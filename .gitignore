@@ -1,0 +1,14 @@
+# --- GoDrive build resume system: local-only operational files ---
+# These three track HOW/WHERE/WHAT-done for the autonomous build.
+# They are intentionally untracked (your decision, 2026-06-18). Do not commit.
+CLAUDE.md
+PROGRESS.md
+BUILD_LOG.md
+
+# Local Claude Code config (permission allowlist etc.) — local-only, do not commit
+.claude/
+
+# (M0-T01 will expand this file with the canonical ignores:
+#  node_modules, .env, build artifacts, Valhalla tiles, etc.)
+.env
+.env.local
