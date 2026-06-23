@@ -1,5 +1,12 @@
 {
   "name": "@roadopia/backend",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.9",
+    "vitest": "^4.1.9"
+  }
 }
