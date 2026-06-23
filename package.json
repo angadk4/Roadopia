@@ -14,7 +14,17 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r exec tsc --noEmit",
-    "test:coverage": "pnpm -r exec vitest run --coverage"
+    "test:coverage": "pnpm -r exec vitest run --coverage",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,mts,cts}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,cjs,mjs,json,yml,yaml,md}": [
+      "prettier --ignore-unknown --write"
+    ]
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
@@ -22,6 +32,8 @@
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
     "prettier": "^3.8.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.61.1"
