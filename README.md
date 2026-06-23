@@ -10,16 +10,16 @@ boundary). No speed / racing / timing framing — ever.
 
 ## Monorepo layout
 
-| Dir | Purpose |
-|---|---|
-| `app/` | Mobile client (Expo / React Native + Mapbox). |
+| Dir        | Purpose                                                                                  |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| `app/`     | Mobile client (Expo / React Native + Mapbox).                                            |
 | `backend/` | API server — the `/plan` SSE endpoint, deterministic planner, cost-guarded model client. |
-| `shared/` | Shared domain types + typed config (zod), consumed via the `@shared/*` alias. |
-| `db/` | Supabase SQL migrations + RLS policies. |
-| `data/` | OSM extracts, Valhalla tiles, generated geodata (gitignored — large/local). |
-| `eval/` | Route-planner evaluation harness + fixtures + CI gate. |
-| `infra/` | Docker Compose, Valhalla, deploy/ops config. |
-| `docs/` | The six authoritative spec docs (scope, methodology, deps, contract). |
+| `shared/`  | Shared domain types + typed config (zod), consumed via the `@shared/*` alias.            |
+| `db/`      | Supabase SQL migrations + RLS policies.                                                  |
+| `data/`    | OSM extracts, Valhalla tiles, generated geodata (gitignored — large/local).              |
+| `eval/`    | Route-planner evaluation harness + fixtures + CI gate.                                   |
+| `infra/`   | Docker Compose, Valhalla, deploy/ops config.                                             |
+| `docs/`    | The six authoritative spec docs (scope, methodology, deps, contract).                    |
 
 ## Toolchain
 

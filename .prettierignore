@@ -1,0 +1,20 @@
+# Dependencies / build output
+node_modules
+dist
+build
+coverage
+
+# Lockfile (machine-generated)
+pnpm-lock.yaml
+
+# Authoritative spec docs — keep as authored, do not reformat
+docs
+
+# Local-only build resume system (gitignored)
+CLAUDE.md
+PROGRESS.md
+BUILD_LOG.md
+
+# Geodata (large/local)
+data
+*.osm.pbf
