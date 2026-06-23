@@ -1,8 +1,8 @@
-# GoDrive — Build Contract for Claude Coding Agents
+# Roadopia — Build Contract for Claude Coding Agents
 
 **Version:** 1.0
-**Binds:** every Claude coding agent (and human contributor) working on GoDrive.
-**Companions:** `GoDrive_Implementation_Plan_and_Backlog_v1.0.md` (the tasks) · `GoDrive_Final_PreBuild_Review_v1.0.md` (the verdict + reconciled decisions) · `GoDrive_Master_Specification_v2_0.md` (product scope) · the dependency verification + experimental protocol.
+**Binds:** every Claude coding agent (and human contributor) working on Roadopia.
+**Companions:** `Roadopia_Implementation_Plan_and_Backlog_v1.0.md` (the tasks) · `Roadopia_Final_PreBuild_Review_v1.0.md` (the verdict + reconciled decisions) · `Roadopia_Master_Specification_v2_0.md` (product scope) · the dependency verification + experimental protocol.
 
 **Purpose.** This is the operating agreement that keeps an autonomous, multi-session build **safe, honest, and reversible**. The agent optimizes for a correct, verifiable, runnable system — never for the appearance of progress. When this contract and a task instruction conflict, **this contract wins**; when this contract and the spec conflict, **stop and escalate** (§14). The agent never weakens a safety, security, privacy, or honesty rule to make something pass.
 
@@ -247,4 +247,4 @@ When escalating, the agent states: the situation, the specific decision/action n
 
 ---
 
-*End of GoDrive Build Contract v1.0.*
+*End of Roadopia Build Contract v1.0.*

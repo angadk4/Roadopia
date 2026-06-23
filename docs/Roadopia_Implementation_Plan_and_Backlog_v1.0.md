@@ -1,7 +1,7 @@
-# GoDrive — Implementation Plan & Backlog
+# Roadopia — Implementation Plan & Backlog
 
 **Version:** 1.0
-**Companions:** `GoDrive_Final_PreBuild_Review_v1.0.md` (verdict: CONDITIONAL GO) · `GoDrive_Build_Contract_v1.0.md` (agent operating agreement) · v2 spec · dependency verification · experimental protocol.
+**Companions:** `Roadopia_Final_PreBuild_Review_v1.0.md` (verdict: CONDITIONAL GO) · `Roadopia_Build_Contract_v1.0.md` (agent operating agreement) · v2 spec · dependency verification · experimental protocol.
 **Audience:** the human owner + Claude coding agents. **A reader should be able to take the first unblocked task (M0-T01) and begin without re-reading the whole spec.**
 
 **Reconciled decisions in force** (from the Pre-Build Review §2): the planner is **deterministic-first**; **LLM selection & correction are gated (off by default)**, decided in M4; the **AI MVP boundary = parse + explanation + auto-title/summary/tags + deterministic refinement-merge**; **numeric scenic scoring is gated** (labels-only default); **Mapbox Navigation SDK is prohibited** (follow-mode built from Valhalla maneuvers); the verification §8 edits are folded into the tasks.
@@ -1099,4 +1099,4 @@ Everything in the **MVP DoD (§13)** **plus** the packaging that makes it a cred
 
 ---
 
-*End of GoDrive Implementation Plan & Backlog v1.0.*
+*End of Roadopia Implementation Plan & Backlog v1.0.*

@@ -1,7 +1,7 @@
-# GoDrive — Route-Planner Experimental Protocol
+# Roadopia — Route-Planner Experimental Protocol
 
 **Version:** 1.0
-**Companion to:** `GoDrive_Master_Specification_v2_0.md` (product/build contract) and `GoDrive_Dependency_and_Feasibility_Verification_v1.0.md` (dependency verification)
+**Companion to:** `Roadopia_Master_Specification_v2_0.md` (product/build contract) and `Roadopia_Dependency_and_Feasibility_Verification_v1.0.md` (dependency verification)
 **Scope:** the route-**generation and -refinement methodology only** — proving, selecting, calibrating, and evaluating it. This is **not** a product spec; it specifies experiments, baselines, metrics, and decision gates.
 **Governing principle:** start from the *simplest* deterministic method and add complexity — most of all, any LLM call inside the loop — **only where a metric measured against a baseline justifies it.** Sophistication is a cost to be paid for, never a default.
 
@@ -103,7 +103,7 @@ The protocol must answer all 27 questions below; each maps to the section(s) tha
 
 ## 3. Formal problem definition
 
-GoDrive solves a **heuristic constrained-search** problem, **not** an exact optimal-routing problem. No optimizer with an optimality guarantee is implemented; therefore **no optimality claim is made** (§30). The system searches a bounded candidate space and returns the best *found* route under a time budget.
+Roadopia solves a **heuristic constrained-search** problem, **not** an exact optimal-routing problem. No optimizer with an optimality guarantee is implemented; therefore **no optimality claim is made** (§30). The system searches a bounded candidate space and returns the best *found* route under a time budget.
 
 ### 3.1 The four goals, kept distinct
 
@@ -167,7 +167,7 @@ Decision rule (evaluated after parsing):
 
 1. **Unsafe intent** (`unsafe_flag`) → **refuse the unsafe framing**, offer a safe reframing ("I can plan an engaging drive, not a timed/▒speed run"). Never a clarification, never compliance.
 2. **Prompt injection** (`prompt_injection_flag`) → **ignore the injected instruction**, treat surrounding text as a normal brief, proceed. (Tool results are data, not instructions — spec §37.)
-3. **Out of region** (`out_of_region_flag`) → **friendly redirect** ("GoDrive currently covers the Western Golden Horseshoe / Niagara region; pick a start inside it"). Not a clarification.
+3. **Out of region** (`out_of_region_flag`) → **friendly redirect** ("Roadopia currently covers the Western Golden Horseshoe / Niagara region; pick a start inside it"). Not a clarification.
 4. **Hard ambiguity that makes the search ill-defined** → **one** clarification question. Only two cases qualify: (a) **no resolvable origin** (no coords, no usable place-name, no current location); (b) a **shape contradiction** that changes the search fundamentally and cannot be auto-resolved (e.g., "a loop **ending in another city**" — loop vs A→B is undecidable from intent).
 5. **Everything else (soft contradictions)** → **best-effort + disclose**, resolved by the hierarchy:
    - *"No highways but get me there quickly"* → honor **no-highways** (hard-relaxable), optimize duration as a soft target, disclose any trade-off.
@@ -175,7 +175,7 @@ Decision rule (evaluated after parsing):
    - *"Twisty but relaxing"* → both are soft; set a moderate curviness target (lower than "spirited"); the scoring blend handles it.
    - *Impossible combination* (e.g., a long all-backroad loop where none exists) → relax per hierarchy (§3.7), disclose.
 
-**Why this rule is correct for GoDrive:** clarification questions add a turn, hurt the no-login demo, and are usually unnecessary because the hierarchy + honest disclosure already encode the right behaviour. Reserving questions for *ill-defined* searches (no origin / shape undecidable) keeps the system responsive and honest. *(This rule is itself tested — §18-A measures how often the LLM parser over-asks vs the deterministic one; [GATE] penalizes spurious clarifications.)*
+**Why this rule is correct for Roadopia:** clarification questions add a turn, hurt the no-login demo, and are usually unnecessary because the hierarchy + honest disclosure already encode the right behaviour. Reserving questions for *ill-defined* searches (no origin / shape undecidable) keeps the system responsive and honest. *(This rule is itself tested — §18-A measures how often the LLM parser over-asks vs the deterministic one; [GATE] penalizes spurious clarifications.)*
 
 ### 3.6 Constraints, objective, feasibility
 
@@ -208,7 +208,7 @@ Every generation is a function of (brief, origin, shape, weights, **prompt versi
 ## 4. Assumptions
 
 1. **Verified foundations hold** (verification doc, 18 Jun 2026): Valhalla provides `/route`, `/isochrone`, `/trace_route`, `/optimized_route` (TSP, ≥4 pts), elevation, costing, and hard exclusions behind `allow_hard_exclusions` (warn-and-ignore if disabled; can return no-route if enabled). Anthropic Haiku 4.5 / Sonnet 4.6 exist at the stated prices with caching + batch. These are inputs to the experiments, not under test here.
-2. **Valhalla provides no native scenic/twisty/loop primitive** — GoDrive's heuristics own that. This is the central thing the experiments must prove "good enough."
+2. **Valhalla provides no native scenic/twisty/loop primitive** — Roadopia's heuristics own that. This is the central thing the experiments must prove "good enough."
 3. **Only curviness is genuinely computable**; scenicness is a labeled heuristic signal (tested for *correlation*, never asserted as truth).
 4. **Region is fixed for experiments** to the seeded corridor (§5); results are claimed only for that region.
 5. **One developer + AI agents + a few enthusiast friends** is the entire research team; experiments must be cheap, mostly offline (eval harness), and runnable in days, with human eval deliberately small (§20, §26).
@@ -333,7 +333,7 @@ Two distinct gold uses, kept separate:
 | **B3** | **Deterministic POI route** | route through the nearest requested-type spot(s), ordered by `optimized_route` | stop-coverage floor without curvature logic |
 | **B4** | **Deterministic high-curvature route** | greedily route through top-curvature segments in `Ω` (no sectors/dedup) | curvature-only; exposes out-and-back/retracing problems |
 | **B5** | **Router-native round trip** | Valhalla round-trip/loop if usable, else N/A | tests whether the engine alone makes loops (it largely doesn't — confirm) |
-| **B6** | **GoDrive deterministic core (no LLM)** | full §9/§10/§14 deterministic pipeline: isochrone + sectors + curvy-waypoint + dedup + weighted scoring; **deterministic top-1**; **rules parser**; **deterministic repair** | **the primary baseline** — the simplest GoDrive that could ship |
+| **B6** | **Roadopia deterministic core (no LLM)** | full §9/§10/§14 deterministic pipeline: isochrone + sectors + curvy-waypoint + dedup + weighted scoring; **deterministic top-1**; **rules parser**; **deterministic repair** | **the primary baseline** — the simplest Roadopia that could ship |
 | **B7** | **B6 + LLM parse only** | B6 with LLM parser, deterministic everything else | isolates parsing value |
 | **B8** | **B6 + LLM selection** | B6 with LLM choosing among `K_PRESENT` | isolates selection value (RQ 21) |
 | **B9** | **B6 + LLM correction** | B6 with LLM-chosen repair action | isolates correction value (RQ 22) |
@@ -402,7 +402,7 @@ A→B is easier (the destination anchors the search) but must still inject chara
 
 ## 12. Curvature experiments
 
-Curvature is the **one signal GoDrive can compute honestly**, so it must be right. **Question:** simplest formulation that ranks known twisty roads above urban grids and is robust to OSM geometry noise. (Pairs with SPK-10.)
+Curvature is the **one signal Roadopia can compute honestly**, so it must be right. **Question:** simplest formulation that ranks known twisty roads above urban grids and is robust to OSM geometry noise. (Pairs with SPK-10.)
 
 ### 12.1 Preprocessing (fixed across formula variants, then ablated)
 Resample geometry to fixed spacing (tunable); drop degenerate point-triples (near-collinear/coincident); set a **minimum segment length**; **exclude roundabout/intersection/ramp geometry** (OSM tags) so junction wiggle isn't read as "twisty"; split long numbered highways into sections; record road class. **Ablation:** with vs without each preprocessing step, measured on the urban-grid false-positive rate.
@@ -619,8 +619,8 @@ Subjective quality (goal #3, §3.1) is **sampled honestly at small scale**, neve
 ### 20.1 Design
 - **Evaluators:** the developer + **2–4 enthusiast friends** (people who drive for fun). Small, non-expert; this is a **sanity signal, not a study**.
 - **Routes:** **20–40** routes per comparison campaign, drawn from VAL (never TEST until final), stratified by archetype + shape.
-- **Method:** **blind pairwise comparison** (A vs B), **randomized left/right order**, **provenance hidden** (evaluator can't tell GoDrive from baseline, or original from refined). Pairwise is chosen over Likert because it is far more reliable at small N.
-- **Primary comparisons:** (i) GoDrive (B6/finalist) **vs** B1 avoid-highways and B4 curvature-only; (ii) **LLM-selection (R4) vs deterministic (R1)** — the §27 gate input; (iii) **refined vs original** after a refinement turn.
+- **Method:** **blind pairwise comparison** (A vs B), **randomized left/right order**, **provenance hidden** (evaluator can't tell Roadopia from baseline, or original from refined). Pairwise is chosen over Likert because it is far more reliable at small N.
+- **Primary comparisons:** (i) Roadopia (B6/finalist) **vs** B1 avoid-highways and B4 curvature-only; (ii) **LLM-selection (R4) vs deterministic (R1)** — the §27 gate input; (iii) **refined vs original** after a refinement turn.
 - **Map-only by default:** evaluators judge from the rendered route + stats (no driving required). This is the honest basis for "appears…" claims.
 - **Optional physical drive:** the developer may drive a **handful** of routes to sanity-check that map-good ⇒ road-good. **Safety rules:** obey all traffic law; no phone interaction while driving; passenger or post-drive rating only; never rate speed/timing; abort if conditions are unsafe. Physical-drive results are anecdotal and labeled as such.
 
@@ -633,8 +633,8 @@ Appears enjoyable · appears scenic · appears appropriately twisty · route coh
 - **Explicitly state the limits:** small, non-random, possibly-biased evaluator pool; region-specific; map-only; not powered for significance. Conclusions are **directional**.
 
 ### 20.4 What human eval can and cannot conclude
-- **Can:** "evaluators preferred GoDrive routes over the avoid-highways baseline in X/Y blind comparisons (95% CI …)"; "no evaluator flagged excessive retracing in Z%." 
-- **Cannot:** "GoDrive produces objectively better/scenic routes"; any significance claim from n≈30; anything about regions not tested (§24, §30).
+- **Can:** "evaluators preferred Roadopia routes over the avoid-highways baseline in X/Y blind comparisons (95% CI …)"; "no evaluator flagged excessive retracing in Z%." 
+- **Cannot:** "Roadopia produces objectively better/scenic routes"; any significance claim from n≈30; anything about regions not tested (§24, §30).
 
 ---
 
@@ -801,7 +801,7 @@ Only claims a stated metric on a stated dataset/region supports (with n, version
 - "**Grounded:** the planner returns no road, stop, or geometry absent from the underlying OSM/spot data; LLM outputs are schema-validated and fact-checked, with **0 invented-place** rate on the sampled set." *(invalid_model_output_rate, factuality.)*
 - Evidence-based design claims, **whichever way the gates fell**: e.g., "deterministic ranking matched LLM selection in blind preference (Δ within CI), so the simpler design ships," or "the scenic heuristic showed no human correlation, so scenicness ships as labels only." *(These honest negatives are a strength.)*
 - "Supports **conversational refinement** with measured consistency (refinement_success = …, hard-constraint retention = …)." *(If [GATE-RF] kept it.)*
-- "In **small blind human comparisons** (n=…, 95% CI …), evaluators preferred GoDrive routes over the [baseline] — a **directional** result, region-specific, not a significance claim."
+- "In **small blind human comparisons** (n=…, 95% CI …), evaluators preferred Roadopia routes over the [baseline] — a **directional** result, region-specific, not a significance claim."
 - "**Honest, versioned public metrics**, partitioned into benchmark vs production, each annotated with sample size, versions, and caveats."
 
 ## 30. Claims the final project may not make
@@ -821,4 +821,4 @@ Forbidden because no implemented method or sample supports them:
 
 ---
 
-*End of GoDrive Route-Planner Experimental Protocol v1.0.*
+*End of Roadopia Route-Planner Experimental Protocol v1.0.*

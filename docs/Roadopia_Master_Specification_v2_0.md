@@ -1,4 +1,4 @@
-# GoDrive — Master Specification
+# Roadopia — Master Specification
 
 **Version:** 2.0
 **Author:** Angad Khera
@@ -11,7 +11,7 @@
 
 ## 0. How to read this document
 
-This is the authoritative implementation contract for **GoDrive**, a native mobile app for driving enthusiasts whose centerpiece is a grounded, tool-using Claude agent that composes real, road-following routes from a plain-English brief. V2 replaces v1.0. It is written so a Claude coding agent (or any engineer) can build the system without re-deriving its design.
+This is the authoritative implementation contract for **Roadopia**, a native mobile app for driving enthusiasts whose centerpiece is a grounded, tool-using Claude agent that composes real, road-following routes from a plain-English brief. V2 replaces v1.0. It is written so a Claude coding agent (or any engineer) can build the system without re-deriving its design.
 
 **This document is both a product spec and an operating contract for AI coding agents.** §77–§80 define how agents work the backlog; §79 is the work-packet template every implementation task must follow.
 
@@ -128,17 +128,17 @@ The single structural rule: **a live, demoable, grounded route planner exists as
 
 ## 1. Executive summary
 
-GoDrive is a **native mobile application** (**React Native + Expo + TypeScript**, iOS-primary with Android support, one codebase) for people who drive *for the drive* — who care which road is good, not just which is fastest. Users discover, create, share, record, and navigate scenic and engaging driving routes, plus a community layer of **car spots** (great roads, viewpoints, coffee/food, fuel, meet-ups, rest stops).
+Roadopia is a **native mobile application** (**React Native + Expo + TypeScript**, iOS-primary with Android support, one codebase) for people who drive *for the drive* — who care which road is good, not just which is fastest. Users discover, create, share, record, and navigate scenic and engaging driving routes, plus a community layer of **car spots** (great roads, viewpoints, coffee/food, fuel, meet-ups, rest stops).
 
 The centerpiece — and the engineering story the project exists to tell — is the **AI Route Planner**: a **grounded, hybrid, tool-using agent** that turns a natural-language brief ("90-minute twisty loop near Hamilton, a coffee stop, no highways") into a real, drivable route. **The agent never invents geography.** A deterministic pipeline runs the spatial queries, routing, candidate generation, diversification, scoring, constraint-checking, and loop assembly; a Claude model is invoked only at four bounded decision points (parse the brief into constraints, select among genuinely distinct pre-scored candidate routes, decide a self-correction move, write the explanation). Because every claim is anchored in a tool result over real OpenStreetMap-derived data and a self-hosted routing engine, the output is **verifiable** — which is also what makes the evaluation rigorous and automatable.
 
-V2 promotes three capabilities into the core launch that make GoDrive *demonstrably* an AI product, not a map with a prompt box: **conversational refinement** ("make it longer," "add a viewpoint"), a **reasoning-transparency view** ("how this route was built"), and a **public evaluation page** showing honest, real agent metrics.
+V2 promotes three capabilities into the core launch that make Roadopia *demonstrably* an AI product, not a map with a prompt box: **conversational refinement** ("make it longer," "add a viewpoint"), a **reasoning-transparency view** ("how this route was built"), and a **public evaluation page** showing honest, real agent metrics.
 
 The backend is deliberately lean: **Supabase** (Postgres + PostGIS + Auth + Storage + row-level security) handles most CRUD and spatial queries directly from the app; a small **Node/TypeScript service (Fastify)** colocated with a self-hosted **Valhalla** routing engine handles only what needs server-side secrets and logic (the agent, custom routing, GPS map-matching, isochrones). The routing/agent box runs on a **small always-on VPS** (Docker Compose), with hosted Valhalla as an emergency fallback. Maps render via **Mapbox**.
 
 **Cost is bounded and honest.** Runtime LLM inference uses the **pay-as-you-go Anthropic API** (separate from any Claude subscription) and is protected by a **$30/month hard spend cap** with a kill switch. Realistic total operating cost at small scale is **~$10–22/month** on a VPS (not the v1.0 "$10–30 total," which was unachievable with an always-on routing engine on usage-billed Railway).
 
-GoDrive **never** has timing, racing, leaderboards, or speed competition of any kind, and the agent never optimizes for or describes speed. It is a tool for finding good drives, not a street-racing aid.
+Roadopia **never** has timing, racing, leaderboards, or speed competition of any kind, and the agent never optimizes for or describes speed. It is a tool for finding good drives, not a street-racing aid.
 
 ---
 
@@ -181,12 +181,12 @@ Grounded-hybrid agent + the *LLM-emits-no-geography* invariant; the deterministi
 
 ## 3. Product vision
 
-GoDrive is a **map-based, community-driven driving-route app with a grounded AI planner at its core**, defined by four pillars [KEEP from v1.0 §2]:
+Roadopia is a **map-based, community-driven driving-route app with a grounded AI planner at its core**, defined by four pillars [KEEP from v1.0 §2]:
 
-1. **Compose, don't just log.** Unlike incumbents that record, import, or manually draw routes, GoDrive *generates* a route from intent by reasoning over real geospatial data: precomputed road curvature, elevation, routing geometry, scenic signals, and the community's pinned spots.
+1. **Compose, don't just log.** Unlike incumbents that record, import, or manually draw routes, Roadopia *generates* a route from intent by reasoning over real geospatial data: precomputed road curvature, elevation, routing geometry, scenic signals, and the community's pinned spots.
 2. **Grounded intelligence.** The LLM orchestrates read-only tools and reasons over their numeric results; it cannot return a road that is not in the underlying data. Grounding is simultaneously the quality story and the security story (§37).
 3. **A human knowledge layer.** Community car spots — bootstrapped from OpenStreetMap and enriched by users with photos, notes, and tags — give the agent real, locally-meaningful places to route through and give the map life.
-4. **Safety as a first-class constraint.** GoDrive never has timing, racing, leaderboards, or speed competition of any kind, and the agent never optimizes for, describes, or internally represents speed. It is a tool for finding good drives.
+4. **Safety as a first-class constraint.** Roadopia never has timing, racing, leaderboards, or speed competition of any kind, and the agent never optimizes for, describes, or internally represents speed. It is a tool for finding good drives.
 
 The vision for V2 adds a fifth, cross-cutting commitment: **the AI must be visible, measurable, and honest.** Users see *how* a route was built (reasoning view), can *converse* to refine it (conversational refinement), and can inspect the planner's *real performance* (public eval page). Claims the system cannot substantiate — "this route is scenic," "the system learns your taste" — are never made.
 
@@ -642,7 +642,7 @@ Every screen defines these. Principles: never a raw error; never a fake/broken r
 | **Offline / weak network** | Map shows last-rendered tiles where possible; CRUD reads from cache where available; writes queue or show "you're offline"; the planner shows "needs a connection." |
 | **Location-permission-denied** | Map still works centered on the region; "current location" origin shows a rationale + "drop a pin instead." |
 | **Geocode failure** | Place-name origin falls back to "drop a pin." |
-| **Out-of-region origin/destination (FR-046)** | Friendly message: "GoDrive currently covers the Western Golden Horseshoe / Niagara region; pick a start inside it." |
+| **Out-of-region origin/destination (FR-046)** | Friendly message: "Roadopia currently covers the Western Golden Horseshoe / Niagara region; pick a start inside it." |
 | **AI planner failure (§40)** | Best-effort route + honest note → friendly redirect → "planner temporarily unavailable"; rest of app works. |
 | **Hard-constraint relaxation (§28)** | Constraints panel marks the constraint relaxed; explanation states what was traded off; `status='relaxed'`. |
 | **Generation timeout (FR-048)** | Returns best-so-far with "I ran out of time; here's the best I found." |
@@ -768,7 +768,7 @@ The human knowledge layer and the agent's set of routable places. [KEEP from v1.
 - **Loop:** offer **leg-by-leg hand-off to the next waypoint/spot** (works in Apple + Google), or a **decimated waypoint set for Google only** within platform limits; **never** claim a faithful loop in Apple Maps (FR-116).
 - Before presenting a Google URL, verify waypoint count + URL length are within limits (FR-117).
 
-**Product promise (honest):** *"GoDrive designs and displays the full scenic route in-app and guides you with follow-mode and maneuver hints. External map hand-off is best-effort, using your destination or simplified legs."*
+**Product promise (honest):** *"Roadopia designs and displays the full scenic route in-app and guides you with follow-mode and maneuver hints. External map hand-off is best-effort, using your destination or simplified legs."*
 
 - **Deferred:** voice guidance, automatic rerouting, GPX export, offline caching.
 - **Acceptance:** FR-110..117; follow-mode shows live position + updating maneuver hint; hand-off opens the platform app within its documented limits and never misrepresents loop fidelity.
@@ -777,9 +777,9 @@ The human knowledge layer and the agent's set of routable places. [KEEP from v1.
 
 ## 25. Runtime AI capability map
 
-**This section governs AI that GoDrive itself calls for users at runtime** (distinct from build-time AI, §26). Every runtime capability declares: user value, input, output, model, tools/context, deterministic safeguards, validation, failure handling, privacy, latency, cost, evaluation, sync/async, and whether it needs multimodal/embeddings/structured-output/tool-use/memory.
+**This section governs AI that Roadopia itself calls for users at runtime** (distinct from build-time AI, §26). Every runtime capability declares: user value, input, output, model, tools/context, deterministic safeguards, validation, failure handling, privacy, latency, cost, evaluation, sync/async, and whether it needs multimodal/embeddings/structured-output/tool-use/memory.
 
-**Foundational fact (drives the whole cost model):** runtime inference uses the **pay-as-you-go Anthropic API**, billed per token, **entirely separate from any Claude.ai/Max subscription** (**fact**, 18 Jun 2026). The Max plan funds *build-time* AI (Claude writing GoDrive), not runtime. Runtime spend is hard-capped at $30/mo (§65) with a kill switch (FR-262).
+**Foundational fact (drives the whole cost model):** runtime inference uses the **pay-as-you-go Anthropic API**, billed per token, **entirely separate from any Claude.ai/Max subscription** (**fact**, 18 Jun 2026). The Max plan funds *build-time* AI (Claude writing Roadopia), not runtime. Runtime spend is hard-capped at $30/mo (§65) with a kill switch (FR-262).
 
 **Models (verified 18 Jun 2026):** Haiku 4.5 (`claude-haiku-4-5-20251001`, $1/$5 per MTok, 200K context) for routine/cheap turns; Sonnet 4.6 (`claude-sonnet-4-6`, $3/$15 per MTok, 1M context) for harder selection/explanation. Prompt caching on the stable prefix cuts cached-input cost ~90%. Batch API (50% off) for offline eval only. [tunable: exact model mix, §91]
 
@@ -805,10 +805,10 @@ The human knowledge layer and the agent's set of routable places. [KEEP from v1.
 
 ## 26. Build-time AI development methodology
 
-**This section governs AI that *builds and maintains* GoDrive** (distinct from runtime AI, §25). It is the operating contract for Claude coding agents; the mechanics live in §76–§80.
+**This section governs AI that *builds and maintains* Roadopia** (distinct from runtime AI, §25). It is the operating contract for Claude coding agents; the mechanics live in §76–§80.
 
-- **Build-time AI = Claude (Claude Code / the Max plan).** Its cost is the human's subscription; it is **$0 marginal to GoDrive's runtime** and never touches the runtime spend cap.
-- **Runtime AI = the Anthropic API key** GoDrive uses for users. **These are different accounts/billing.** The repo's `.env.example` documents the runtime `ANTHROPIC_API_KEY`; build-time Claude never has its key baked into the app.
+- **Build-time AI = Claude (Claude Code / the Max plan).** Its cost is the human's subscription; it is **$0 marginal to Roadopia's runtime** and never touches the runtime spend cap.
+- **Runtime AI = the Anthropic API key** Roadopia uses for users. **These are different accounts/billing.** The repo's `.env.example` documents the runtime `ANTHROPIC_API_KEY`; build-time Claude never has its key baked into the app.
 - **Division of labour.** Claude agents do: scaffolding, frontend, backend, DB design + migrations, geospatial processing, AI orchestration, tests, debugging, refactoring, docs, infra/CI/CD config, deploy scripts, data-import scripts. The **human** does: personal/credential actions (Apple/Google/Mapbox/Supabase/Anthropic accounts, API keys, billing approval), physical-device testing, real-world driving tests, store configuration, and approval of architectural/design decisions and human-gated actions (§79).
 - **Realism.** "Zero hand-written code" ≠ "zero effort." Account for configuration, repeated debug cycles, device behaviour, deployment friction, and the likelihood that AI-generated code needs repair passes. Work is decomposed into small, verifiable **work packets** (§78) with acceptance criteria + tests so regressions are caught.
 - **Anti-drift.** Agents MUST NOT silently change architecture, duplicate systems, or diverge naming/data models (§77). A second-AI review pass and human approval gates guard this (§79).
@@ -909,7 +909,7 @@ Refinement (§34) re-enters at **SCOPE/RETRIEVE** with merged constraints. Each 
 
 [REDESIGNED — the make-or-break of route quality; resolves v1.0's under-specified "assemble ordered sets."]
 
-**Why this is hard (fact):** generating an attractive twisty route under a time budget is the **Arc Orienteering Problem (AOP)** — NP-hard — and the literature notes even heuristic AOP solvers struggle at interactive latencies on real networks (verified 18 Jun 2026, SIGSPATIAL). So GoDrive does **not** seek optimality; it generates **diverse, good candidates** and lets the LLM select, with deterministic scoring and validation.
+**Why this is hard (fact):** generating an attractive twisty route under a time budget is the **Arc Orienteering Problem (AOP)** — NP-hard — and the literature notes even heuristic AOP solvers struggle at interactive latencies on real networks (verified 18 Jun 2026, SIGSPATIAL). So Roadopia does **not** seek optimality; it generates **diverse, good candidates** and lets the LLM select, with deterministic scoring and validation.
 
 ### 29.1 Procedure (pseudocode)
 
@@ -1014,7 +1014,7 @@ Acceptance: FR-353 (weight changes measurably change ranking); FR-354 (defaults 
 
 [REDESIGNED — honest; resolves v1.0's overclaim that scenicness is "computed."]
 
-**Principle:** **only curviness is genuinely computable.** "Scenic" is **not** a solved computation (a flat lakeshore is scenic; a climb through a quarry is not), so GoDrive does **not** assert objective scenicness. It computes a **transparent, optional scenic *signal*** from **grounded, citable** inputs and labels it as a heuristic.
+**Principle:** **only curviness is genuinely computable.** "Scenic" is **not** a solved computation (a flat lakeshore is scenic; a climb through a quarry is not), so Roadopia does **not** assert objective scenicness. It computes a **transparent, optional scenic *signal*** from **grounded, citable** inputs and labels it as a heuristic.
 
 **Scenic signal inputs (all grounded, none invented):**
 - **OSM tags** along/near the route: `natural=water`/coastline proximity, `landuse=forest`/`natural=wood`, `tourism=viewpoint`, `boundary=national_park`/protected areas.
@@ -1073,7 +1073,7 @@ Acceptance: SC-2; eval self-correction efficacy (§39).
 [REDESIGNED — explicit, honest; no learning.]
 
 - **What exists:** user-set **preference weights** (presets + advanced sliders, §30) stored per authenticated user (FR-352). On a new plan, the user's stored weights pre-fill the Plan screen.
-- **What does NOT exist (and is never claimed):** no learned/inferred personalization, no behavioural modelling, no "the system learns your taste." V2 explicitly rejects learned personalization (§6, §11) because it needs data maturity + careful evaluation GoDrive won't have at launch.
+- **What does NOT exist (and is never claimed):** no learned/inferred personalization, no behavioural modelling, no "the system learns your taste." V2 explicitly rejects learned personalization (§6, §11) because it needs data maturity + careful evaluation Roadopia won't have at launch.
 - **Session memory** (refinement, §34) is distinct from stored preferences and is not long-term.
 - **Privacy:** stored weights are user-private (§55); not used to profile the user; deletable with the account (FR-207).
 - **Future (deferred/experimental):** if learned personalization is ever added, it must come with a real evaluation and an honest UI claim — not before.
@@ -1619,7 +1619,7 @@ Scheduling: a small scheduler (cron on the VPS or a hosted cron); jobs are idemp
 
 [KEEP — permanent; STRENGTHENED with the internal-mapping clause.]
 
-- **No timing, racing, leaderboards, lap times, "fastest route," or speed competition of any kind — ever.** A deliberate, permanent non-goal that keeps GoDrive from being a street-racing aid.
+- **No timing, racing, leaderboards, lap times, "fastest route," or speed competition of any kind — ever.** A deliberate, permanent non-goal that keeps Roadopia from being a street-racing aid.
 - **The agent never optimizes for, describes, or *internally maps any quality to* speed.** Intensity (chill/moderate/spirited) describes *engagement*, never velocity; the agent must not translate intensity into pace internally either. [STRENGTHENED]
 - **Public-roads-only routing.** Costing profile + data scope keep routes on legal public roads.
 - **Persistent safe-driving disclaimers** on navigation/follow-mode and generated routes (FR-400).
@@ -1647,7 +1647,7 @@ Scheduling: a small scheduler (cron on the VPS or a hosted cron); jobs are idemp
 - **Mapbox** attribution stays visible per Mapbox terms.
 - **Valhalla** is open-source (permissive license) — comply with its license terms for self-hosting/distribution.
 - A **Terms of Service / EULA** and a **privacy policy** are required before any store submission.
-- GoDrive is **informational**; it does not provide professional driving, safety, or legal advice (stated in-app).
+- Roadopia is **informational**; it does not provide professional driving, safety, or legal advice (stated in-app).
 - Image/UGC: users grant the necessary license to display their content; reports/removal per §60.
 
 ---
@@ -1840,7 +1840,7 @@ Annual/one-off: Apple Developer ($99/yr) + Google Play ($25 once) [HUMAN]; domai
 
 ## 76. AI-assisted repository workflow
 
-[NEW — operationalizes §26.] GoDrive is built by Claude coding agents against this spec; the human is PO/reviewer/credential owner. The workflow keeps that safe and reversible.
+[NEW — operationalizes §26.] Roadopia is built by Claude coding agents against this spec; the human is PO/reviewer/credential owner. The workflow keeps that safe and reversible.
 
 - **Single source of truth:** this spec. Agents read the relevant sections before a packet; if a packet would contradict the spec, the agent stops and flags it (§77).
 - **Repository layout (canonical):** `app/` (Expo RN client), `backend/` (Fastify agent + Valhalla compose), `shared/` (shared TS types — route, constraints, tool I/O), `db/` (migrations + RLS policies + seed), `data/` (region `.poly` + import/curvature scripts), `eval/` (gold-labeled fixtures + harness), `infra/` (Docker Compose, Caddy, CI), `docs/` (this spec + decision log + README + architecture).
@@ -2216,7 +2216,7 @@ Rule: an unverified capability is a **hypothesis** (§85), not a fact, until a s
 21. **Eval uses human gold constraint labels (parse accuracy + satisfaction-vs-gold), with adversarial briefs + a diversity metric.** *Why:* measuring against the model's own parse is circular.
 22. **Candidate generation is AOP-aware: isochrone scope + directional-sector circuits + overlap-based diversification.** *Why:* avoids out-and-back and near-duplicate candidates; scenic routing is NP-hard.
 23. **Likes deferred; favourite/fork/save/share cover the value.** *Why:* likes add counting/abuse/moderation/UI cost without core benefit.
-24. **Conversational refinement + reasoning view + public eval page promoted into MVP core.** *Why:* they are the clearest proof GoDrive is an AI product, and feasible under AI-assisted build.
+24. **Conversational refinement + reasoning view + public eval page promoted into MVP core.** *Why:* they are the clearest proof Roadopia is an AI product, and feasible under AI-assisted build.
 25. **Auto-title/summary/tags + user-adjustable weights (presets + advanced sliders) in MVP; no learning claimed.** *Why:* cheap, visible, ties to the scoring story; honest about no ML.
 26. **Per-target favourite tables (real FKs) instead of polymorphic likes/favourites.** *Why:* enables the promised cascade deletes.
 27. **Least-privilege `SECURITY DEFINER` planner read path over public/OSM data only.** *Why:* the open planner must never exfiltrate private rows.
@@ -2298,7 +2298,7 @@ Rule: an unverified capability is a **hypothesis** (§85), not a fact, until a s
 
 **Rejected (V2):**
 - **LLM fine-tuning** — base model + grounding + tools suffices; would signal misjudgment and add cost/complexity (§89).
-- **Learned/inferred personalization** — needs data maturity + careful evaluation GoDrive won't have at launch; **explicit user-set weights** instead (§35). Revisit only with a real eval + an honest claim.
+- **Learned/inferred personalization** — needs data maturity + careful evaluation Roadopia won't have at launch; **explicit user-set weights** instead (§35). Revisit only with a real eval + an honest claim.
 - Anything with **speed/timing/racing/leaderboards** — permanent non-goal (§59).
 
 ---
@@ -2339,9 +2339,9 @@ Rule: an unverified capability is a **hypothesis** (§85), not a fact, until a s
 - **Hard constraint** — a requirement **never violated without telling the user**; if engine-level hard exclusion fails, the agent falls back to soft avoidance and discloses it (§28).
 - **Soft constraint** — an optimized target (duration, curviness, stop count, scenic signal) reported when off-target (§28).
 - **Grounded hybrid** — the architecture where a deterministic pipeline owns geography/routing/scoring/validation and the LLM makes only four bounded decisions, emitting no geography (§27).
-- **Build-time AI** — Claude coding agents building GoDrive (funded by the Max plan; $0 runtime) (§26).
-- **Runtime AI** — the Anthropic API GoDrive calls for users (pay-as-you-go; $30/mo capped) (§25/§65).
-- **AOP (Arc Orienteering Problem)** — the NP-hard problem underlying "best scenic route within a time budget"; GoDrive seeks diverse-good candidates, not optimality (§29).
+- **Build-time AI** — Claude coding agents building Roadopia (funded by the Max plan; $0 runtime) (§26).
+- **Runtime AI** — the Anthropic API Roadopia calls for users (pay-as-you-go; $30/mo capped) (§25/§65).
+- **AOP (Arc Orienteering Problem)** — the NP-hard problem underlying "best scenic route within a time budget"; Roadopia seeks diverse-good candidates, not optimality (§29).
 - **Isochrone** — a reachable-area polygon for a time budget, used to scope candidate search (§29/§36).
 - **edge_overlap / self_overlap** — diversification + out-and-back measures over road edges (§29).
 - **Follow-mode** — the primary in-app navigation: route polyline + live position + maneuver hints + disclaimer (§24).
@@ -2354,4 +2354,4 @@ Rule: an unverified capability is a **hypothesis** (§85), not a fact, until a s
 
 ---
 
-*End of GoDrive Master Specification v2.0.*
+*End of Roadopia Master Specification v2.0.*

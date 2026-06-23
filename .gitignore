@@ -1,4 +1,4 @@
-# --- GoDrive build resume system: local-only operational files ---
+# --- Roadopia build resume system: local-only operational files ---
 # These three track HOW/WHERE/WHAT-done for the autonomous build.
 # They are intentionally untracked (your decision, 2026-06-18). Do not commit.
 CLAUDE.md

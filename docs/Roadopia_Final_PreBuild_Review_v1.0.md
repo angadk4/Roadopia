@@ -1,4 +1,4 @@
-# GoDrive — Final Pre-Build Review
+# Roadopia — Final Pre-Build Review
 
 **Version:** 1.0
 **Reviewer role:** staff engineer / EM / TPM / QA lead / release engineer / security reviewer / coding-agent supervisor
@@ -11,7 +11,7 @@
 
 **CONDITIONAL GO.**
 
-The GoDrive v2 design is coherent, dependency-verified, and implementable by one human owner directing Claude coding agents over a risk-ordered 4–10 week effort. The three source documents are mutually consistent once reconciled (§2 below); **there are no unresolved cross-document conflicts** — the two points of tension both resolve cleanly to the newest explicitly-approved decision and are treated as reconciled, not blocking. No Critical or High issue is hidden.
+The Roadopia v2 design is coherent, dependency-verified, and implementable by one human owner directing Claude coding agents over a risk-ordered 4–10 week effort. The three source documents are mutually consistent once reconciled (§2 below); **there are no unresolved cross-document conflicts** — the two points of tension both resolve cleanly to the newest explicitly-approved decision and are treated as reconciled, not blocking. No Critical or High issue is hidden.
 
 The verdict is **conditional** for exactly one reason, already established by the dependency verification: a small set of claims are **measurement-dependent** and must be settled by spikes before dependent implementation proceeds. Work may begin **immediately** on M0 (repo/tooling) and the M1 spikes; full implementation of each dependent feature is gated on its spike. The binding gates are:
 
@@ -31,9 +31,9 @@ Everything else is **Ready** or **Ready-after-named-spike**. The recommendation 
 
 | Doc | Role | Status |
 |---|---|---|
-| `GoDrive_Master_Specification_v2_0.md` | product/build contract (95 §) | authoritative for product scope |
-| `GoDrive_Dependency_and_Feasibility_Verification_v1.0.md` | dependency verification (24 §, 21 spikes) | authoritative for dependency facts + required edits |
-| `GoDrive_Route_Planner_Experimental_Protocol_v1.0.md` | methodology proof (30 §) | **newest**; authoritative for the planner methodology |
+| `Roadopia_Master_Specification_v2_0.md` | product/build contract (95 §) | authoritative for product scope |
+| `Roadopia_Dependency_and_Feasibility_Verification_v1.0.md` | dependency verification (24 §, 21 spikes) | authoritative for dependency facts + required edits |
+| `Roadopia_Route_Planner_Experimental_Protocol_v1.0.md` | methodology proof (30 §) | **newest**; authoritative for the planner methodology |
 
 **Conflict-reconciliation rule applied:** *where the documents differ, select the newest explicitly-approved decision; list anything unresolved as a blocker.* Two tensions were found; **both reconcile cleanly (no blockers):**
 
@@ -162,4 +162,4 @@ There is no NO-GO condition present. Proceed.
 
 ---
 
-*End of GoDrive Final Pre-Build Review v1.0.*
+*End of Roadopia Final Pre-Build Review v1.0.*

@@ -1,7 +1,7 @@
-# GoDrive — Dependency & Feasibility Verification
+# Roadopia — Dependency & Feasibility Verification
 
 **Version:** 1.0
-**Reviewed artifact:** `GoDrive_Master_Specification_v2_0.md` (v2.0, approved-for-build)
+**Reviewed artifact:** `Roadopia_Master_Specification_v2_0.md` (v2.0, approved-for-build)
 **Reviewer role:** principal architect / geospatial-infra / mobile-platform / AI-infra / security / technical due-diligence
 **Verification date:** June 18, 2026 (all "**verified**" claims carry this access date unless stated)
 **Method:** every volatile or high-stakes claim re-checked against the vendor's own current documentation, pricing page, or source repository — not against the spec's assertions. Facts are separated from engineering assumptions and from items that can only be settled by measurement (spikes).
@@ -17,7 +17,7 @@
 5. Version-compatibility matrix
 6. Invalid or outdated assumptions
 7. Verified limitations
-8. Required changes to GoDrive v2
+8. Required changes to Roadopia v2
 9. Hosting & resource analysis
 10. VPS recommendation
 11. Valhalla deployment analysis
@@ -41,17 +41,17 @@
 
 **CONDITIONAL GO.**
 
-GoDrive v2 is buildable and deployable essentially as written. Every load-bearing external dependency — the Anthropic API (models, identifiers, pricing, caching, tool use, streaming), `@rnmapbox/maps`, Mapbox pricing, Supabase/PostGIS limits, Valhalla's routing/map-matching/isochrone/exclusion/TSP capabilities, the Apple/Google Maps hand-off limits, Expo/React Native, and small-VPS economics — was verified against the vendor's current primary source and **matches the spec's claims**. The spec's defining engineering judgments (grounded hybrid planner, deterministic/LLM split, in-app follow-mode as primary nav, three-tier constraints, the $30 AI cap, honest scenicness, gold-label eval) are all sound and implementable. There is **no NO-GO blocker** and **no open product decision** preventing the start of Phase P0.
+Roadopia v2 is buildable and deployable essentially as written. Every load-bearing external dependency — the Anthropic API (models, identifiers, pricing, caching, tool use, streaming), `@rnmapbox/maps`, Mapbox pricing, Supabase/PostGIS limits, Valhalla's routing/map-matching/isochrone/exclusion/TSP capabilities, the Apple/Google Maps hand-off limits, Expo/React Native, and small-VPS economics — was verified against the vendor's current primary source and **matches the spec's claims**. The spec's defining engineering judgments (grounded hybrid planner, deterministic/LLM split, in-app follow-mode as primary nav, three-tier constraints, the $30 AI cap, honest scenicness, gold-label eval) are all sound and implementable. There is **no NO-GO blocker** and **no open product decision** preventing the start of Phase P0.
 
-The verdict is *conditional*, not unconditional, for one reason: a small number of claims are **measurement-dependent and cannot be settled from documentation** — chiefly (a) whether the regional Valhalla tiles run comfortably in a small-VPS RAM envelope, (b) whether the Supabase free tier's **5 GB egress** holds for the public demo, (c) end-to-end **AI generation latency and cost** under the real model mix, and (d) **loop/scenic route quality** (the one capability Valhalla does *not* provide natively — GoDrive's heuristics own it). These are exactly the unknowns the spec already routes to spikes; this review confirms the spikes are the right gate and sharpens their pass/fail thresholds (§21).
+The verdict is *conditional*, not unconditional, for one reason: a small number of claims are **measurement-dependent and cannot be settled from documentation** — chiefly (a) whether the regional Valhalla tiles run comfortably in a small-VPS RAM envelope, (b) whether the Supabase free tier's **5 GB egress** holds for the public demo, (c) end-to-end **AI generation latency and cost** under the real model mix, and (d) **loop/scenic route quality** (the one capability Valhalla does *not* provide natively — Roadopia's heuristics own it). These are exactly the unknowns the spec already routes to spikes; this review confirms the spikes are the right gate and sharpens their pass/fail thresholds (§21).
 
 Verification also surfaced a handful of refinements the spec should absorb (§8) — none fatal, several genuinely useful:
 
-- **The Mapbox Navigation SDK is a financial trap that GoDrive must continue to avoid.** Verified: the Maps SDK for mobile has a generous MAU free tier, but the *Navigation SDK* free tier is tiny (≈10 MAU unlimited / ≈100 MAU + 1,000 trips metered). GoDrive's "build follow-mode from Valhalla maneuvers" choice is therefore not only a product decision but a **cost necessity** — pulling in the Mapbox Nav SDK would blow the budget at a few hundred users.
+- **The Mapbox Navigation SDK is a financial trap that Roadopia must continue to avoid.** Verified: the Maps SDK for mobile has a generous MAU free tier, but the *Navigation SDK* free tier is tiny (≈10 MAU unlimited / ≈100 MAU + 1,000 trips metered). Roadopia's "build follow-mode from Valhalla maneuvers" choice is therefore not only a product decision but a **cost necessity** — pulling in the Mapbox Nav SDK would blow the budget at a few hundred users.
 - **Mapbox has no hard spend cap, only usage alerts** (vendor-confirmed). The spec already flags this; the asymmetry with Anthropic (whose spend *is* genuinely cappable) should be stated plainly.
 - **Apple introduced a new "unified Maps URLs" schema in iOS 18.4**, and the legacy `daddr=lat,lng` behaviour regressed. Hand-off code must target the current schema and be device-tested — reinforcing "best-effort."
 - **Expo SDK 55 runs only on the New Architecture** (legacy arch removed after SDK 54). Every native dependency must be New-Arch-compatible; versions must be pinned and validated in the dev-build spike.
-- **Supabase's new-project Data-API grants requirement (after 30 May 2026) applies to GoDrive from day one**, not the October date (which is for pre-existing projects).
+- **Supabase's new-project Data-API grants requirement (after 30 May 2026) applies to Roadopia from day one**, not the October date (which is for pre-existing projects).
 - **Valhalla's "public-roads-only" guarantee is directionally true but not absolute** — it routes the OSM network as tagged and cannot know most closures/seasonal restrictions or untagged private roads; §59's wording should be softened to "reduces, not guarantees."
 
 **Bottom line:** proceed to P0 and run the named spikes. Treat SPK-04 (Valhalla tiles/RAM), SPK-09 (Supabase egress/free-tier-fit), SPK-19 (end-to-end AI latency+cost), and SPK-15 (loop quality) as the four that gate committing to the production topology and the public demo.
@@ -138,7 +138,7 @@ Verification found **no fatal/invalid assumptions**. The following are minor cor
 
 1. **(Outdated risk, now moot) Mapbox download token.** Older rnmapbox docs required a secret `RNMapboxMapsDownloadToken` (DOWNLOADS:READ). The current install flow for v11 does not center on it; the spec's note that the deprecated download token "is no longer required for the SDK" is **broadly correct** but version-sensitive — confirm at integration (some setups still set it).
 2. **(Sharpening) Apple Maps URL schema.** The spec correctly says Apple Maps takes only origin/destination. As of **iOS 18.4** Apple shipped a new **"unified Maps URLs"** schema and the legacy `daddr=lat,lng` form regressed. Not invalid — but hand-off code must target the **current** schema and be device-tested.
-3. **(Sharpening) Supabase grants timing.** The spec dates the Data-API grants change generically. Verified specifics: **new projects created after 30 May 2026** must add explicit Postgres grants for PostgREST; existing free projects are affected **30 Oct 2026**. GoDrive's projects are new ⇒ **affected immediately** (a day-one setup step, not a future date).
+3. **(Sharpening) Supabase grants timing.** The spec dates the Data-API grants change generically. Verified specifics: **new projects created after 30 May 2026** must add explicit Postgres grants for PostgREST; existing free projects are affected **30 Oct 2026**. Roadopia's projects are new ⇒ **affected immediately** (a day-one setup step, not a future date).
 4. **(Sharpening) Expo SDK version.** "React Native + Expo" understates a real constraint: **SDK 55 is New-Architecture-only**. This is an integration prerequisite, not a free choice.
 5. **(Sharpening) "Public-roads-only routing" (spec §59).** Verified that Valhalla routes the OSM network *as tagged* and honors access/conditional tags where present, but cannot guarantee exclusion of untagged private roads or knowledge of most closures/seasonal restrictions. The claim should be reworded to **"strongly biases toward legal public roads but does not guarantee it"** (see §8, §11, §18).
 6. **(Clarification) "$30/mo hard cap."** A true hard cap is achieved by **app-side accounting + a vendor-side backstop** (prepaid credits / Anthropic workspace spend limit), not by a single API setting. The spec's mechanism is right; the wording should acknowledge it is belt-and-braces (§16).
@@ -152,10 +152,10 @@ Everything else in the spec's fact base (model IDs/pricing, rnmapbox-not-in-Expo
 Real constraints to design around (each confirmed against primary sources):
 
 - **Mapbox: no hard spend cap.** Only usage alerts exist; runaway cost is the customer's risk. *Mitigation:* MAU alert at a fraction of the free tier; the Maps-SDK MAU free tier makes overage unlikely at ≤ 500 users, but the alert is mandatory.
-- **Mapbox Navigation SDK ≠ Maps SDK pricing.** The Nav SDK's free tier is tiny; GoDrive must stay on the **Maps SDK** and implement follow-mode itself (it already does).
+- **Mapbox Navigation SDK ≠ Maps SDK pricing.** The Nav SDK's free tier is tiny; Roadopia must stay on the **Maps SDK** and implement follow-mode itself (it already does).
 - **Supabase free tier:** 500 MB DB, **5 GB egress (binding limit)**, 1 GB storage, 50K MAU, 2 projects, **no managed backups**, **7-day inactivity pause**, 200 connections, 7-day log retention; ≥20%-of-limit email warnings then read-only/blocked after a one-time grace period. *Mitigations:* simplified geometry + CDN headers for egress; keep-alive cron for the pause; `pg_dump`→R2 for backups; PgBouncer pooling for connections.
 - **Supabase Storage:** deleting a DB row does **not** delete the storage object — explicit cleanup (trigger/edge function/app logic) is required so removed/forked/deleted photos don't orphan in the bucket and consume storage.
-- **Valhalla:** no native loop or "scenic/twisty" routing (GoDrive's heuristics own it); hard exclusions are **ignored-with-warning** unless `allow_hard_exclusions` is enabled in config, and when enabled can return **no route**; cannot guarantee public-only routing or know live/most-seasonal closures; `optimized_route` needs **≥4 locations**.
+- **Valhalla:** no native loop or "scenic/twisty" routing (Roadopia's heuristics own it); hard exclusions are **ignored-with-warning** unless `allow_hard_exclusions` is enabled in config, and when enabled can return **no route**; cannot guarantee public-only routing or know live/most-seasonal closures; `optimized_route` needs **≥4 locations**.
 - **Apple Maps hand-off:** origin/destination only, no waypoints, evolving schema (iOS 18.4) → a scenic loop cannot be faithfully handed off.
 - **Google Maps hand-off:** waypoints capped (~3 mobile, may be ignored), 2,048-char URL → only a decimated representation.
 - **Expo:** `@rnmapbox/maps` forces a dev build (no Expo Go); EAS Update is **JS-only** (native changes need a rebuild); SDK 55 is New-Arch-only.
@@ -166,7 +166,7 @@ None of these is a blocker; all are already reflected (or now recommended for re
 
 ---
 
-## 8. Required changes to GoDrive v2
+## 8. Required changes to Roadopia v2
 
 Verification implies the following edits. **None are architectural**; they are precision and one or two day-one setup steps. (M = should-do before/at integration; minor = wording.)
 
@@ -175,7 +175,7 @@ Verification implies the following edits. **None are architectural**; they are p
 3. **[M] State the Supabase day-one setup steps.** §73 should call out: (a) add explicit PostgREST/Data-API **grants** on every table for new projects; (b) implement **Storage-object cleanup** on photo delete/fork/account-deletion (the `photos` row cascade does not remove the blob).
 4. **[M] Make the Mapbox MAU alert a named requirement.** §66 already implies it; promote to an explicit NFR/observability item, paired with the statement that Mapbox has **no hard cap** (contrast with the AI cap).
 5. **[M] Clarify the cap mechanism.** §38/§65: "$30 hard cap" = app-side accounting **+** prepaid credits / Anthropic workspace spend limit as the true backstop, **+** the kill switch.
-6. **[minor] Soften the public-roads claim.** §59: "GoDrive strongly biases toward legal public roads via costing + data scope but cannot guarantee it; the safe-driving disclaimer and user judgment remain necessary." (Honesty pillar — strengthens, not weakens, the spec.)
+6. **[minor] Soften the public-roads claim.** §59: "Roadopia strongly biases toward legal public roads via costing + data scope but cannot guarantee it; the safe-driving disclaimer and user judgment remain necessary." (Honesty pillar — strengthens, not weakens, the spec.)
 7. **[minor] Note the Apple unified-Maps-URL schema (iOS 18.4)** in §24 and the hand-off spike (SPK-17): target the current schema; device-test.
 8. **[minor] Record the Valhalla hard-exclusion implementation detail** in §28/§45: the server **warns-and-ignores** excludes unless `allow_hard_exclusions: true`; therefore the app must (a) enable the flag, (b) **still scan results** for road class, and (c) catch the **no-route** error to trigger the soft-avoidance fallback. Also note `exclude_locations`/`exclude_polygons` as the clean mechanism for "avoid that town" refinement (an under-used capability).
 9. **[minor] Add `optimize_waypoint_order` ≥4-location guard** in §50 (below 4 points, order deterministically).
@@ -226,7 +226,7 @@ Every Valhalla capability the spec relies on was verified against the official A
 - **Canadian OSM + Docker + tile building** — standard `osmium`/`valhalla_build_tiles` over a Geofabrik Ontario extract; official Docker images. **Verified.**
 - **Incremental updates** — Valhalla has **no live incremental graph update**; the practical model is **periodic full (regional) tile rebuilds** from a fresh extract. **Verified** — matches the spec's "re-run the pipeline" stance; stale roads/POIs are handled by rebuild cadence, not real-time.
 
-**What v2 does NOT incorrectly assume:** the spec never claims Valhalla provides loops or scenic/twisty routing — and it doesn't. Valhalla yields cost-optimal routing + the primitives above; **GoDrive's candidate-generation heuristics (isochrone scope + directional sectors + curvy-waypoint selection + TSP ordering + overlap diversification) do the work Valhalla lacks.** This is correctly owned in §29 and is the single biggest *quality* risk (hence SPK-15).
+**What v2 does NOT incorrectly assume:** the spec never claims Valhalla provides loops or scenic/twisty routing — and it doesn't. Valhalla yields cost-optimal routing + the primitives above; **Roadopia's candidate-generation heuristics (isochrone scope + directional sectors + curvy-waypoint selection + TSP ordering + overlap diversification) do the work Valhalla lacks.** This is correctly owned in §29 and is the single biggest *quality* risk (hence SPK-15).
 
 **Limitations to keep honest (feed §18/§59):** Valhalla routes the OSM network as tagged; it honors access/`access:conditional` tags where present but **cannot guarantee public-only routing, cannot know most closures/seasonal restrictions, and reflects the extract's vintage.** Public-road bias is strong but not a guarantee.
 
@@ -261,12 +261,12 @@ A typical generation:
 ## 13. Licensing & attribution analysis
 
 **Legal facts (verified against the licenses/terms):**
-- **OpenStreetMap data is licensed ODbL 1.0.** Using it requires (a) **attribution** — "© OpenStreetMap contributors" visibly — and (b) **share-alike on the *derived database***: if GoDrive publicly distributes a derived *database* (e.g., the curvature DB or extract), that database must be offered under ODbL. **Produced *content* (an individual route image/description shown to a user) is "Produced Work" and is not itself forced open.** GoDrive displaying routes/maps = Produced Work + attribution; this is fine. *If* GoDrive ever publishes the `curvy_segments` dataset or tiles for download, that distribution carries ODbL obligations. (Engineering implication: keep the derived DB internal, or be ready to ODbL-license it if shared.)
+- **OpenStreetMap data is licensed ODbL 1.0.** Using it requires (a) **attribution** — "© OpenStreetMap contributors" visibly — and (b) **share-alike on the *derived database***: if Roadopia publicly distributes a derived *database* (e.g., the curvature DB or extract), that database must be offered under ODbL. **Produced *content* (an individual route image/description shown to a user) is "Produced Work" and is not itself forced open.** Roadopia displaying routes/maps = Produced Work + attribution; this is fine. *If* Roadopia ever publishes the `curvy_segments` dataset or tiles for download, that distribution carries ODbL obligations. (Engineering implication: keep the derived DB internal, or be ready to ODbL-license it if shared.)
 - **Mapbox terms** require the Mapbox wordmark + attribution and the "Improve this map" / OSM attribution to remain visible; do not remove or obscure. Caching/storing **geocoding results** is permitted within Mapbox's terms for your app's use — confirm the current terms clause at integration, but standard caching of place→coordinate results is allowed.
-- **Combining OSM-derived routing with user-generated content** is fine: UGC (spots, photos, notes, recorded routes) is GoDrive's/its users' content, stored alongside OSM-derived data; ODbL share-alike attaches to the *OSM-derived database*, not to user content or to the app. OSM-seeded café/viewpoint/fuel POIs are OSM-derived data and may be stored/displayed with attribution (and re-derived on refresh).
+- **Combining OSM-derived routing with user-generated content** is fine: UGC (spots, photos, notes, recorded routes) is Roadopia's/its users' content, stored alongside OSM-derived data; ODbL share-alike attaches to the *OSM-derived database*, not to user content or to the app. OSM-seeded café/viewpoint/fuel POIs are OSM-derived data and may be stored/displayed with attribution (and re-derived on refresh).
 - **Valhalla** is open source under a permissive license (MIT-style); self-hosting/modifying is unrestricted with license retention.
 
-**Engineering assumptions (not legal advice):** keep OSM-seeded POIs marked `source='osm'` and refreshable; show attribution on every map/route surface; don't ship the derived database publicly unless intentionally ODbL-licensing it. The spec's §61 is **correct**; the one addition is the explicit **derived-database share-alike** caveat above (relevant only if GoDrive ever distributes the dataset/tiles).
+**Engineering assumptions (not legal advice):** keep OSM-seeded POIs marked `source='osm'` and refreshable; show attribution on every map/route surface; don't ship the derived database publicly unless intentionally ODbL-licensing it. The spec's §61 is **correct**; the one addition is the explicit **derived-database share-alike** caveat above (relevant only if Roadopia ever distributes the dataset/tiles).
 
 ## 14. Mobile-platform limitations
 
@@ -287,7 +287,7 @@ Distinct requirement sets, verified against current Apple/Google policy norms (c
 
 - **Private portfolio link / dev build:** an **EAS dev build** installed on the developer's own device(s). No store review; fastest path for the demo. Suitable for the hero video + live demonstration. No store policy obligations beyond honoring third-party terms (OSM/Mapbox attribution).
 - **Internal testing:** **TestFlight (iOS, up to 100 internal / 10k external testers)** and **Google Play internal testing track**. Light review (TestFlight external needs a basic review). Good for sharing with a few enthusiast testers. Requires the **paid developer accounts** ([HUMAN]: Apple $99/yr, Google $25 once).
-- **Public App Store / Google Play:** full review. Triggers the **hard requirements**: in-app **account + data deletion** (both stores), accurate **privacy labels / Data Safety** (declare **foreground** location + photos + account data; **declare no background location** because GoDrive doesn't use it), permission **rationale strings**, a **moderation** path for UGC (report→review→remove, plus user **blocking** is commonly expected once there's user-to-user content — add a block capability for store builds even though the MVP floor is report→remove), a **privacy policy** + **EULA/ToS**, **safe-driving** framing (no speed/racing — Apple/Google both scrutinize driving apps), and **OSM + Mapbox attribution**. Photo **EXIF/GPS stripping** supports the privacy posture.
+- **Public App Store / Google Play:** full review. Triggers the **hard requirements**: in-app **account + data deletion** (both stores), accurate **privacy labels / Data Safety** (declare **foreground** location + photos + account data; **declare no background location** because Roadopia doesn't use it), permission **rationale strings**, a **moderation** path for UGC (report→review→remove, plus user **blocking** is commonly expected once there's user-to-user content — add a block capability for store builds even though the MVP floor is report→remove), a **privacy policy** + **EULA/ToS**, **safe-driving** framing (no speed/racing — Apple/Google both scrutinize driving apps), and **OSM + Mapbox attribution**. Photo **EXIF/GPS stripping** supports the privacy posture.
 
 **Implication for the plan:** the spec's P6 (store readiness) correctly separates from the MVP, and the MVP's moderation + EXIF + foreground-only + account-deletion floor is exactly what makes the **pre-store public link** safe. The one addition for *public store* builds: a **user-blocking** capability (not just content removal), which app-review commonly expects for UGC apps — fold into §60/§72 as a P6 item.
 
@@ -295,7 +295,7 @@ Distinct requirement sets, verified against current Apple/Google policy norms (c
 
 Verified against Anthropic's current model pages, pricing, and docs (18 Jun 2026):
 
-- **Models exist under the stated identifiers.** **Haiku 4.5** (`claude-haiku-4-5-20251001`, $1/$5, 200K context) and **Sonnet 4.6** (`claude-sonnet-4-6`, $3/$15, **1M** context, 128K max output) are current, GA, and priced as the spec states. (Opus 4.8 is the current flagship at $5/$25 — not needed by GoDrive; staying Haiku+Sonnet is the right cost call.)
+- **Models exist under the stated identifiers.** **Haiku 4.5** (`claude-haiku-4-5-20251001`, $1/$5, 200K context) and **Sonnet 4.6** (`claude-sonnet-4-6`, $3/$15, **1M** context, 128K max output) are current, GA, and priced as the spec states. (Opus 4.8 is the current flagship at $5/$25 — not needed by Roadopia; staying Haiku+Sonnet is the right cost call.)
 - **Tool use, structured output, streaming, prompt caching** — all supported; the system-prompt + tool-schema **prefix is the cache target** (~90% off cached input). **Batch API** (50% off) for offline eval. **Node/TS SDK** (`@anthropic-ai/sdk`) supports streaming + tool use + caching.
 - **Subscriptions ≠ API.** Verified explicitly: the API is usage-based with **no monthly subscription**, and **Claude.ai Pro/Max do not include API access**. The spec's build-time (Max) vs runtime (API) separation is **correct and important**.
 - **Rate/token limits + retries.** The API enforces per-model/tier rate limits (RPM/TPM) and returns 429/overloaded with `retry-after`; standard guidance is exponential backoff + jitter and idempotent retries. Build this into the agent loop (it already plans bounded retries on malformed output; add transport-level backoff).
@@ -320,7 +320,7 @@ Verified against Apple's *Map Links* reference, the iOS 18.4 unified-Maps-URLs n
 | Deep links / universal links | ✅ (`maps.apple.com` universal links; `maps://`) | ✅ (`comgooglemaps://` + universal links) |
 
 **The spec's redesigned position is accurate and verified:**
-- In-app **follow-mode is correctly the primary** navigation experience (GoDrive owns the geometry + Valhalla maneuvers).
+- In-app **follow-mode is correctly the primary** navigation experience (Roadopia owns the geometry + Valhalla maneuvers).
 - **Apple Maps cannot faithfully receive a custom scenic loop** through URL parameters (no waypoints; single origin→destination only).
 - **Google Maps can receive only a limited waypoint representation** (capped, possibly ignored).
 - **Hand-off must be best-effort** — destination-only (A→B), leg-by-leg to the next waypoint/spot (works in both), or a decimated Google waypoint set within limits; never a faithful loop in Apple Maps.
@@ -427,7 +427,7 @@ Each spike is compact but complete. **Blocking?** = does it gate committing to t
 > **If pass:** **commit CX32**; (downsize to CX22 only if RAM ≪ budget). **If fail:** size up to **CX42 (16 GB)** or use **hosted Valhalla**. **Fallback:** Stadia/hosted Valhalla. **Blocking? B.**
 
 > **SPK-05 — Valhalla route metadata & duration accuracy**
-> **Q:** Do `/route` responses expose the road-class/flags + maneuvers GoDrive needs, and are duration estimates close enough to real drive time on known roads?
+> **Q:** Do `/route` responses expose the road-class/flags + maneuvers Roadopia needs, and are duration estimates close enough to real drive time on known roads?
 > **Why:** scoring, result-scanning, and the duration constraint depend on it.
 > **Prototype:** route several known local loops; compare reported vs real duration; inspect maneuvers/flags.
 > **Time box:** 0.5 day. **Setup:** SPK-04 tiles.
@@ -654,8 +654,8 @@ The architecture is **resilient by construction**: every brittle external is sha
 
 **CONDITIONAL GO.**
 
-The GoDrive v2 architecture is **verified as buildable and deployable as written**. Every load-bearing dependency matches its vendor's current primary source; the defining engineering judgments are sound; the cost envelope is realistic (and slightly conservative); and there is no NO-GO blocker or open product decision. Proceed to **Phase P0**.
+The Roadopia v2 architecture is **verified as buildable and deployable as written**. Every load-bearing dependency matches its vendor's current primary source; the defining engineering judgments are sound; the cost envelope is realistic (and slightly conservative); and there is no NO-GO blocker or open product decision. Proceed to **Phase P0**.
 
-The build may **not** be declared production-ready on architectural plausibility alone — four measurements gate the production-topology + public-demo commitment: **SPK-04** (Valhalla tiles fit a small VPS), **SPK-09** (Supabase egress holds), **SPK-19** (AI latency + cost hit target), and **SPK-15** (loops are diverse, drivable, and brief-satisfying — the one capability Valhalla doesn't provide and the project's true hard part). Pass those four, apply the ten precision edits in §8, clear the pre-public-link security/abuse/privacy spikes, and GoDrive v2 converts from **CONDITIONAL GO** to **GO**.
+The build may **not** be declared production-ready on architectural plausibility alone — four measurements gate the production-topology + public-demo commitment: **SPK-04** (Valhalla tiles fit a small VPS), **SPK-09** (Supabase egress holds), **SPK-19** (AI latency + cost hit target), and **SPK-15** (loops are diverse, drivable, and brief-satisfying — the one capability Valhalla doesn't provide and the project's true hard part). Pass those four, apply the ten precision edits in §8, clear the pre-public-link security/abuse/privacy spikes, and Roadopia v2 converts from **CONDITIONAL GO** to **GO**.
 
-*End of GoDrive Dependency & Feasibility Verification v1.0.*
+*End of Roadopia Dependency & Feasibility Verification v1.0.*
