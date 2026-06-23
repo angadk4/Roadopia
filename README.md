@@ -25,6 +25,7 @@ boundary). No speed / racing / timing framing — ever.
 
 - **Package manager:** pnpm workspaces (`pnpm@11.8.0`).
 - **Runtime:** Node `>=20`.
+- **Language:** TypeScript `5.x` (strict), shared `tsconfig.base.json` + `@shared/*` path alias.
 
 ## Getting started
 

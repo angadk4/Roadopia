@@ -13,5 +13,9 @@
     "lint": "pnpm -r run lint",
     "format:check": "pnpm -r run format:check",
     "typecheck": "pnpm -r exec tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^5.9.3"
   }
 }
