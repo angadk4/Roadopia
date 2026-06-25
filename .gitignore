@@ -36,6 +36,9 @@ app/android/
 data/**
 !data/.gitkeep
 !data/README.md
+# tracked SPK-08 deliverables (the large .pbf outputs stay ignored below)
+!data/region.poly
+!data/extract.sh
 *.osm.pbf
 *.osm.bz2
 valhalla_tiles/

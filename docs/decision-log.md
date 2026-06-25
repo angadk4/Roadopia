@@ -137,3 +137,14 @@ install). `0000_init.sql` enables PostGIS + pg_trgm (foundational infra; schema 
 
 **BD-10 — Region: Western Golden Horseshoe / Niagara (carried, decision #15).** No build action yet; the
 `.poly` lands in M2. (Listed for traceability when `REGION_POLY_PATH` is populated.)
+
+**BD-11 — SPK-08 OSM road-class/POI filter (2026-06-24).** The extract keeps `highway = primary,
+secondary, tertiary, unclassified, residential` (+ `_link`) and POIs `amenity=cafe,fuel,restaurant`,
+`tourism=viewpoint`, `natural=peak`; it **drops motorway/trunk** (and service/parking/driveway/track/
+path/footway). *Why:* the SPK-08 keep-list (Backlog) targets the **scenic/curvy dataset** that feeds
+SPK-10 `curvy_segments` — dropping ~921 MB Ontario to a **5.4 MB** corridor extract with a sensible class
+mix (verified: primary 4.2k / secondary 14.5k / tertiary 8.8k / residential 43k). **Finding / Revisit at
+SPK-04:** the **Valhalla routing tiles** likely need a *broader* extract that re-includes **motorway/
+trunk**, so highway-*avoidance* (the Tier-2 soft fallback, decision #19) has a connected network to fall
+back onto; `extract.sh` is parameterized to add a `routing` variant. The region polygon is a provisional
+bbox — M2-T01 replaces it with the proper `REGION_POLY_PATH`.
