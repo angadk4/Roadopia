@@ -88,7 +88,9 @@ decision or a hard rule. "Revisit when" marks a watch item tied to an external t
 local + Docker image + CI all run Node 24. *Why:* **pnpm 11.8 fails on Node 20** (`ERR_UNKNOWN_BUILTIN_MODULE`,
 found building the M0-T09 image). This **supersedes** the 2026-06-18 owner decision of `>=20` (whose
 premise — "no concrete dependency pins above Node 20" — is now false). Consistent with Dependency
-Verification §5 ("Node 20 LTS+"). *Revisit:* none — `>=22` is the verified floor.
+Verification §5 ("Node 20 LTS+"). **Owner-ratified 2026-06-24.** *Revisit:* none for the floor; one
+watch-item — confirm **Expo SDK 55 tooling on Node 24** at SPK-01 (Expo supports Node 22 for certain; if
+24 ever bites, run the app tooling on Node 22 — still ≥ floor, isolated to `app/`).
 
 **BD-2 — `zod` pinned to v4 (`^4.4.3`) (2026-06-24, M0-T02).** *Why:* the docs name zod but pin no
 version; v4 is current GA and our code is its primary consumer. *Revisit:* if a runtime dep ever requires
