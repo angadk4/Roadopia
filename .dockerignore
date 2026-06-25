@@ -1,0 +1,37 @@
+# Build context hygiene for the dev images (M0-T09).
+# Dependencies are installed inside the image from the lockfile — never copy host ones.
+node_modules
+**/node_modules
+.pnpm-store
+
+# VCS / hooks / CI
+.git
+.github
+.husky
+
+# Build output / caches / coverage
+**/dist
+**/build
+**/coverage
+**/*.tsbuildinfo
+.turbo
+.cache
+
+# Secrets (only .env.example is ever tracked; none belong in an image)
+.env
+.env.*
+
+# Geodata + docs (not needed by the backend image)
+data
+docs
+
+# Local-only build resume system + agent config
+.claude
+CLAUDE.md
+PROGRESS.md
+BUILD_LOG.md
+
+# Logs / OS cruft
+*.log
+.DS_Store
+Thumbs.db

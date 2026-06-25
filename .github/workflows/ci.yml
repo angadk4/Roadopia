@@ -7,8 +7,9 @@ on:
     branches: [main]
 
 # This skeleton uses NO secrets. Any future secrets come ONLY from GitHub Actions
-# secrets (never committed) — Build Contract Hard rule H. Node is pinned to 20 to
-# enforce the repo's `engines.node: ">=20"` floor; pnpm is read from `packageManager`.
+# secrets (never committed) — Build Contract Hard rule H. Node 24 matches local dev +
+# the Docker image; pnpm 11.8 requires Node >= 22 (it fails on 20). pnpm version is
+# read from `packageManager`.
 
 permissions:
   contents: read
@@ -22,7 +23,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
@@ -36,7 +37,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
@@ -53,7 +54,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter "@roadopia/${{ matrix.package }}" test

@@ -7,3 +7,5 @@ packages:
   - 'backend'
   - 'shared'
   - 'eval'
+allowBuilds:
+  esbuild: true

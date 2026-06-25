@@ -5,7 +5,7 @@
   "description": "Roadopia — grounded, deterministic-first AI road-trip route planner (monorepo root).",
   "packageManager": "pnpm@11.8.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "pnpm -r run build",

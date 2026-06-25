@@ -1,0 +1,5 @@
+# Optional dev reverse proxy (enable with `docker compose --profile proxy up`).
+# Production TLS + real host config is a VPS concern (M12).
+:80 {
+	reverse_proxy backend:8080
+}

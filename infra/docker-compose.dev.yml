@@ -1,0 +1,60 @@
+name: roadopia-dev
+
+# Local dev stack (M0-T09): Fastify backend + a Valhalla placeholder, on a private
+# bridge network. Caddy is an optional reverse proxy (enable with `--profile proxy`).
+#   Up:    docker compose -f infra/docker-compose.dev.yml up
+#   Health: curl http://localhost:8080/health  -> {"status":"ok"}
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    init: true
+    environment:
+      PORT: '8080'
+      HOST: '0.0.0.0'
+      VALHALLA_URL: 'http://valhalla:8002'
+    ports:
+      - '8080:8080'
+    volumes:
+      # Hot-reload: mount only source (node_modules stays as installed in the image).
+      - ../backend/src:/app/backend/src
+    depends_on:
+      - valhalla
+    networks:
+      - roadopia
+
+  valhalla:
+    # PLACEHOLDER (M0-T09): a lightweight stand-in that just stays up so the stack
+    # boots before any tiles exist. It publishes NO ports — reachable only on the
+    # private `roadopia` network. SPK-04 pins the real image tag; M2 builds tiles
+    # into the `valhalla_tiles` volume and swaps in the real serving command:
+    #   image: ghcr.io/gis-ops/docker-valhalla/valhalla:<pinned-at-SPK-04>
+    #   expose: ['8002']
+    #   environment: { tile_dir: /data }
+    image: alpine:3
+    command: ['tail', '-f', '/dev/null']
+    volumes:
+      - valhalla_tiles:/data
+    networks:
+      - roadopia
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ['proxy'] # optional; off by default
+    depends_on:
+      - backend
+    ports:
+      - '80:80'
+    volumes:
+      - ../infra/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - roadopia
+
+networks:
+  roadopia:
+    driver: bridge
+
+volumes:
+  valhalla_tiles:
