@@ -148,3 +148,30 @@ SPK-04:** the **Valhalla routing tiles** likely need a *broader* extract that re
 trunk**, so highway-*avoidance* (the Tier-2 soft fallback, decision #19) has a connected network to fall
 back onto; `extract.sh` is parameterized to add a `routing` variant. The region polygon is a provisional
 bbox — M2-T01 replaces it with the proper `REGION_POLY_PATH`.
+
+**BD-12 — `data/` became a workspace package (2026-06-24, SPK-10).** SPK-10's Backlog `Files`
+(`data/curvature/compute.ts`) and `Verify` (`pnpm -C data test curvature`) require `data` to be a JS
+package, so it was added to `pnpm-workspace.yaml` (members now app/backend/shared/eval/**data**) and the
+CI test matrix. This **revises** the M0-T01 note that "`data` is intentionally NOT a workspace package."
+*Why:* following the task's literal Files/Verify (the authority for what to build) beats the stale comment;
+the OSM extracts/tiles `data` operates on stay gitignored, only the curvature **source** (`data/curvature/
+*.ts`, `*.sh`) is tracked. No Part A decision or hard rule touched.
+
+**BD-13 — SPK-10 curvature: candidate formula + parameters + findings (2026-06-24).** Built a deterministic
+curvature engine (`data/curvature/`) computing two §12.2 candidates per way — **C2** heading-change/km and
+**C7** length-weighted circumradius (1/km) — with §12.1 preprocessing (resample 20 m, min length 120 m,
+max radius 1000 m, junction/`*_link`/roundabout exclusion, drop degenerate triples). Evaluated on a
+**32-of-35-matched hand-label set** of known WGH/Niagara roads. **Results (real run):** both formulas rank
+twisty>grid strongly — **Spearman ρ = 0.825 (C7) / 0.823 (C2)**, monotonic class means (grid 0.24 →
+gentle 1.22 → curvy 1.71 → twisty 2.64 on C7); candidate **`THETA_CURVY` ≈ 0.60 1/km** gives **grid-FP
+6.3 %** at **83 % twisty recall** (sweep shows θ 0.6–0.9 all ≤ 10 % FP). PostGIS `curvy_segments` (29,474
+rows) = **11.4 MB total** (8.4 MB table + 2.7 MB indexes); `find_curvy_roads` (5 km, θ=0.6) **p90 159 ms**
+(≪ 1 s). **All four AC PASS.** *Status:* **not frozen** — C2 vs C7 (both pass; C2 is simpler/cheaper, C7
+truer to physical corner radius), `THETA_CURVY`, `turn_threshold` and resample spacing are **finalised at
+M4 [GATE-C]**. **Findings/Revisit at M2/M4:** (a) the `find_curvy_roads` `::geography` cast bypasses the
+GiST index (per-row distance after the curvature filter) — still 159 ms, but **M2-T08 should add a
+geometry-bbox prefilter** to use the index; (b) 3 labels unmatched (Creek Road / Westbrook Road / Guelph
+Line — name/centroid drift > 5 km) and the **hand-label set is from cartographic knowledge, not driven
+ground truth** — **M4 must rebuild it with verified labels** before freezing; (c) 44,295 of 73,769 ways
+were skipped (< 120 m / junction) — the table stores the 29 k scorable ways, a curvature floor can shrink
+it further if needed.

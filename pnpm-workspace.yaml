@@ -1,11 +1,13 @@
 # Roadopia pnpm workspace — the JS/TS packages of the monorepo.
-# Non-code directories (db, data, infra, docs) are intentionally NOT workspace
-# packages: db = SQL migrations, data = OSM extracts/tiles (gitignored),
-# infra = Docker/deploy, docs = the six spec docs.
+# Non-code directories (db, infra, docs) are NOT workspace packages: db = SQL
+# migrations, infra = Docker/deploy, docs = the six spec docs.
+# `data` became a package at SPK-10 (curvature compute lives in data/curvature/*;
+# the OSM extracts/tiles it operates on stay gitignored). See decision-log BD-12.
 packages:
   - 'app'
   - 'backend'
   - 'shared'
   - 'eval'
+  - 'data'
 allowBuilds:
   esbuild: true

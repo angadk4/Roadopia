@@ -39,6 +39,17 @@ data/**
 # tracked SPK-08 deliverables (the large .pbf outputs stay ignored below)
 !data/region.poly
 !data/extract.sh
+# tracked SPK-10 data package — source only (generated .geojsonl/.csv stay ignored)
+!data/package.json
+!data/tsconfig.json
+!data/vitest.config.ts
+!data/curvature/
+!data/curvature/*.ts
+!data/curvature/*.sh
+!data/curvature/*.md
+data/curvature/coverage/
+data/curvature/*.geojsonl
+data/curvature/*.csv
 *.osm.pbf
 *.osm.bz2
 valhalla_tiles/

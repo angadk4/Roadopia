@@ -1,0 +1,20 @@
+{
+  "name": "@roadopia/data",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "curvature:build": "tsx curvature/build-table.ts",
+    "curvature:report": "tsx curvature/rank-report.ts",
+    "curvature:load": "tsx curvature/load.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "@vitest/coverage-v8": "^4.1.9",
+    "pg": "^8.13.1",
+    "tsx": "^4.19.2",
+    "vitest": "^4.1.9"
+  }
+}
