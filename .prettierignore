@@ -18,3 +18,8 @@ BUILD_LOG.md
 # Geodata (large/local)
 data
 *.osm.pbf
+
+# Supabase CLI local artifacts (machine-generated; ignored by db/supabase/.gitignore,
+# but prettier only reads root ignores, so list them here too)
+db/supabase/.temp
+db/supabase/.branches
