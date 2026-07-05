@@ -1,15 +1,11 @@
 {
-  "name": "@roadopia/data",
+  "name": "@roadopia/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "curvature:build": "tsx curvature/build-table.ts",
-    "curvature:report": "tsx curvature/rank-report.ts",
-    "curvature:load": "tsx curvature/load.ts",
-    "curvature:load-db": "tsx load_curvy.ts",
-    "pois:extract": "tsx extract_pois.ts"
+    "seed": "tsx seed/seed.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

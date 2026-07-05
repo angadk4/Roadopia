@@ -175,3 +175,43 @@ Line — name/centroid drift > 5 km) and the **hand-label set is from cartograph
 ground truth** — **M4 must rebuild it with verified labels** before freezing; (c) 44,295 of 73,769 ways
 were skipped (< 120 m / junction) — the table stores the 29 k scorable ways, a curvature floor can shrink
 it further if needed.
+
+**BD-14 — SPK-04: VPS size committed = CX23 4 GB, Falkenstein; Valhalla fits trivially (2026-07-05).**
+S0 completed by the owner (2026-07-05): Hetzner **CX23** (2 vCPU / 4 GB / 40 GB, **Falkenstein eu-central**,
+~$7/mo) — an owner cost decision replacing the docs' conservative CX32/8 GB guess, endorsed because the VPS
+only *serves* (tiles build in seconds) and the EU location is immaterial next to the 15–25 s generation
+budget (planner calls are backend-side; revisit only if that premise changes). **SPK-04 measurements
+validate it:** routing extract (BD-11 keep-list: + motorway/trunk/links/living_street) = **5.5 MB /
+76,940 ways**; tile build **9 s**; tiles **19 MB**; serving peak RSS **118 MiB** vs the 2,289 MiB 60%-of-box
+AC limit (~5% used); `/route` **p95 30 ms** (100/100 ok), `/isochrone` 50–128 ms, `/trace_route` 37–98 ms —
+all on-box. This satisfies the Dependency Verification's own "downsize only if RAM ≪ budget" rule.
+*Deviations:* (a) tiles built from the **routing** extract, not the scenic-filtered one — that is BD-11
+executed as designed (highway-avoidance needs the full drivable network); (b) the routing extract was
+derived **on the VPS** (local Docker was down) using the same pinned container + filter as
+`data/extract-routing.sh` — deterministic either way. *Posture:* Valhalla bound to **127.0.0.1 only**
+(nothing public; backend colocates at M12); config is the generated default — **M2-T03 pins it and adds
+`allow_hard_exclusions: true`** (spec §45/§28). *Fallback if ever tight:* 2-click resize to CX33/CX43.
+
+**BD-15 — VPS 4 GB swapfile for batch clip jobs (2026-07-05, M2-T02).** `osmium extract
+--strategy complete_ways` on the full 922 MB Ontario input was **OOM-killed on the bare 4 GB CX23**
+(the clip's node index exceeds 3.7 GiB); added a persistent **4 GB swapfile** (`/swapfile`, fstab) and the
+clip completes. This affects **batch acquisition only** — Valhalla *serving* stays at 118 MiB RSS with zero
+swap pressure, so BD-14's box commitment stands. The dev machine also runs the clip fine natively (SPK-08).
+*Process note:* run-1's failure was initially masked by piping to `tail` (exit code of the pipe tail);
+remote verify commands now run under `set -o pipefail`.
+
+**BD-16 — Valhalla pinned (v3.7.0 by digest) + `allow_hard_exclusions: true` + SPK-06 semantics
+finding (2026-07-05, M2-T03).** The Valhalla image is pinned by digest
+(`ghcr.io/valhalla/valhalla@sha256:8aebd555…` = **3.7.0-7e1ddb194**) in `data/build_tiles.sh` and
+`infra/docker-compose.dev.yml`; the canonical **pinned config** is `infra/valhalla/valhalla.json`
+(generated 3.7.0 defaults + **`allow_hard_exclusions: true`**, tile_dir `/data/tiles`, tile_extract
+disabled) — `build_tiles.sh` uses a shipped config as-is and only generates one as bootstrap fallback.
+Local dev serves tiles from a **bind mount** `data/valhalla/` (gitignored) on `127.0.0.1:8002`; the VPS
+runs the same pinned config (synced + restarted). **SPK-06 (verification spike) settled with a
+doc-deviating finding:** on 3.7.0, `exclude_highways` is **honored even with the flag false** (identical
+compliant routes on both boxes: Hamilton→St. Catharines 38.3 min *with* highway default → 56.8 min
+*without*, `has_highway:false`, no warnings) — the documented "warn-and-ignore when disabled" branch does
+not manifest for this option. Posture: keep the flag **true** (harmless, explicit), and **M2-T04 keeps the
+mandatory result-scan caveat** (verify returned road classes; never trust request flags blindly — spec
+§11/§28). The "impossible exclusion → no-route" case wasn't force-constructed (dense corridor); M3's
+relaxation-ladder tests exercise no-route handling naturally.

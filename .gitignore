@@ -37,8 +37,18 @@ data/**
 !data/.gitkeep
 !data/README.md
 # tracked SPK-08 deliverables (the large .pbf outputs stay ignored below)
-!data/region.poly
+# region polygons live under data/regions/ (M2-T01; REGION_POLY_PATH selects one)
+!data/regions/
+!data/regions/*.poly
 !data/extract.sh
+# tracked SPK-04 deliverables (routing extract filter + VPS tile build + probe)
+!data/extract-routing.sh
+!data/build_tiles.sh
+!data/valhalla_probe.py
+# tracked M2-T06 loader (curvy_segments rows into the data tier)
+!data/load_curvy.ts
+# tracked M2-T09 POI extractor (generated pois.geojsonl / pois.json stay ignored)
+!data/extract_pois.ts
 # tracked SPK-10 data package — source only (generated .geojsonl/.csv stay ignored)
 !data/package.json
 !data/tsconfig.json

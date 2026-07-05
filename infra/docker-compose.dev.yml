@@ -26,17 +26,20 @@ services:
       - roadopia
 
   valhalla:
-    # PLACEHOLDER (M0-T09): a lightweight stand-in that just stays up so the stack
-    # boots before any tiles exist. It publishes NO ports — reachable only on the
-    # private `roadopia` network. SPK-04 pins the real image tag; M2 builds tiles
-    # into the `valhalla_tiles` volume and swaps in the real serving command:
-    #   image: ghcr.io/gis-ops/docker-valhalla/valhalla:<pinned-at-SPK-04>
-    #   expose: ['8002']
-    #   environment: { tile_dir: /data }
-    image: alpine:3
-    command: ['tail', '-f', '/dev/null']
+    # Real Valhalla (M2-T03; replaces the M0-T09 placeholder). Pinned by digest —
+    # v3.7.0-7e1ddb194 (same image the VPS serves; BD-14). Tiles + the PINNED config
+    # live in ../data/valhalla (bind mount, gitignored; config canonical copy =
+    # infra/valhalla/valhalla.json with allow_hard_exclusions=true — Spec §45/§28).
+    # Build tiles first:
+    #   cp infra/valhalla/valhalla.json data/valhalla/ && cp data/region-clipped.osm.pbf data/valhalla/
+    #   SERVE=0 bash data/build_tiles.sh "$PWD/data/valhalla"
+    # Published on 127.0.0.1 only (backend-on-host dev hits http://localhost:8002).
+    image: ghcr.io/valhalla/valhalla@sha256:8aebd555b84163ff9d98d3199380f1653113f6fa28f3043a13c6baf609338f29
+    command: ['valhalla_service', '/data/valhalla.json', '1']
+    ports:
+      - '127.0.0.1:8002:8002'
     volumes:
-      - valhalla_tiles:/data
+      - ../data/valhalla:/data
     networks:
       - roadopia
 
@@ -55,6 +58,3 @@ services:
 networks:
   roadopia:
     driver: bridge
-
-volumes:
-  valhalla_tiles:

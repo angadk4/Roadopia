@@ -1,0 +1,401 @@
+{
+  "trip": {
+    "locations": [
+      {
+        "type": "break",
+        "lat": 43.255719,
+        "lon": -79.87114,
+        "original_index": 0
+      },
+      {
+        "type": "break",
+        "lat": 43.159206,
+        "lon": -79.246524,
+        "original_index": 0
+      }
+    ],
+    "legs": [
+      {
+        "maneuvers": [
+          {
+            "type": 1,
+            "instruction": "Drive east on Main Street West/8.",
+            "verbal_succinct_transition_instruction": "Drive east. Then Turn left onto James Street South.",
+            "verbal_pre_transition_instruction": "Drive east on Main Street West, 8. Then Turn left onto James Street South.",
+            "verbal_post_transition_instruction": "Continue for 100 meters.",
+            "street_names": ["Main Street West", "8"],
+            "bearing_after": 104,
+            "time": 9.094,
+            "length": 0.126,
+            "cost": 9.898,
+            "begin_shape_index": 0,
+            "end_shape_index": 7,
+            "verbal_multi_cue": true,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 15,
+            "instruction": "Turn left onto James Street South.",
+            "verbal_transition_alert_instruction": "Turn left onto James Street South.",
+            "verbal_succinct_transition_instruction": "Turn left.",
+            "verbal_pre_transition_instruction": "Turn left onto James Street South.",
+            "verbal_post_transition_instruction": "Continue for 2 kilometers.",
+            "street_names": ["James Street South"],
+            "bearing_before": 109,
+            "bearing_after": 17,
+            "time": 162.616,
+            "length": 2.029,
+            "cost": 225.065,
+            "begin_shape_index": 7,
+            "end_shape_index": 100,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 10,
+            "instruction": "Turn right onto Burlington Street East.",
+            "verbal_transition_alert_instruction": "Turn right onto Burlington Street East.",
+            "verbal_succinct_transition_instruction": "Turn right.",
+            "verbal_pre_transition_instruction": "Turn right onto Burlington Street East.",
+            "verbal_post_transition_instruction": "Continue for 2.5 kilometers.",
+            "street_names": ["Burlington Street East"],
+            "bearing_before": 18,
+            "bearing_after": 106,
+            "time": 205.276,
+            "length": 2.657,
+            "cost": 257.956,
+            "begin_shape_index": 100,
+            "end_shape_index": 176,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 24,
+            "instruction": "Keep left to stay on Burlington Street East.",
+            "verbal_transition_alert_instruction": "Keep left to stay on Burlington Street East.",
+            "verbal_pre_transition_instruction": "Keep left to stay on Burlington Street East.",
+            "verbal_post_transition_instruction": "Continue for 1.5 kilometers.",
+            "street_names": ["Burlington Street East"],
+            "bearing_before": 106,
+            "bearing_after": 102,
+            "time": 108.572,
+            "length": 1.742,
+            "cost": 122.257,
+            "begin_shape_index": 176,
+            "end_shape_index": 211,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 24,
+            "instruction": "Keep left to take Nikola Tesla Boulevard.",
+            "verbal_transition_alert_instruction": "Keep left to take Nikola Tesla Boulevard.",
+            "verbal_pre_transition_instruction": "Keep left to take Nikola Tesla Boulevard.",
+            "verbal_post_transition_instruction": "Continue for 3 kilometers.",
+            "street_names": ["Nikola Tesla Boulevard"],
+            "bearing_before": 106,
+            "bearing_after": 101,
+            "time": 178.438,
+            "length": 3.213,
+            "cost": 178.805,
+            "begin_shape_index": 211,
+            "end_shape_index": 259,
+            "highway": true,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 24,
+            "instruction": "Keep left to take QEW toward Niagara.",
+            "verbal_transition_alert_instruction": "Keep left to take QEW.",
+            "verbal_pre_transition_instruction": "Keep left to take QEW toward Niagara. Then Keep right to take QEW.",
+            "bearing_before": 83,
+            "bearing_after": 87,
+            "time": 7.188,
+            "length": 0.199,
+            "cost": 6.805,
+            "begin_shape_index": 259,
+            "end_shape_index": 262,
+            "sign": {
+              "exit_branch_elements": [
+                {
+                  "text": "QEW",
+                  "consecutive_count": 2
+                },
+                {
+                  "text": "Queen Elizabeth Way"
+                }
+              ],
+              "exit_toward_elements": [
+                {
+                  "text": "Niagara",
+                  "consecutive_count": 1
+                },
+                {
+                  "text": "Toronto"
+                }
+              ]
+            },
+            "verbal_multi_cue": true,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 23,
+            "instruction": "Keep right to take QEW toward Niagara.",
+            "verbal_transition_alert_instruction": "Keep right to take QEW.",
+            "verbal_pre_transition_instruction": "Keep right to take QEW toward Niagara.",
+            "verbal_post_transition_instruction": "Continue for 41 kilometers.",
+            "street_names": ["QEW", "Queen Elizabeth Way"],
+            "bearing_before": 90,
+            "bearing_after": 100,
+            "time": 1341.231,
+            "length": 40.919,
+            "cost": 1251.013,
+            "begin_shape_index": 262,
+            "end_shape_index": 434,
+            "highway": true,
+            "sign": {
+              "exit_branch_elements": [
+                {
+                  "text": "QEW",
+                  "consecutive_count": 2
+                }
+              ],
+              "exit_toward_elements": [
+                {
+                  "text": "Niagara",
+                  "consecutive_count": 1
+                }
+              ]
+            },
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 20,
+            "instruction": "Take exit 49 on the right onto 406 toward Thorold/Welland/Pt. Colborne.",
+            "verbal_transition_alert_instruction": "Take exit 49 on the right.",
+            "verbal_pre_transition_instruction": "Take exit 49 on the right onto 406 toward Thorold, Welland.",
+            "verbal_post_transition_instruction": "Continue for 4 kilometers.",
+            "street_names": ["406", "Highway 406"],
+            "bearing_before": 96,
+            "bearing_after": 115,
+            "time": 146.843,
+            "length": 3.778,
+            "cost": 154.15,
+            "begin_shape_index": 434,
+            "end_shape_index": 511,
+            "highway": true,
+            "sign": {
+              "exit_number_elements": [
+                {
+                  "text": "49"
+                }
+              ],
+              "exit_branch_elements": [
+                {
+                  "text": "406",
+                  "consecutive_count": 1
+                }
+              ],
+              "exit_toward_elements": [
+                {
+                  "text": "Thorold"
+                },
+                {
+                  "text": "Welland"
+                },
+                {
+                  "text": "Pt. Colborne"
+                }
+              ]
+            },
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 23,
+            "instruction": "Keep right to take exit 4 onto 77/Fourth Avenue.",
+            "verbal_transition_alert_instruction": "Keep right to take exit 4.",
+            "verbal_pre_transition_instruction": "Keep right to take exit 4 onto 77, Fourth Avenue.",
+            "bearing_before": 87,
+            "bearing_after": 93,
+            "time": 12.891,
+            "length": 0.318,
+            "cost": 13.184,
+            "begin_shape_index": 511,
+            "end_shape_index": 518,
+            "sign": {
+              "exit_number_elements": [
+                {
+                  "text": "4"
+                }
+              ],
+              "exit_branch_elements": [
+                {
+                  "text": "77"
+                },
+                {
+                  "text": "Fourth Avenue"
+                }
+              ]
+            },
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 24,
+            "instruction": "Keep left to take 77 East/QEW EDR/Fourth Avenue East.",
+            "verbal_transition_alert_instruction": "Keep left to take 77 East.",
+            "verbal_pre_transition_instruction": "Keep left to take 77 East, QEW EDR. Then, in 200 meters, Bear left onto Fourth Avenue.",
+            "bearing_before": 91,
+            "bearing_after": 82,
+            "time": 8.394,
+            "length": 0.157,
+            "cost": 19.727,
+            "begin_shape_index": 518,
+            "end_shape_index": 532,
+            "sign": {
+              "exit_branch_elements": [
+                {
+                  "text": "77 East"
+                },
+                {
+                  "text": "QEW EDR"
+                },
+                {
+                  "text": "Fourth Avenue East"
+                }
+              ]
+            },
+            "verbal_multi_cue": true,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 16,
+            "instruction": "Bear left onto Fourth Avenue/77. Continue on 77.",
+            "verbal_transition_alert_instruction": "Bear left onto Fourth Avenue.",
+            "verbal_succinct_transition_instruction": "Bear left.",
+            "verbal_pre_transition_instruction": "Bear left onto Fourth Avenue, 77.",
+            "verbal_post_transition_instruction": "Continue on 77 for 900 meters.",
+            "street_names": ["77"],
+            "begin_street_names": ["Fourth Avenue", "77"],
+            "bearing_before": 57,
+            "bearing_after": 38,
+            "time": 67.336,
+            "length": 0.903,
+            "cost": 105.116,
+            "begin_shape_index": 532,
+            "end_shape_index": 556,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 10,
+            "instruction": "Turn right onto Lake Street.",
+            "verbal_transition_alert_instruction": "Turn right onto Lake Street.",
+            "verbal_succinct_transition_instruction": "Turn right. Then Turn left onto James Street.",
+            "verbal_pre_transition_instruction": "Turn right onto Lake Street. Then Turn left onto James Street.",
+            "verbal_post_transition_instruction": "Continue for 30 meters.",
+            "street_names": ["Lake Street"],
+            "bearing_before": 65,
+            "bearing_after": 176,
+            "time": 10.587,
+            "length": 0.027,
+            "cost": 17.2,
+            "begin_shape_index": 556,
+            "end_shape_index": 557,
+            "verbal_multi_cue": true,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 15,
+            "instruction": "Turn left onto James Street.",
+            "verbal_transition_alert_instruction": "Turn left onto James Street.",
+            "verbal_succinct_transition_instruction": "Turn left.",
+            "verbal_pre_transition_instruction": "Turn left onto James Street.",
+            "verbal_post_transition_instruction": "Continue for 400 meters.",
+            "street_names": ["James Street"],
+            "bearing_before": 176,
+            "bearing_after": 126,
+            "time": 28.594,
+            "length": 0.439,
+            "cost": 41.056,
+            "begin_shape_index": 557,
+            "end_shape_index": 564,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 10,
+            "instruction": "Turn right onto Market Street.",
+            "verbal_transition_alert_instruction": "Turn right onto Market Street.",
+            "verbal_succinct_transition_instruction": "Turn right. Then You will arrive at your destination.",
+            "verbal_pre_transition_instruction": "Turn right onto Market Street. Then You will arrive at your destination.",
+            "verbal_post_transition_instruction": "Continue for 40 meters.",
+            "street_names": ["Market Street"],
+            "bearing_before": 134,
+            "bearing_after": 222,
+            "time": 8.258,
+            "length": 0.034,
+            "cost": 22.261,
+            "begin_shape_index": 564,
+            "end_shape_index": 567,
+            "verbal_multi_cue": true,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          },
+          {
+            "type": 4,
+            "instruction": "You have arrived at your destination.",
+            "verbal_transition_alert_instruction": "You will arrive at your destination.",
+            "verbal_pre_transition_instruction": "You have arrived at your destination.",
+            "bearing_before": 215,
+            "time": 0.0,
+            "length": 0.0,
+            "cost": 0.0,
+            "begin_shape_index": 567,
+            "end_shape_index": 567,
+            "travel_mode": "drive",
+            "travel_type": "car"
+          }
+        ],
+        "summary": {
+          "has_time_restrictions": false,
+          "has_toll": false,
+          "has_highway": true,
+          "has_ferry": false,
+          "min_lat": 43.15678,
+          "min_lon": -79.87114,
+          "max_lat": 43.272738,
+          "max_lon": -79.24626,
+          "time": 2295.323,
+          "length": 56.543,
+          "cost": 2424.501
+        },
+        "shape": "myboqAfi}iwCPcBXiC^eDzCiS~J_p@V{Ax@oFeDgA}@YcT_HqSeHeAWgFyBuBw@kBaA}G{B}Ai@iDgA{E}A_A[ie@qO}CcAoAa@uAg@cDiAu@Yoi@wRkBo@cC{@}`@wMgGoBsE}AgFcBaKgDmJ_Dsa@aNiSyGw@WkBm@uBs@sE{A}DoAoIqC_U{HaBm@cDiAmDmAcCy@cYsJkC}@cCy@QGuCaAw[sK{Ag@eQqFgGmByGuB}LuEcKaDi@QKC}GwBeH}BOEg@Q{DsA}DoAcYcJwJcDmEaBcKwDyNiEoNeFuFgByAe@_PqFqDoAeR_GqBq@yE{A{CgAqBq@iu@kVqBq@gv@eWaO_FsMkEoVgIq@UkBm@}Bw@aKcDgi@}P}y@oX{VaIcMiEqBs@sUcIcCy@`@wDt@wFhCmRdJkr@`PynAJw@VmB`@kCpPcnAxKoz@`@{C\\oCz`@mzCbGgb@tFm_@nIaj@xC_GjEa[rBqM`E{UtB}LnFs^d@eDpEgW~@aGvJin@nM}u@`CgY`UumAvHsa@h@yCvZ}iBpPgfAhDyTzDwFnGu_@xAeKvAeJvBuNx@qFo@aIjFq]|Gue@hD{HrEkWvCwS{@cFlDiXpDaU`DgVzIkr@|B}NdEkT|CuMvCkMfGiYpFuUlBiIzDuEvJkWrBaFpCwG~CkIzBuHfCcMtAqI^_DdBgTbAsNtAeSbB{NzBkQn@aF~Dq[tAyKbDmWf@{HhEq]~BiQ|CaVfCaTzC{U|B_PhC_RlBuMj@aEhIuj@tGed@jDmUnBiMlDyUxAkJLw@jBsLxAwIfBcJx@cEfAkGxBcLjDiRvVgmAtKqo@tAmIh@yCxnA_mHpf@u|Cnd@ktCl@_FtImq@tGyg@R_B~Bg[`DiVbEg[jKyv@|F}`@pCwP|@aFrBmLdJwh@rJeh@`BoIf_@yoBdf@}dC`Imf@~CuSdFy\\xJso@zJct@nJa`AzBua@HiNRqKr@_`@a@{xAg@okC}@imCiBowGDer@r@i`AhAgw@hA}hA[{h@aBil@iBsb@cCsYcIwp@iEu[wGe_@sSy|@qM}e@eNue@eHyW_Ia[oI_i@wFub@{C_X}AgYg@}Ma@mXYuwACof@tBk\\pC_R|CiMdDiJlFmN~EsIbIoK|IsIbq@sd@l{AsbArR{UxY{RtWwOnqCkfBhl@k_@|hC{|Al[kR|YoTbTkQ`VoVzRiWrPqXtPc\\vM}]`_@}uAbd@szCzl@s~Djb@svCx_ByqKlyC{rR|f@{lDtyBqyNxaBynK`K{q@~cCkoP`b@qrCn{B_cOxdA_~Grd@qyC|tDcpV`gAygH|zAmyJldAqaHbj@ihDnr@{}EtuAczIdEyWnaAywGxVycBnx@uoFpmAcfIjcAcoGxk@awD|m@ybEhdAq_HleA}`HpLav@bc@cxChaAwjGrk@suDrZ{oBrCaQ`q@yrEnyAuyJrw@u`F~y@moF|c@u{Cxb@qjCrp@gqEvb@}pCl^e_Ct\\_|Brh@wdD`|@c{Fnf@k_DhEiXrEwY`t@g{E~\\iyBxYulBnq@_tEvc@cpCjz@ezFfeAw~GdeAaaHpb@_tC|i@wgEhe@{sEnDo_@vDsf@xUm}CbBsa@~Ee{A|BchBJ}iCIsi@MmvEyAwqFs@_jIiBie[`CaiCnAmtAlNohM|E_{ElCcmCbCoxBbAqpAdEeaF~@egAhG{`GlI}_IdCgdCbKuhKpBe~ArHq{G|F_|HbIowHjd@gwc@jIc_Hl@of@fHisHnA{hAdAot@v@_xBAez@oCqzEcC}hDuAg{Be@amBz@iw@xAov@hCa~@jGsmAxImiArLgiAhNaiAlQaiAtKkl@pNuk@bTgz@pp@{fClk@yeBfi@acB~Tus@pg@c`BlMia@fJyYzXoeAf\\g}AhFq[tQojAzOodBbO{|CjAs`BcVci\\u@yx@uN}{T[am@aGugIw@mn@o@otAm@sqAdBuoCjDotAnLw_D~QwsErTgfGlCox@hIusB~HipBX}Hpl@{cP~EsSd@eMhAmP~E{|@`G_e@fAsIbAkGdAaG|EyT|KiZpJwRhJaNzMiO~LyKlPcJdIqDnMqDxJwAtWcC`}@_GtdBoEdReEnQa@lWaF`]aLvNwGrLiGbUsNjfBwtA`S_NlSiLx\\uMjToGlSwD~XmCv\\q@fYXp}AzFnn@zBxV~@vVl@xNG`Oc@zLq@|LkAfQyBfQmEbQoF`QyGlYeOrRsMhQwN~LqLdLeMzKuNnJiNpJyO`IsOfKsU~IuUzIwW|GoXlFwV~CuQbC}PtCoY`BmPbAeRdBef@LgVIoYmEufEyF}eEk@}q@}@kh@g@yd@m@se@|@az@DoZd@sd@^ga@p@kk@VkXDcOo@eNgA{MgBuLg@uCs@gDkAoEmBqGsBeHwB}GcA{DeA{Di@wBu@qBsAmCqM{N}MkGsEoHwPeQ}s@uz@qRkWgNgVoSyc@qCsJuAsEkGqTeAoDmB_IaM{g@kDsN{AuGgEmR_CkKqFeVkHm\\yHa]eIi\\_Row@sKsd@~Mo@lBqEzw@yjBtL{XzDeJrT{g@zNa]b_@am@LNbBtCrJfJ"
+      }
+    ],
+    "summary": {
+      "has_time_restrictions": false,
+      "has_toll": false,
+      "has_highway": true,
+      "has_ferry": false,
+      "min_lat": 43.15678,
+      "min_lon": -79.87114,
+      "max_lat": 43.272738,
+      "max_lon": -79.24626,
+      "time": 2295.323,
+      "length": 56.543,
+      "cost": 2424.501
+    },
+    "status_message": "Found route between points",
+    "status": 0,
+    "units": "kilometers",
+    "language": "en-US"
+  }
+}

@@ -122,3 +122,21 @@ export function loadServerConfig(env: RawEnv = process.env): ServerConfig {
 export function loadClientConfig(env: RawEnv = process.env): ClientConfig {
   return parseOrThrow(clientEnvSchema, env, 'client');
 }
+
+/** The active region, resolved from config (M2-T01; Spec §46 config-driven portability). */
+export interface Region {
+  /** Region identifier (e.g. "wgh-niagara") — used in names/manifests, never hard-coded. */
+  id: string;
+  /** Repo-relative (or absolute) path to the region's `.poly` boundary polygon. */
+  polyPath: string;
+}
+
+/**
+ * Resolve the region from a loaded config. Every pipeline consumer goes through
+ * this (or reads the same env keys, for shell scripts) — swapping `REGION_ID` +
+ * `REGION_POLY_PATH` in the environment retargets the entire pipeline; no script
+ * may hard-code a region or bbox (M2-T01 AC).
+ */
+export function getRegion(config: Pick<ServerConfig, 'REGION_ID' | 'REGION_POLY_PATH'>): Region {
+  return { id: config.REGION_ID, polyPath: config.REGION_POLY_PATH };
+}

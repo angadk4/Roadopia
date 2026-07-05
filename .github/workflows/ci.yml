@@ -48,7 +48,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [app, backend, shared, eval, data]
+        # db's integration tests self-skip when no local Supabase stack is reachable
+        # (they are the local `pnpm -C db test …` Verify gates; CI covers lint/types).
+        package: [app, backend, shared, eval, data, db]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

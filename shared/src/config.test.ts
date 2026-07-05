@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { loadServerConfig, loadClientConfig, EnvValidationError } from './config';
+import { loadServerConfig, loadClientConfig, getRegion, EnvValidationError } from './config';
 
 /** A minimal valid server env (only the required keys; defaults fill the rest). */
 const validServerEnv = {
@@ -62,6 +62,22 @@ describe('config loader', () => {
     expect(cfg.ITERATION_CAP).toBe(5);
     expect(cfg.KILL_SWITCH).toBe(true);
     expect(cfg.TAU_OVERLAP).toBeCloseTo(0.7);
+  });
+
+  it('resolves the region from env; swapping the env swaps the region (M2-T01)', () => {
+    const a = getRegion(loadServerConfig({ ...validServerEnv }));
+    expect(a).toEqual({ id: 'golden-horseshoe', polyPath: './data/regions/golden-horseshoe.poly' });
+
+    // Swapping ONLY the env values retargets the region — no code change involved.
+    const b = getRegion(
+      loadServerConfig({
+        ...validServerEnv,
+        REGION_ID: 'wgh-niagara',
+        REGION_POLY_PATH: 'data/regions/wgh-niagara.poly',
+      }),
+    );
+    expect(b).toEqual({ id: 'wgh-niagara', polyPath: 'data/regions/wgh-niagara.poly' });
+    expect(b).not.toEqual(a);
   });
 
   it('client config exposes ONLY public keys (no secrets — Spec §57)', () => {

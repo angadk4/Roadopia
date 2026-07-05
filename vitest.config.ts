@@ -9,7 +9,16 @@
  * `vitest/config` import here would be pulled into each package's config bundle and
  * trip a spurious UNRESOLVED_IMPORT warning. Vitest accepts a plain object directly.
  */
+import { fileURLToPath } from 'node:url';
+
 export default {
+  resolve: {
+    alias: {
+      // Runtime mirror of tsconfig.base.json `paths` — vitest does not read
+      // tsconfig paths, so the @shared/* convention needs this alias (M2-T04).
+      '@shared': fileURLToPath(new URL('./shared/src', import.meta.url)),
+    },
+  },
   test: {
     environment: 'node',
     include: ['src/**/*.{test,spec}.ts'],

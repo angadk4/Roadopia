@@ -19,6 +19,9 @@ BUILD_LOG.md
 data
 *.osm.pbf
 
+# Generated Valhalla config (valhalla_build_config output — keep as generated)
+infra/valhalla/valhalla.json
+
 # Supabase CLI local artifacts (machine-generated; ignored by db/supabase/.gitignore,
 # but prettier only reads root ignores, so list them here too)
 db/supabase/.temp

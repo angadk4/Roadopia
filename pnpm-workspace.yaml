@@ -9,5 +9,8 @@ packages:
   - 'shared'
   - 'eval'
   - 'data'
+  # db became a package at M2-T06 (integration tests for migrations/RPCs live in
+  # db/tests; the SQL itself stays plain migrations under db/supabase/migrations).
+  - 'db'
 allowBuilds:
   esbuild: true
