@@ -19,8 +19,8 @@ import { haversineMeters } from '../../../data/curvature/geometry';
 import type { CandidateSegment, CandidateSpot } from './retrieve';
 
 export const N_SECTORS_DEFAULT = 8;
-export const K_CLUSTERS_DEFAULT = 6;
-export const N_CANDIDATES_DEFAULT = 10;
+export const K_CLUSTERS_DEFAULT = 8;
+export const N_CANDIDATES_DEFAULT = 14;
 /** Greedy cluster absorption radius (m) — segments this close join the seed's cluster. */
 export const CLUSTER_RADIUS_M = 2_500;
 /** Return anchor sits roughly at this fraction of the cluster distance from origin. */
@@ -135,6 +135,12 @@ export interface GenerateOptions {
   durationS?: number;
   /** Assumed average speed for sizing (km/h; M4 calibrates). */
   avgSpeedKmh?: number;
+  /**
+   * Return-anchor pool: road points of ANY curviness (SPK-15 run 7 — ordinary
+   * parallel roads fix band-topology retrace). Falls back to curvy-segment
+   * centroids when absent, synthetic bearing points as last resort.
+   */
+  anchorPoints?: LatLng[];
 }
 
 /**
@@ -166,7 +172,10 @@ export function generateLoopCandidates(
   const kClusters = options.kClusters ?? K_CLUSTERS_DEFAULT;
   const nCandidates = options.nCandidates ?? N_CANDIDATES_DEFAULT;
 
-  const infos: SegmentInfo[] = segments.map((segment) => {
+  // Waypoint material excludes residential fragments (SPK-15 run 8: crescents/
+  // courts made waypoints in-and-out spurs); residential still counts in scoring —
+  // just not as a place the route is steered through. Falls back when sparse.
+  const allInfos: SegmentInfo[] = segments.map((segment) => {
     const centroid = centroidOf(segment);
     const bearing = bearingDeg(origin, centroid);
     return {
@@ -177,6 +186,8 @@ export function generateLoopCandidates(
       sector: sectorOf(bearing, nSectors),
     };
   });
+  const nonResidential = allInfos.filter((i) => i.segment.highway !== 'residential');
+  const infos = nonResidential.length >= 5 ? nonResidential : allInfos;
 
   const clusters = clusterSegments(infos, kClusters);
   // rank clusters: duration-sized weight desc (SPK-15: cluster distance must fit
@@ -200,107 +211,152 @@ export function generateLoopCandidates(
   }
 
   const candidates: WaypointCandidate[] = [];
-  // return-sector offsets to try per cluster (opposite-ish first — anti-retrace)
-  const offsets = [
-    Math.floor(nSectors / 2),
-    Math.floor(nSectors / 2) + 1,
-    Math.floor(nSectors / 2) - 1,
-  ];
+  const halfTurn = Math.floor(nSectors / 2);
+  const sectorDist = (a: number, b: number) => {
+    const d = Math.abs(a - b) % nSectors;
+    return Math.min(d, nSectors - d);
+  };
 
-  outer: for (const cluster of roundRobin) {
-    for (const offset of offsets) {
-      if (candidates.length >= nCandidates) break outer;
-      const returnSector = (cluster.sector + offset) % nSectors;
-      // return anchor (the anti-retrace device — SPK-15 showed candidates WITHOUT
-      // one become out-and-back spokes and die at the self-overlap gate):
-      //   1) best road segment in the return sector, else in any sector ≥ 2 away;
-      //   2) fallback: a deterministic synthetic point on the return bearing —
-      //      Valhalla snaps it to the nearest real road (search construction,
-      //      not invented geography; rule A concerns the LLM, not the pipeline).
-      // Return anchor (SPK-15 iterations 4–6 recorded): segment-first from the
-      // return sector (widened to any sector ≥2 away), SYNTHETIC bearing-point
-      // fallback (Valhalla snaps to the nearest real road). Synthetic-ONLY was
-      // tried and REGRESSED (pulled returns onto boring concessions, curviness
-      // down ~25 % — run 6): curvy segment anchors matter when they exist off the
-      // outbound corridor. Band-topology retrace remains the open SPK-15 problem.
-      const targetDist = cluster.distanceM * RETURN_ANCHOR_DISTANCE_FRACTION;
-      const sectorDist = (a: number, b: number) => {
-        const d = Math.abs(a - b) % nSectors;
-        return Math.min(d, nSectors - d);
-      };
-      const anchorPool = infos.filter((i) => i.sector === returnSector);
-      const widened =
-        anchorPool.length > 0
-          ? anchorPool
-          : infos.filter((i) => sectorDist(i.sector, cluster.sector) >= 2);
-      const anchorInfo = widened.sort(
-        (a, b) =>
-          Math.abs(a.distanceM - targetDist) - Math.abs(b.distanceM - targetDist) ||
-          a.segment.id.localeCompare(b.segment.id),
-      )[0];
-      let anchor: { centroid: LatLng; sector: number };
-      if (anchorInfo && anchorInfo.sector !== cluster.sector) {
-        anchor = { centroid: anchorInfo.centroid, sector: anchorInfo.sector };
-      } else {
-        const d2r = Math.PI / 180;
-        const bearing = ((returnSector + 0.5) * 360) / nSectors;
-        const distKm = (cluster.distanceM / 1000) * RETURN_ANCHOR_DISTANCE_FRACTION;
-        anchor = {
-          centroid: {
-            lat: origin.lat + (distKm / 111.32) * Math.cos(bearing * d2r),
-            lng:
-              origin.lng +
-              ((distKm / 111.32) * Math.sin(bearing * d2r)) / Math.cos(origin.lat * d2r),
-          },
-          sector: returnSector,
-        };
-      }
+  // Return-anchor pool (SPK-15 run 7): ANY-curviness road points when provided
+  // (ordinary parallel roads — fixes band-topology retrace where all θ≥0.6 roads
+  // form one band and out/return collapsed onto it), else curvy-segment centroids
+  // (unit-test/back-compat path). Synthetic bearing point (Valhalla-snapped) as
+  // the last resort. Deterministic throughout.
+  const anchorPool: Array<{ centroid: LatLng; sector: number; distanceM: number; key: string }> =
+    options.anchorPoints && options.anchorPoints.length > 0
+      ? options.anchorPoints.map((p, i) => ({
+          centroid: p,
+          sector: sectorOf(bearingDeg(origin, p), nSectors),
+          distanceM: distM(origin, p),
+          key: `ap${i}`,
+        }))
+      : infos.map((i) => ({
+          centroid: i.centroid,
+          sector: i.sector,
+          distanceM: i.distanceM,
+          key: i.segment.id,
+        }));
 
-      // cluster entry/far waypoints: nearest + farthest member centroids
-      const members = [...cluster.members].sort((a, b) => a.distanceM - b.distanceM);
-      const entry = members[0]!.centroid;
-      const far = members.length > 1 ? members[members.length - 1]!.centroid : null;
+  const pickAnchor = (
+    outboundSector: number,
+    returnSector: number,
+    targetDist: number,
+  ): { centroid: LatLng; sector: number } => {
+    const inSector = anchorPool.filter((a) => a.sector === returnSector);
+    const pool =
+      inSector.length > 0
+        ? inSector
+        : anchorPool.filter((a) => sectorDist(a.sector, outboundSector) >= 2);
+    const found = pool.sort(
+      (a, b) =>
+        Math.abs(a.distanceM - targetDist) - Math.abs(b.distanceM - targetDist) ||
+        a.key.localeCompare(b.key),
+    )[0];
+    if (found && found.sector !== outboundSector) {
+      return { centroid: found.centroid, sector: found.sector };
+    }
+    const d2r = Math.PI / 180;
+    const bearing = ((returnSector + 0.5) * 360) / nSectors;
+    const distKm = (targetDist / 1000) * 1; // already fractioned by the caller
+    return {
+      centroid: {
+        lat: origin.lat + (distKm / 111.32) * Math.cos(bearing * d2r),
+        lng:
+          origin.lng + ((distKm / 111.32) * Math.sin(bearing * d2r)) / Math.cos(origin.lat * d2r),
+      },
+      sector: returnSector,
+    };
+  };
 
-      // optional POI anchor: nearest requested spot to the cluster centroid
-      const spotIds: string[] = [];
-      let spotWp: LatLng | null = null;
-      if (options.anchorSpots && spots.length > 0) {
-        const nearest = [...spots].sort(
-          (a, b) =>
-            distM({ lat: a.lat, lng: a.lng }, cluster.centroid) -
-              distM({ lat: b.lat, lng: b.lng }, cluster.centroid) || a.id.localeCompare(b.id),
-        )[0]!;
-        spotWp = { lat: nearest.lat, lng: nearest.lng };
-        spotIds.push(nearest.id);
-      }
+  const nearestSpotTo = (target: LatLng): CandidateSpot | null => {
+    if (!options.anchorSpots || spots.length === 0) return null;
+    return [...spots].sort(
+      (a, b) =>
+        distM({ lat: a.lat, lng: a.lng }, target) - distM({ lat: b.lat, lng: b.lng }, target) ||
+        a.id.localeCompare(b.id),
+    )[0]!;
+  };
 
-      const wps: LatLng[] = [entry];
-      if (far && distM(entry, far) > 500) wps.push(far);
-      if (spotWp) wps.push(spotWp);
-      wps.push(anchor.centroid); // always present now (segment, widened, or synthetic)
+  const makeCandidate = (
+    id: string,
+    primary: Cluster,
+    extraCluster: Cluster | null,
+    returnSector: number,
+  ): WaypointCandidate => {
+    const members = [...primary.members].sort((a, b) => a.distanceM - b.distanceM);
+    const entry = members[0]!.centroid;
+    const far = members.length > 1 ? members[members.length - 1]!.centroid : null;
 
-      // angular order around the origin (L4) so the loop sweeps one way round
-      const ordered = wps
-        .map((p) => ({ p, b: bearingDeg(origin, p) }))
-        .sort((a, b) => {
-          // rotate bearings so the outbound sector's centre is 0 — stable sweep
-          const rot = (x: number) => (x - (cluster.sector * 360) / nSectors + 360) % 360;
-          return rot(a.b) - rot(b.b);
-        })
-        .map(({ p }) => p);
+    const spot = nearestSpotTo(primary.centroid);
+    const spotIds = spot ? [spot.id] : [];
 
-      candidates.push({
-        id: `loop-c${cluster.id}-r${returnSector}`,
-        kind: 'loop',
-        waypoints: ordered,
-        sector: cluster.sector,
-        returnSector,
-        clusterId: cluster.id,
-        spotIds,
-        clusterWeight: cluster.weight,
-      });
+    const anchor = pickAnchor(
+      primary.sector,
+      returnSector,
+      primary.distanceM * RETURN_ANCHOR_DISTANCE_FRACTION,
+    );
+
+    const wps: LatLng[] = [entry];
+    if (far && distM(entry, far) > 500) wps.push(far);
+    if (extraCluster) wps.push(extraCluster.centroid);
+    if (spot) wps.push({ lat: spot.lat, lng: spot.lng });
+    wps.push(anchor.centroid);
+
+    // angular order around the origin (L4) so the loop sweeps one way round
+    const ordered = wps
+      .map((p) => ({ p, b: bearingDeg(origin, p) }))
+      .sort((a, b) => {
+        const rot = (x: number) => (x - (primary.sector * 360) / nSectors + 360) % 360;
+        return rot(a.b) - rot(b.b);
+      })
+      .map(({ p }) => p);
+
+    return {
+      id,
+      kind: 'loop',
+      waypoints: ordered,
+      sector: primary.sector,
+      returnSector,
+      clusterId: primary.id,
+      spotIds,
+      clusterWeight: primary.weight + (extraCluster?.weight ?? 0),
+    };
+  };
+
+  // ROUND 1 — one candidate per cluster (distinct outbound corridors survive
+  // dedup; SPK-15 run 7: 3 return-variants per cluster collapsed to ~1 kept).
+  for (const cluster of roundRobin) {
+    if (candidates.length >= nCandidates) break;
+    const returnSector = (cluster.sector + halfTurn) % nSectors;
+    candidates.push(
+      makeCandidate(`loop-c${cluster.id}-r${returnSector}`, cluster, null, returnSector),
+    );
+  }
+
+  // ROUND 2 — cluster pairs in nearby-but-different sectors (chained corridors:
+  // new distinct shapes + fills long duration budgets).
+  for (let i = 0; i < roundRobin.length && candidates.length < nCandidates; i++) {
+    for (let j = i + 1; j < roundRobin.length && candidates.length < nCandidates; j++) {
+      const a = roundRobin[i]!;
+      const b = roundRobin[j]!;
+      const sd = sectorDist(a.sector, b.sector);
+      if (sd < 1 || sd > 3) continue;
+      const returnSector = (Math.max(a.sector, b.sector) + halfTurn) % nSectors;
+      candidates.push(makeCandidate(`loop-c${a.id}+c${b.id}`, a, b, returnSector));
     }
   }
+
+  // ROUND 3 — extra return-sector variants for the top clusters.
+  outer: for (const cluster of roundRobin) {
+    for (const offset of [halfTurn + 1, halfTurn - 1]) {
+      if (candidates.length >= nCandidates) break outer;
+      const returnSector = (cluster.sector + offset + nSectors) % nSectors;
+      const id = `loop-c${cluster.id}-r${returnSector}`;
+      if (candidates.some((c) => c.id === id)) continue;
+      candidates.push(makeCandidate(id, cluster, null, returnSector));
+    }
+  }
+
   return candidates;
 }
 

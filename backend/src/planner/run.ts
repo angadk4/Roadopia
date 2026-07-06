@@ -29,7 +29,7 @@ import { diversify } from './diversify';
 import { assembleLoop } from './loop';
 import { weightsForPreset } from './presets';
 import { initialParams, nextRelaxation, type SearchParams } from './relax';
-import { retrieveCandidates } from './retrieve';
+import { retrieveAnchorPoints, retrieveCandidates } from './retrieve';
 import { buildScope } from './scope';
 import { mergeWeights, scoreCandidate, type ScoreBreakdown } from './score';
 import { validateCandidate, type ValidationVerdict } from './validate';
@@ -226,10 +226,12 @@ export async function runPlanner(
 
     // generate
     step(events, 'generate_candidates', 'started');
+    const anchorPoints = isLoop ? await retrieveAnchorPoints(deps.db, scope) : [];
     const candidates = isLoop
       ? generateLoopCandidates(origin, retrieved.segments, retrieved.spots, {
           anchorSpots: retrieved.spots.length > 0,
           durationS, // duration-sized cluster choice (SPK-15)
+          anchorPoints, // any-curviness return anchors (SPK-15 run 7)
         })
       : generateAtoBCandidates(origin, destination!, retrieved.segments, retrieved.spots, {
           anchorSpots: retrieved.spots.length > 0,

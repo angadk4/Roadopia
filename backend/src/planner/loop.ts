@@ -52,6 +52,7 @@ export async function assembleLoop(
   ];
   const route = await routeThrough(baseUrl, {
     waypoints,
+    middleType: 'through', // search waypoints are pass-throughs, never stops (SPK-15)
     ...(costingOptions ? { costingOptions } : {}),
   });
 

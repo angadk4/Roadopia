@@ -77,6 +77,31 @@ interface SpotRow {
   source: string;
 }
 
+/**
+ * Return-anchor material (SPK-15 run 7): centroids of ALL segments in Ω at ANY
+ * curviness (θ = 0) — ordinary roads included, so loop returns can ride parallel
+ * concessions instead of doubling down the curvy band. Light query: points only.
+ */
+export async function retrieveAnchorPoints(
+  db: Client,
+  scope: Scope,
+  limit = 4000,
+): Promise<Array<{ lat: number; lng: number }>> {
+  const points: Array<{ lat: number; lng: number }> = [];
+  for (const ring of scope.rings) {
+    const polygon = JSON.stringify(ringToGeoJsonPolygon(ring));
+    const rows = await db.query<{ lat: number; lng: number }>(
+      `select st_y(st_centroid(geom))::float8 as lat, st_x(st_centroid(geom))::float8 as lng
+       from find_curvy_roads(p_west := 0, p_south := 0, p_east := 0, p_north := 0,
+                             p_polygon := $1::jsonb, p_min_curviness := 0, p_limit := $2)
+       where highway <> 'residential'`,
+      [polygon, limit],
+    );
+    for (const r of rows.rows) points.push({ lat: Number(r.lat), lng: Number(r.lng) });
+  }
+  return points;
+}
+
 export async function retrieveCandidates(
   db: Client,
   scope: Scope,

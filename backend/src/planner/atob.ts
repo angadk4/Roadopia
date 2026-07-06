@@ -95,6 +95,7 @@ export async function assembleAtoB(
       ...waypoints.map((w) => [w.lng, w.lat] as [number, number]),
       [destination.lng, destination.lat],
     ],
+    middleType: 'through', // search waypoints are pass-throughs, never stops (SPK-15)
     ...(costingOptions ? { costingOptions } : {}),
   });
 

@@ -234,3 +234,22 @@ corridor, or multi-cluster chaining; (2) **presented < K_PRESENT (mean 2.7 vs 4)
 variants dedup to one; needs more distinct clusters per Ω (raise K_CLUSTERS, chain 2 clusters/loop) or
 accept K_PRESENT=3 (an M4 [GATE] question); (3) durErr tail (49–79 %) on band briefs where the only
 curvy cluster sits at a fixed distance. All tunables remain candidates — M4 freezes.
+
+**BD-18 — SPK-15 sitting 2: the cul-de-sac diagnosis + 10/15 (2026-07-05).** Street-sequence inspection
+of real routes found the TRUE root cause (not band topology): **waypoints were Valhalla `break`
+locations landing on residential crescents** — the engine drove in, "arrived", U-turned and drove out;
+every waypoint was a retrace spur (the best-shaped, most-curvy candidates were being generated and then
+destroyed by spur artifacts). **Fixes shipped:** (a) middle waypoints are now **`type: 'through'`**
+(pass-through, no stop/U-turn) in `routeThrough` — used by loop + A→B assembly; (b) **waypoint material
+excludes residential fragments** (clustering + the anchor-point query) — residential still scores, it
+just isn't steered through; (c) generation restructured to **three rounds** (one candidate per cluster →
+cluster PAIRS in nearby sectors → return-sector variants) so distinct corridors survive dedup; (d) return
+anchors from an **any-curviness anchor-point pool** (`retrieveAnchorPoints`, θ=0, non-residential) with
+synthetic bearing-point fallback; (e) K_CLUSTERS 6→**8**, N_CANDIDATES 10→**14**; (f) the report's
+ladder-assist now fires on **distinct-kept < K** and **merges** passes (replacing regressed).
+**Result: 10/15 PASS** (trajectory 1→2→3→7→8→10), mean presented 3.8, mean durErr 19 %, ~575 ms/brief.
+Remaining fails: Welland/Fonthill miss the meanSelf 0.15 bar by ≤0.01 (a §91 measure-and-set calibration
+question — NOT bent mid-experiment), Pelham 0.19, Burlington kept=3/0.21, **Grimsby pathological**
+(sparse non-residential mesh; 2 kept). **Verdict deferred to the [HUMAN] drivability inspection** (the
+AC's subjective half; §20): `eval/spk15-routes.geojson` (regenerable artifact) → geojson.io. All 158
+repo tests green throughout.

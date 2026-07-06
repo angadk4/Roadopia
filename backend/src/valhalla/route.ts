@@ -36,6 +36,13 @@ export interface RouteThroughRequest {
   /** Ordered waypoints, [lon, lat] GeoJSON order, ≥ 2. */
   waypoints: ReadonlyArray<readonly [number, number]>;
   costingOptions?: AutoCostingOptions;
+  /**
+   * Valhalla location type for the MIDDLE waypoints (first/last stay 'break').
+   * 'through' = pass through without stopping or U-turning — the planner's
+   * default for search waypoints (SPK-15 run 8: 'break' middles made every
+   * waypoint an in-and-out spur when it landed on a minor street).
+   */
+  middleType?: 'break' | 'through';
 }
 
 // --- Valhalla response (subset we consume; external input → validated) ---
@@ -182,8 +189,14 @@ export async function routeThrough(
   request: RouteThroughRequest,
   { timeoutMs = 10_000 }: { timeoutMs?: number } = {},
 ): Promise<RouteThroughOutput> {
+  const middleType = request.middleType ?? 'break';
+  const last = request.waypoints.length - 1;
   const payload = {
-    locations: request.waypoints.map(([lon, lat]) => ({ lat, lon })),
+    locations: request.waypoints.map(([lon, lat], i) => ({
+      lat,
+      lon,
+      type: i === 0 || i === last ? 'break' : middleType,
+    })),
     costing: 'auto',
     ...(request.costingOptions ? { costing_options: { auto: request.costingOptions } } : {}),
   };
