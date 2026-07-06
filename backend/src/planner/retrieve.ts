@@ -90,8 +90,10 @@ export async function retrieveAnchorPoints(
   const points: Array<{ lat: number; lng: number }> = [];
   for (const ring of scope.rings) {
     const polygon = JSON.stringify(ringToGeoJsonPolygon(ring));
+    // ST_PointN(geom, 1): a real on-road VERTEX, not a centroid — centroids of
+    // curved roads sit off the roadway and snap badly (owner round 2).
     const rows = await db.query<{ lat: number; lng: number }>(
-      `select st_y(st_centroid(geom))::float8 as lat, st_x(st_centroid(geom))::float8 as lng
+      `select st_y(st_pointn(geom, 1))::float8 as lat, st_x(st_pointn(geom, 1))::float8 as lng
        from find_curvy_roads(p_west := 0, p_south := 0, p_east := 0, p_north := 0,
                              p_polygon := $1::jsonb, p_min_curviness := 0, p_limit := $2)
        where highway <> 'residential'`,

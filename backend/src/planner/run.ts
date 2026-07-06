@@ -25,7 +25,7 @@ import { getElevationProfile } from '../valhalla/elevation';
 import { assembleAtoB } from './atob';
 import { generateAtoBCandidates, generateLoopCandidates } from './candidates';
 import { measureCurvature } from './curvature';
-import { diversify } from './diversify';
+import { diversify, prefilterByDuration } from './diversify';
 import { assembleLoop } from './loop';
 import { weightsForPreset } from './presets';
 import { initialParams, nextRelaxation, type SearchParams } from './relax';
@@ -232,6 +232,8 @@ export async function runPlanner(
           anchorSpots: retrieved.spots.length > 0,
           durationS, // duration-sized cluster choice (SPK-15)
           anchorPoints, // any-curviness return anchors (SPK-15 run 7)
+          // no-highway loops average backroad speeds — size clusters accordingly
+          avgSpeedKmh: params.avoid.highways ? 42 : 55,
         })
       : generateAtoBCandidates(origin, destination!, retrieved.segments, retrieved.spots, {
           anchorSpots: retrieved.spots.length > 0,
@@ -282,7 +284,12 @@ export async function runPlanner(
 
     // score (curvature measured on FINAL geometry) + diversify + validate
     step(events, 'score_rank', 'started');
-    const scored = routed.map((r) => {
+    const durationFiltered = prefilterByDuration(
+      routed,
+      constraints.duration_target_s,
+      (r) => r.route.duration_s,
+    );
+    const scored = durationFiltered.map((r) => {
       const curv = measureCurvature(r.route.geometry);
       const spotCount = r.candidate.spotIds.length;
       const breakdown = scoreCandidate(

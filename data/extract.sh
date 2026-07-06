@@ -33,8 +33,8 @@ ROAD_FILTER="w/highway=primary,secondary,tertiary,unclassified,residential,prima
 POI_FILTER="n/amenity=cafe,fuel,restaurant n/tourism=viewpoint n/natural=peak"
 
 # --- Region from env (M2-T01) ---
-REGION_ID="${REGION_ID:-wgh-niagara}"
-REGION_POLY_PATH="${REGION_POLY_PATH:-data/regions/wgh-niagara.poly}"
+REGION_ID="${REGION_ID:-south-central-ontario}"
+REGION_POLY_PATH="${REGION_POLY_PATH:-data/regions/south-central-ontario.poly}"
 case "$REGION_POLY_PATH" in
   /*) POLY_ABS="$REGION_POLY_PATH" ;;
   *) POLY_ABS="$REPO_DIR/$REGION_POLY_PATH" ;;

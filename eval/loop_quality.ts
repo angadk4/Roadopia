@@ -24,6 +24,7 @@ import { measureCurvature } from '../backend/src/planner/curvature';
 import {
   diversify,
   K_PRESENT_DEFAULT,
+  prefilterByDuration,
   TAU_OVERLAP_DEFAULT,
 } from '../backend/src/planner/diversify';
 import { assembleLoop } from '../backend/src/planner/loop';
@@ -56,6 +57,26 @@ const BRIEFS: string[] = [
   '1 hour loop from Fonthill with a fuel stop',
   '90 minute forest loop from Kilbride',
   '2 hour twisty loop from Thorold, no highways',
+  // --- south-central-ontario expansion briefs (owner-requested regions, BD-19) ---
+  '90 minute twisty loop from Georgetown',
+  '2 hour loop from Caledon',
+  '1 hour loop from Erin with a coffee stop',
+  '90 minute backroads loop from Bolton',
+  '2 hour scenic loop from Newmarket',
+  '1 hour twisty loop from Uxbridge',
+  '90 minute loop from Port Perry',
+  '2 hour loop from Peterborough',
+  '90 minute loop from Cobourg',
+  // --- region v3 / owner round-2 towns (BD-20) ---
+  '1 hour loop from Stouffville',
+  '2 hour loop from Barrie',
+  '90 minute twisty loop from Guelph',
+  '90 minute loop from Kitchener',
+  '1 hour loop from Brantford',
+  '90 minute loop from Cayuga',
+  '1 hour twisty loop from Milton',
+  '90 minute loop from Mississauga',
+  '90 minute twisty loop from Orangeville',
 ];
 
 interface BriefReport {
@@ -108,6 +129,7 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
       anchorSpots: retrieved.spots.length > 0,
       durationS,
       anchorPoints,
+      avgSpeedKmh: constraints.avoid.highways ? 42 : 55,
     });
     const attempts = await Promise.all(
       candidates.map(async (c) => {
@@ -176,7 +198,15 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
   );
 
   const requestedStops = constraints.stops.reduce((s, x) => s + x.count, 0);
-  const scored = assembled.map((a) => {
+  const durationFiltered = prefilterByDuration(
+    assembled,
+    constraints.duration_target_s,
+    (a) => a.route.duration_s,
+  );
+  if (durationFiltered.length < assembled.length) {
+    notes.push(`duration-prefilter dropped ${assembled.length - durationFiltered.length}`);
+  }
+  const scored = durationFiltered.map((a) => {
     const curv = measureCurvature(a.route.geometry);
     const breakdown = scoreCandidate(
       {
@@ -270,7 +300,32 @@ async function main(): Promise<void> {
 
   const reports: BriefReport[] = [];
   for (const brief of BRIEFS) {
-    reports.push(await evaluateBrief(db, brief));
+    // one brief's failure must never kill the whole report (an eval harness
+    // reports errors as data — found live when a 3 h brief 400'd the isochrone)
+    let r: BriefReport;
+    try {
+      r = await evaluateBrief(db, brief);
+    } catch (err) {
+      r = {
+        brief,
+        presented: 0,
+        feasible: 0,
+        maxPairOverlap: 0,
+        meanSelfOverlap: 0,
+        maxSelfOverlap: 0,
+        durErrPct: null,
+        curviness: null,
+        ms: 0,
+        pass: false,
+        notes: [`ERROR: ${err instanceof Error ? err.message : String(err)}`],
+        bestGeometry: null,
+      };
+    }
+    reports.push(r);
+    // live progress — the full table still prints at the end
+    console.log(
+      `[${reports.length}/${BRIEFS.length}] ${r.pass ? 'PASS' : 'fail'} ${Math.round(r.ms)}ms  ${brief}`,
+    );
   }
   await db.end();
 

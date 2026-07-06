@@ -96,6 +96,25 @@ const SEED_DRIVES: Array<{
       [-79.972, 43.426],
     ],
   },
+  // --- south-central-ontario expansion seeds (BD-19) ---
+  {
+    name: 'Forks of the Credit Run',
+    description: 'The famous hairpin road through the Credit River forks.',
+    tags: ['twisty', 'forest'],
+    waypoints: [
+      [-80.0117, 43.7926], // Belfountain
+      [-79.943, 43.7936], // Inglewood
+    ],
+  },
+  {
+    name: 'Hockley Valley Road',
+    description: 'Rolling wooded sweepers along the Nottawasaga headwaters.',
+    tags: ['twisty', 'scenic'],
+    waypoints: [
+      [-80.042, 43.9358], // Orangeville east
+      [-79.893, 43.995], // Hockley village
+    ],
+  },
 ];
 
 interface ValhallaTrip {

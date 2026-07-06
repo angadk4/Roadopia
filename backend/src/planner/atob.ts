@@ -109,6 +109,10 @@ export async function assembleAtoB(
   if (selfOverlap > selfOverlapCap) {
     rejectReasons.push(`self_overlap ${selfOverlap.toFixed(2)} > ${selfOverlapCap}`);
   }
+  // U-turns are never fun (owner round 2): hard-reject repeat offenders only;
+  // a single u-turn is scored down (zero-tolerance starved the pool).
+  const uturns = route.maneuvers.filter((m) => m.type.startsWith('uturn')).length;
+  if (uturns >= 2) rejectReasons.push(`uturns ${uturns}`);
 
   return {
     candidate,

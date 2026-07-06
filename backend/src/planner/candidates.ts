@@ -20,7 +20,7 @@ import type { CandidateSegment, CandidateSpot } from './retrieve';
 
 export const N_SECTORS_DEFAULT = 8;
 export const K_CLUSTERS_DEFAULT = 8;
-export const N_CANDIDATES_DEFAULT = 14;
+export const N_CANDIDATES_DEFAULT = 20;
 /** Greedy cluster absorption radius (m) — segments this close join the seed's cluster. */
 export const CLUSTER_RADIUS_M = 2_500;
 /** Return anchor sits roughly at this fraction of the cluster distance from origin. */
@@ -277,15 +277,44 @@ export function generateLoopCandidates(
     )[0]!;
   };
 
+  // NOTE (SPK-15 run 14, tried + REVERTED): keying the return-anchor distance to
+  // the duration budget forced every candidate onto the same far ring — curviness
+  // collapsed ~35 % and self-overlap rejections exploded. Cluster-keyed anchors
+  // stay; long-budget-in-dense-area remains an M4 calibration item (multi-cluster
+  // chains are the promising lever, not far anchors).
+  /** First/last VERTEX of a segment — points ON the road (owner round 2: centroid
+   *  waypoints sit OFF curved roads → bad snaps, block-spins, and fastest-path
+   *  arterials BETWEEN centroids instead of driving the curvy road itself). */
+  const endpointsOf = (seg: CandidateSegment): [LatLng, LatLng] => {
+    const coords = seg.geometry.coordinates;
+    const [aLng, aLat] = coords[0]!;
+    const [bLng, bLat] = coords[coords.length - 1]!;
+    return [
+      { lat: aLat, lng: aLng },
+      { lat: bLat, lng: bLng },
+    ];
+  };
+
   const makeCandidate = (
     id: string,
     primary: Cluster,
     extraCluster: Cluster | null,
     returnSector: number,
   ): WaypointCandidate => {
-    const members = [...primary.members].sort((a, b) => a.distanceM - b.distanceM);
-    const entry = members[0]!.centroid;
-    const far = members.length > 1 ? members[members.length - 1]!.centroid : null;
+    // TRAVERSAL waypoints: both endpoints of the cluster's best segment — the
+    // route must DRIVE the twisty road, not pass near its midpoint. A second
+    // strong member (≥800 m away) adds one more on-road traversal point.
+    const byValue = [...primary.members].sort((a, b) => {
+      const wa = a.segment.curviness * a.segment.lengthM;
+      const wb = b.segment.curviness * b.segment.lengthM;
+      return wb - wa || a.segment.id.localeCompare(b.segment.id);
+    });
+    const best = byValue[0]!;
+    const [bestA, bestB] = endpointsOf(best.segment);
+    // Both endpoints only for LONG segments — forcing both ends of a short spur
+    // demands a turn-back against the sweep (u-turn geometry, owner round 2).
+    const traverseBest = best.segment.lengthM >= 1_500;
+    const second = byValue.find((m) => distM(m.centroid, best.centroid) > 800);
 
     const spot = nearestSpotTo(primary.centroid);
     const spotIds = spot ? [spot.id] : [];
@@ -296,9 +325,18 @@ export function generateLoopCandidates(
       primary.distanceM * RETURN_ANCHOR_DISTANCE_FRACTION,
     );
 
-    const wps: LatLng[] = [entry];
-    if (far && distM(entry, far) > 500) wps.push(far);
-    if (extraCluster) wps.push(extraCluster.centroid);
+    const wps: LatLng[] = traverseBest ? [bestA, bestB] : [bestA];
+    if (second) wps.push(endpointsOf(second.segment)[0]);
+    if (extraCluster) {
+      const extraBest = [...extraCluster.members].sort((a, b) => {
+        const wa = a.segment.curviness * a.segment.lengthM;
+        const wb = b.segment.curviness * b.segment.lengthM;
+        return wb - wa || a.segment.id.localeCompare(b.segment.id);
+      })[0]!;
+      const [ea, eb] = endpointsOf(extraBest.segment);
+      if (extraBest.segment.lengthM >= 1_500) wps.push(ea, eb);
+      else wps.push(ea);
+    }
     if (spot) wps.push({ lat: spot.lat, lng: spot.lng });
     wps.push(anchor.centroid);
 

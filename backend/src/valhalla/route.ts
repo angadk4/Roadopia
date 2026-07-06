@@ -192,11 +192,22 @@ export async function routeThrough(
   const middleType = request.middleType ?? 'break';
   const last = request.waypoints.length - 1;
   const payload = {
-    locations: request.waypoints.map(([lon, lat], i) => ({
-      lat,
-      lon,
-      type: i === 0 || i === last ? 'break' : middleType,
-    })),
+    locations: request.waypoints.map(([lon, lat], i) => {
+      const isEndpoint = i === 0 || i === last;
+      return {
+        lat,
+        lon,
+        type: isEndpoint ? 'break' : middleType,
+        // Middle SEARCH waypoints refuse to snap below 'unclassified' (rural
+        // unclassified roads stay in; residential crescents/service roads are
+        // out) — SPK-15 owner finding: routes ducked into subdivisions because
+        // waypoints snapped onto neighbourhood streets. Endpoints keep full
+        // snapping (a user's own start IS often residential).
+        ...(isEndpoint || middleType === 'break'
+          ? {}
+          : { search_filter: { min_road_class: 'unclassified' } }),
+      };
+    }),
     costing: 'auto',
     ...(request.costingOptions ? { costing_options: { auto: request.costingOptions } } : {}),
   };

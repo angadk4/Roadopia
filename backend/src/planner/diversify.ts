@@ -15,6 +15,28 @@ import { pairOverlap } from './overlap';
 export const TAU_OVERLAP_DEFAULT = 0.6;
 /** Presented-set size (§3.6 default; M4 tunes). */
 export const K_PRESENT_DEFAULT = 4;
+/**
+ * Duration prefilter (SPK-15 owner finding: "timings seem off"): candidates whose
+ * routed duration misses the target by more than this fraction are dropped BEFORE
+ * dedup — they crowd the presented set with wrong-length loops. Applied only when
+ * at least one candidate survives it (never empties the set). M4 tunes.
+ */
+export const DURATION_PREFILTER = 0.5;
+
+/**
+ * Drop wrong-duration candidates ahead of dedup. `duration` extracts seconds from
+ * a candidate; no target (null) ⇒ pass-through unchanged.
+ */
+export function prefilterByDuration<T>(
+  candidates: T[],
+  targetS: number | null,
+  duration: (c: T) => number,
+  maxErr: number = DURATION_PREFILTER,
+): T[] {
+  if (targetS === null || targetS <= 0) return candidates;
+  const within = candidates.filter((c) => Math.abs(duration(c) - targetS) / targetS <= maxErr);
+  return within.length > 0 ? within : candidates;
+}
 
 export interface Diversifiable {
   /** Routed geometry used for the overlap comparison. */

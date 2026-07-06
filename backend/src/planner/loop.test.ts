@@ -56,7 +56,10 @@ describe('assembleLoop (M3-T07, live engine)', () => {
       ]),
     );
     expect(loop.closureM).toBeLessThanOrEqual(EPSILON_CLOSURE_M);
-    expect(loop.selfOverlap).toBeLessThanOrEqual(0.15);
+    // soft line is 0.15; the assembly cap is 0.30 (two-tier, BD-18) — the fixture
+    // asserts acceptance under the cap (country-bias costing shifted absolute
+    // values; scoring handles the 0.15–0.30 soft zone)
+    expect(loop.selfOverlap).toBeLessThanOrEqual(0.3);
     expect(loop.accepted).toBe(true);
     expect(loop.route.distance_m).toBeGreaterThan(10_000);
     expect(loop.route.geometry.coordinates.length).toBeGreaterThan(100);
@@ -90,9 +93,12 @@ describe('assembleLoop (M3-T07, live engine)', () => {
       undefined,
       { selfOverlapCap: 0.05 },
     );
-    // engine already diversifies the return (recorded ~0.11 on this OD) — good for SPK-15
+    // FINDING UPDATE (owner round 2): the earlier "~0.11, engine diversifies
+    // returns" observation was a HIGHWAY-costing artifact — under country-bias
+    // costing a naked round trip retraces heavily (~0.7), which is exactly why
+    // the return-anchor architecture is load-bearing. The wiring assertion is
+    // what matters: over-cap ⇒ rejected with a reason.
     expect(roundTrip.selfOverlap).toBeGreaterThan(0.05);
-    expect(roundTrip.selfOverlap).toBeLessThan(0.3);
     expect(roundTrip.accepted).toBe(false);
     expect(roundTrip.rejectReasons.some((r) => r.includes('self_overlap'))).toBe(true);
   });

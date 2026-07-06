@@ -23,6 +23,12 @@ export const ALPHA_LOOP = 0.55;
 export const ALPHA_ATOB = 0.55;
 /** Floor so tiny budgets still produce a usable region (minutes granularity). */
 export const MIN_TAU_S = 5 * 60;
+/**
+ * Ceiling: Valhalla rejects isochrone contours beyond 120 min (HTTP 400 — found
+ * live when a 3 h brief's ladder-widened τ hit 129 min and killed the run).
+ * Beyond ~2 h outbound the reachable set is effectively the whole region anyway.
+ */
+export const MAX_TAU_S = 115 * 60;
 
 export type IsochroneFn = (input: GetIsochroneInput) => Promise<GetIsochroneOutput>;
 
@@ -68,7 +74,10 @@ export async function buildScope(
   const costing = request.costing ?? 'auto';
 
   if (request.shape === 'loop') {
-    const tau = Math.max(MIN_TAU_S, Math.round(request.durationS * ALPHA_LOOP));
+    const tau = Math.min(
+      MAX_TAU_S,
+      Math.max(MIN_TAU_S, Math.round(request.durationS * ALPHA_LOOP)),
+    );
     const iso = await isochroneFn({ origin: request.origin, time_s: tau, costing });
     return { rings: [iso.polygon], tauOutS: tau, shape: 'loop' };
   }
@@ -76,7 +85,7 @@ export async function buildScope(
   if (!request.destination) {
     throw new Error('a_to_b scope requires a destination');
   }
-  const tau = Math.max(MIN_TAU_S, Math.round(request.durationS * ALPHA_ATOB));
+  const tau = Math.min(MAX_TAU_S, Math.max(MIN_TAU_S, Math.round(request.durationS * ALPHA_ATOB)));
   const [fromOrigin, fromDest] = await Promise.all([
     isochroneFn({ origin: request.origin, time_s: tau, costing }),
     isochroneFn({ origin: request.destination, time_s: tau, costing }),

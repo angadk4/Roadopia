@@ -63,7 +63,7 @@ fi
 
 # Elevation bbox follows the region (matches data/regions/<REGION_ID>.poly — swap
 # both when the region changes; env-overridable, never silently hard-coded elsewhere).
-ELEVATION_BBOX="${ELEVATION_BBOX:--80.45,42.8,-78.9,43.55}"
+ELEVATION_BBOX="${ELEVATION_BBOX:--80.45,42.8,-78.0,44.4}"
 if [ "${ELEVATION:-1}" = "1" ] && [ ! -d elevation ]; then
   echo "==> [1.5/3] Download Tilezen elevation tiles for bbox $ELEVATION_BBOX (~150 MB; ELEVATION=0 to skip)"
   docker run --rm -v "$DOCKER_WORK":/data "$VALHALLA_IMAGE" \

@@ -45,7 +45,7 @@ export const DEFAULT_WEIGHTS: WeightVector = {
   stop: 0.2,
   scenic: 0, // GATED OFF until [GATE-S] (Hard rule C)
   overlap: 0.15,
-  uturn: 0.05,
+  uturn: 0.1,
 };
 
 /** Duration fit: 1 at the target, linear falloff to 0 at ±100 % error. */

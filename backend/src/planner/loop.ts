@@ -50,10 +50,16 @@ export async function assembleLoop(
     ...candidate.waypoints.map((w) => [w.lng, w.lat] as [number, number]),
     [origin.lng, origin.lat],
   ];
+  // Country-road bias (owner round 2: "relying on main roads, forgetting inner
+  // country roads"): soft-bias connectors toward county roads. 0.3 was tried and
+  // over-corrected — with highways effectively banned, every loop funnelled
+  // through the same 1–2 escarpment corridors and died at the overlap cap
+  // (canonical Hamilton brief → redirect). 0.6 = mild preference; M4 calibrates.
+  const biasedCosting = { use_highways: 0.6, ...costingOptions };
   const route = await routeThrough(baseUrl, {
     waypoints,
     middleType: 'through', // search waypoints are pass-throughs, never stops (SPK-15)
-    ...(costingOptions ? { costingOptions } : {}),
+    costingOptions: biasedCosting,
   });
 
   const coords = route.geometry.coordinates;
@@ -70,6 +76,11 @@ export async function assembleLoop(
   if (selfOverlap > selfOverlapCap) {
     rejectReasons.push(`self_overlap ${selfOverlap.toFixed(2)} > ${selfOverlapCap}`);
   }
+  // U-turns are never fun (owner round 2). Zero-tolerance was tried and it
+  // slaughtered the pool (one stray intersection u-turn killed great loops;
+  // 3/33): hard-reject only repeat offenders; a single u-turn is scored down.
+  const uturns = route.maneuvers.filter((m) => m.type.startsWith('uturn')).length;
+  if (uturns >= 2) rejectReasons.push(`uturns ${uturns}`);
 
   return {
     candidate,

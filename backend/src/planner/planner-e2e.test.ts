@@ -122,7 +122,8 @@ describe('runPlanner e2e (M3-T13)', () => {
     expect(unsafe.status).toBe('refused');
     expect(unsafe.route).toBeNull();
 
-    const oor = await runPlanner(parseRules('a drive from Toronto'), {
+    // Toronto moved IN-region with the BD-19 expansion; London stays outside.
+    const oor = await runPlanner(parseRules('a drive from London'), {
       db: db!,
       valhallaUrl: VALHALLA,
     });

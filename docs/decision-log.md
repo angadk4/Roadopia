@@ -253,3 +253,52 @@ question — NOT bent mid-experiment), Pelham 0.19, Burlington kept=3/0.21, **Gr
 (sparse non-residential mesh; 2 kept). **Verdict deferred to the [HUMAN] drivability inspection** (the
 AC's subjective half; §20): `eval/spk15-routes.geojson` (regenerable artifact) → geojson.io. All 158
 repo tests green throughout.
+
+**BD-19 — REGION EXPANDED to south-central-ontario (OWNER-DIRECTED, 2026-07-06).** The owner's
+drivability review requested Georgetown/Caledon/Erin/Bolton/Newmarket/Stouffville/Port Perry/Oshawa/
+Cobourg/Peterborough — this supersedes the frozen WGH/Niagara scope (decision #15/BD-10; an owner scope
+decision, not an agent one). New polygon `data/regions/south-central-ontario.poly` (bbox −80.45…−78.00 ×
+42.80…44.40 — Niagara→Kawarthas incl. the GTA, Forks of the Credit and Hockley). **Rebuilt end-to-end
+from the same canonical snapshot** (source md5 `1b781b…`): filtered extract 5.4→**19 MB / 222,194 ways**;
+Valhalla tiles 19→**58 MB** (VPS build 28 s; probe re-run: `/route` p95 **33 ms**, serving RSS **174
+MiB** — SPK-04 conclusions hold at 3× region); elevation 149→**223 MB** (both boxes); `curvy_segments`
+29,499→**91,404 rows / 35 MB** (ρ=0.825 / θ=0.60 / grid-FP 6.3 % all UNCHANGED — the curvature engine
+generalises); POIs 1,009→**4,281**; +2 northern seed drives (Forks of the Credit Run, Hockley Valley
+Road); gazetteer +~30 towns (Toronto/GTA/Durham now IN-region; only genuinely-outside cities redirect —
+stale Toronto fixtures updated). **Owner-feedback quality fixes shipped in the same round:** (a)
+`search_filter.min_road_class=unclassified` on middle waypoints (no more neighbourhood dips at the snap
+level); (b) duration prefilter ±50 % + report gating (mean durErr 23→**19 %**, best sitting 11 %);
+(c) `MAX_TAU_S` 115 min clamp (Valhalla rejects isochrones > 120 min — a 3 h brief's widened τ crashed
+at 129 min; found + fixed live); (d) report hardened: per-brief progress lines + per-brief try/catch
+(the crash had been silently killing earlier runs behind output buffering). **Tried + reverted:**
+budget-keyed return anchors (curviness −35 %). **State: 7/24 briefs pass** — northern escarpment country
+PASSES (Georgetown/Caledon/Bolton); flat farmland (Port Perry/Peterborough/Cobourg, curv 0.5–0.6)
+structurally cannot yield 4 distinct twisty loops → **M4 question: density-aware K_PRESENT or an honest
+"limited twisty roads here" disclosure**; dense-core Hamilton keeps only off-duration candidates (all
+>±50 %) → duration-vs-K tension is THE remaining calibration axis, with the 0.15 meanSelf bar.
+
+**BD-20 — Owner round 2: drive-the-road generation + region v3 (2026-07-06).** Owner findings:
+occasional timings off · routes too square/not fun · dead-end/U-turn-ish entries + one-block spins ·
+same-street there-and-back · over-reliance on main roads vs country roads · more towns (Stouffville,
+Barrie, Guelph, Kitchener, Brantford, Cayuga, Milton, Georgetown, Mississauga, Brampton, Caledon,
+Orangeville). **Root cause found: CENTROID waypoints** — the centroid of a curved road lies OFF the
+roadway (bad snaps → block-spins) and routing "through a centroid" never forces driving the curvy road
+(fastest-path arterials between centroids = square). **Shipped:** (a) waypoints are now REAL segment
+endpoint VERTICES with both-ends traversal forcing for segments ≥1.5 km (short spurs force turn-backs);
+anchor points via `ST_PointN(geom,1)` (on-road); (b) `search_filter.min_road_class=unclassified` +
+`through` middles (round-1) keep neighbourhoods un-snappable; (c) **U-turn two-tier**: hard-reject ≥2,
+single scored down (uturn weight 0.05→0.1) — zero-tolerance was tried and starved the pool (3/33);
+(d) **country-road bias** `use_highways 0.6` on loop connectors — 0.3 was tried and over-corrected
+(every loop funnelled the same escarpment corridors → canonical redirect; reverted to 0.6);
+(e) adaptive sizing speed 42 km/h for no-highway briefs (was 55 — clusters landed too far, loops ran
+1.6–3× target); (f) **region v3**: bbox −80.80…−78.00 × 42.80…44.60 (Kitchener/Waterloo were 0.04°
+outside; Barrie headroom) — extract **22 MB / 249,958 ways**, tiles **66 MB both boxes** (VPS p95
+30 ms / RSS 177 MiB — SPK-04 STILL holds), curvy_segments **105,991 / 40 MB** (ρ stable), POIs
+**4,607**, gazetteer +7 (Cayuga/K-W/Dunnville/Paris/Elora/Fergus), briefs → **33** covering every
+owner-named town. *Ops note:* a stale-tile hazard was caught by ground-truth probing (local build had
+silently used the v2 routing extract; Kitchener "routed" via edge-snap — explicit per-step rebuild
+fixed it; lesson: verify tile inputs by md5/size, not by a route returning). **State: 6/33 composite**
+(razor misses incl. Mississauga at meanSelf 0.153 vs 0.15); per-route quality axes (on-road waypoints,
+forced curvy traversal, ≤1 u-turn, duration-gated best) all structurally improved — **owner geojson
+verdict pending; the composite-K calibration formally moves to M4** (density-aware K_PRESENT, 0.15 bar,
+duration-vs-K trade).

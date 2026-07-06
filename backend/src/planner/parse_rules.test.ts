@@ -64,9 +64,14 @@ describe('parseRules — canonical briefs (gold fixture)', () => {
   });
 
   it('7) origin in a known outside city → out-of-region redirect', () => {
-    const pc = parseRules('A nice drive from Toronto around the lake');
+    // Toronto moved IN-region with the BD-19 expansion; London stays outside.
+    const pc = parseRules('A nice drive from London around the lake');
     expect(pc.out_of_region_flag).toBe(true);
     expect(resolveDisposition(pc)).toBe('redirect_out_of_region');
+
+    const toronto = parseRules('A 1 hour loop from Toronto');
+    expect(toronto.out_of_region_flag).toBe(false);
+    expect(toronto.origin).toEqual({ lat: 43.6532, lng: -79.3832 });
   });
 
   it('8) prompt injection → flagged, instruction ignored, brief still parsed, proceeds', () => {
