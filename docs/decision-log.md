@@ -302,3 +302,147 @@ fixed it; lesson: verify tile inputs by md5/size, not by a route returning). **S
 forced curvy traversal, ≤1 u-turn, duration-gated best) all structurally improved — **owner geojson
 verdict pending; the composite-K calibration formally moves to M4** (density-aware K_PRESENT, 0.15 bar,
 duration-vs-K trade).
+
+**BD-21 — Owner round 3: corpus purity + duration control (2026-07-06).** Owner findings: a
+"90-minute" route that reads 3 h+ · neighbourhood circles · highway exit-and-re-enter · same-road
+reuse acceptable only "when completely necessary" · still main-road/highway loops (wants small curvy
+country roads) · loops confined to cities (wants the surroundings and everything between). **Probes
+before fixes (3 live investigations):** (a) **corpus:** residential is 66 % of `curvy_segments` and
+**98 % of the top-500** by `circum_curvature_per_km` (short suburban crescents max a per-km metric;
+median residential 2.26 vs tertiary 0.37) — rank-then-limit retrieval therefore returned ~2 % real
+roads in any dense Ω. This is the COMMON ROOT of all three feedback rounds (neighbourhood dips =
+crescent waypoints; main-road loops = the ~6 surviving real segments were arterial sweepers;
+city-hugging = urban crescents dominated clustering). No ramps/links/service exist in the corpus (the
+extract already drops them). (b) **geojson forensics:** features carried NO routed duration/distance —
+the "3 h listed as 90 min" route is real: Hamilton's 245 min / 241 km best (durErr 173 %), shipped by
+the never-empty duration-prefilter fallback, invisible because only the brief title was displayed.
+(c) **live Valhalla 3.7 probes:** `use_highways` is STEP-LIKE — 1.0/0.6/0.4 route byte-identically
+onto the 401 and the flip sits between 0.4 and 0.3, so round 2's "0.6 country bias" was a verified
+NO-OP; `top_speed` REJECTED as an alternative (probed: +25 % reported-duration distortion on an
+unchanged path, plus pathological exit/re-enter artifacts). **Shipped:** (1) migration **0004** —
+`find_curvy_roads` gains `p_exclude_highway`, filtered INSIDE the RPC before rank/limit (client-side
+post-limit filtering starves dense rings); retrieval + anchor pool exclude residential/service/
+living_street/track/motorway/trunk/*_link (Hamilton top-300: ~98 % residential → 128 tertiary /
+78 secondary / 67 unclassified / 27 primary). (2) `countryClassFactor` (unclassified 1.0 · tertiary
+0.95 · secondary 0.6 · primary 0.25) scales every segment/cluster ranking — township roads outrank
+arterial sweepers; the residential sparse-pool fallback readmission is REMOVED. (3) Loop connectors
+`use_highways 0.25` (the probed flip side; round 2's funnelling fear at 0.3 was a scarcity artifact
+of the polluted corpus — with hundreds of rural corridors there is no single-corridor collapse).
+(4) **Duration control — the decisive generator insight: RANKING ≠ CONTROL.** The old weight×fit
+product could not steer durations (round 1 emits one candidate per cluster regardless of rank, and
+cluster weights are heavy-tailed, so a monster far cluster at fit 0.05 still won; 36-brief medians
+sat at ~2× target with sizing changes doing nothing). Now: HARD cluster plausibility filter
+(predicted duration LLF·d/v within ±50 % of target; floor = 3 best-fitting for material-poor areas)
++ `LOOP_LENGTH_FACTOR` re-fit 2.4→**4.8** (traversal forcing + country connectors ≈ 2× the driving
+per unit cluster distance; measured ratios 1.4–2.9, mean ≈ 2.0) + ONE resize retry when the routed
+median still misses by >25 % (regenerate at miss-scaled sizing speed, clamp floor 15) + the duration
+prefilter fallback now keeps ONLY the single closest candidate (a wrong-length pool can never ship
+again) + **durErr ≤ 25 % added to the SPK-15 eval AC** (the ladder's relaxed tolerance). (5) Overlap
+pressure raised for "same road twice at all costs": default weight 0.15→**0.25**, preset floors ≥0.2
+(hard caps unchanged: 0.30 assembly reject, 0.15 soft bar — M4 [GATE-L] finalises). (6) Honest
+geojson: per-feature `name` = brief + routed min + km, `routed_min`/`distance_km`/`target_min`/
+signed durErr properties, green-PASS/red-FAIL strokes. (7) Briefs → **36** (+Creemore, Belfountain,
+St. Jacobs rural origins; gazetteer +2). **Result: 17/36 composite on the STRICTER AC** (prior round:
+6/33 without the duration criterion; trail this round 6/36 purity-only → 17/36 with the hard filter),
+mean presented 3.4, mean durErr 19 %, 940 ms/brief, **168/168 tests** (+10). Remaining fails, all
+named for M4: meanSelf 0.16–0.20 vs the 0.15 bar (razor), kept 2–3 in flat farmland (density-aware
+K_PRESENT / honest disclosure), 45–60 min briefs' narrow duration bands, **Grimsby monster** (+119 %,
+escarpment mesh under country costing), **Cobourg kept-0** (lakeshore grid: every candidate
+self_overlap > 0.3 — whether to relax-with-disclosure in flat areas is an M4 design question, not a
+silent bend). Migration 0004 applied to the LOCAL stack; the remote/prod project picks it up at its
+first `supabase db push`.
+
+**BD-22 — Owner round 4: u-turn presentation aversion, deeper country bias, region v4 coverage circle
+(2026-07-06).** Owner findings on the round-3 geojson: still occasional enter-road/U-turn/return
+instances · balance further toward small country roads · loops still city-centred, want
+out-and-back-to-the-surroundings · some routes "extremely square" · and a map with a circled area:
+"make sure the app can generate routes anywhere within this circle." **Shipped:** (1) **U-turns —
+the settled design after a measured retry.** Assembly-level zero tolerance was retried (owner's third
+flag) and starved pools AGAIN (8/36; Dundas/Grimsby/Peterborough/Cobourg → kept 0; the extra
+traversal forcing raises benign single-u-turn incidence, compounding). Settled: assembly keeps the
+two-tier reject (≥2), and the PRESENTATION layer is strictly u-turn-averse —
+`UTURN_PRESENT_PENALTY = 10` subtracted from the presentation key ranks ANY u-turn route below EVERY
+clean route in diversify + best-pick (run.ts + eval), and the SPK-15 AC now requires a
+**u-turn-free presented best**. Single-u-turn routes remain last-resort pool material, never
+preferred content. (2) **Country bias deepened:** `countryClassFactor` secondary 0.6→0.5, primary
+0.25→0.15; connector `use_highways` 0.25→0.2 (cosmetic — the probed step function treats both
+identically; recorded to match intent). (3) **Out-of-city:** the cluster duration-plausibility band
+is now ASYMMETRIC [0.75, 1.5]·T — near-town clusters are dropped harder than far ones, so loops must
+leave town for their material. (4) **Anti-square:** end-to-end traversal forcing extended — threshold
+1.5→1.2 km and the SECOND-best road is traversed end-to-end too, but BUDGET-SCALED (≥75 min briefs
+only: on 45–60 min loops the extra traversal blew durations +31…+38 %, measured and reverted for
+short briefs). (5) **Region v4 (owner-directed scope change, like BD-19/20):** the owner's circle
+extends past the v3 bbox in the NW (Owen Sound/Meaford/Beaver Valley/Collingwood) and east of
+Peterborough (Trent Hills). New bbox **−81.10…−77.60 × 42.75…44.95** in the same poly file. Rebuilt
+everywhere from canonical inputs: extract **275,377 ways / 24 MB**; tiles **73 MB local / 75.8 MB
+VPS** (VPS build 34 s, serving RSS **78 MiB** — SPK-04 untouched at 4× the original region);
+elevation **372 MB / 15 SRTM tiles** both boxes; `curvy_segments` **120,348 rows / 62,814 km**;
+spots **4,778**. Ground truth (stale-tile lesson applied): Collingwood→Owen Sound routes at an
+IDENTICAL **63.615 km on both boxes**; Campbellford→Peterborough 52.484 km; Hamilton→Guelph
+regression clean; fresh tileset timestamps verified; NW/E curvy-corpus probes return 179/85
+non-residential rows. Gazetteer +9 towns; briefs → **40** (Collingwood/Owen Sound/Orillia/
+Campbellford corner briefs). *Ops notes:* (a) Windows Docker bind-mount races broke
+`valhalla_build_elevation -p 4` locally — worked around by downloading into the container overlay FS
+then copying out; script deliberately unchanged (Linux/VPS unaffected); (b) the VPS Ontario snapshot
+is a NEWER Geofabrik date than the local canonical (clip md5s differ, sizes Δ0.13 %) — harmless for
+routing tiles, but reproducibility stays anchored to the local manifest'd snapshot; refresh both
+together at the next deliberate snapshot bump. **State: composite 9/40** — read with the AC
+trajectory in mind: 17/36 (round-3 AC) → 11/36 (same code+data, AC gained u-turn-free-best) → 9/40
+(4 hard new-corner briefs added). Per-route qualities the owner actually asked for all moved:
+u-turn-free bests wherever a clean candidate exists, arterial share down, out-of-town clusters,
+richer curvy traversal on ≥90 min briefs. Remaining fail causes (M4 calibration/design, named):
+meanSelf 0.16–0.23 vs the 0.15 bar; kept 2–3 in thin/flat/peninsula towns (Cobourg + Campbellford
+kept-0 — lakeshore/river funnel topology sends every candidate over the 0.3 self-overlap cap;
+flat-area relax-with-disclosure design); short-brief duration razors; Grimsby monster.
+
+**BD-23 — Owner round 5: spur eradication + twistiness (2026-07-06).** Owner findings: still spotting
+"quickly entering a road and spinning right back" (neighbourhoods, roundabouts, ramp-like in-outs) ·
+"more twisty curvy roads, more fun." **Mechanism found for the spins:** TIP-FORCING — traversal
+waypoints sat on the literal first/last vertex of the curvy road; when the natural connector leaves
+the road 100–300 m before its tip, the route drives to the tip and doubles back. **Shipped:**
+(1) **Inset traversal spans** — long-segment waypoints moved to the vertices nearest 12 %/88 % of
+cumulative length (`TRAVERSAL_INSET`); the twisty middle is still fully driven, the ends flex to
+natural junctions. (2) **Spur detector** (`spurEvents`, overlap.ts): counts micro-retrace excursions
+on a deliberately FINE grid (20 m resample / 40 m cells — a true spur reuses the same roadway =
+identical cells, while switchback hairpin legs sit 40–100 m apart = different cells = NOT flagged;
+synthetic tests pin spur=1 / hairpin=0 / rectangle=0 / origin-grace). Wired with the SAME two-tier
+shape as u-turns: assembly rejects ≥2, presentation ranks ANY spur or u-turn below every clean route
+(shared lexicographic penalty), and the SPK-15 AC now requires a **spur-free AND u-turn-free
+presented best**. (3) Twistiness: default weights cur 0.30→**0.35**, stop 0.15→**0.10** (required
+stops stay hard-validated). **Tried + REVERTED (both recorded by measurement):** (a) MID-VERTEX
+touch points for short segments and anchors — caused the exact retraces they aimed to prevent
+(forcing a road's interior when its through-path passes the tips = in-and-back; pools collapsed
+19→2, composite 4/40); tips restored for single touches, insets kept for full spans; (b) chaining a
+THIRD member on ≥90 min budgets — over-constrained paths, self-overlap rejections spiked, clean
+survivors were −48 % undershoots; M4 candidate with pool-health guards. **Result: 7/40 on the
+SEVEN-criterion AC** (trail this round: 4/40 all-changes → 3/40 partial-revert → 7/40 final; the
+pre-round baseline 9/40 had NO spur criterion). Fail rows are back to the named M4 razors — no new
+pathology; mean durErr 20 %, 883 ms/brief. **174/174 tests** (+6: spur synthetics incl. the
+hairpin-false-positive guard, inset-not-tip waypoint pin).
+
+**BD-24 — Owner round 6: retrace-run metric, block-spin window, time accuracy — and the
+hard-cap-vs-presentation lesson made permanent (2026-07-06).** Owner findings: still occasional
+neighbourhood block spins · "routes overlap — enter an area on a road … come back to the origin area
+on the SAME road, boring" · "increase time accuracy even more." **The metric blind spot named:** the
+self-overlap RATIO cannot see contiguity — 5 doubled km on an 80 km loop is 6 %, under every cap,
+yet exactly the boring drive described. **Shipped:** (1) `maxRetraceRunM` — longest contiguous
+doubled-travel run in route-metres (immediate there-and-back counts both passes; separated doubling
+counts each pass ≈ road length; synthetics pin both semantics + origin-grace); (2) spur windows
+SPLIT: NARROW (≈400 m, round-5-proven) stays the ASSEMBLY gate; WIDE (≈1 km, catches full-block
+neighbourhood spins — in on X, around the block ~600–800 m, out on X) is PRESENTATION/AC only;
+(3) time accuracy: duration prefilter ±50 %→±35 % and the resize retry runs up to TWO attempts, each
+judged on the LATEST batch (mean durErr 21 %→**18 %**, the best yet); (4) presentation "dirty" now =
+any u-turn OR wide-window spur OR retrace-run > 1,200 m — such routes rank below every clean route;
+AC adds **retrace ≤ 1,200 m** on the presented best (eight criteria total); geojson features carry
+`retrace_m`. **The measured lesson (now a design rule):** round 6 FIRST tried the retrace cap
+(3 km) and the wide spur window as ASSEMBLY rejections → **0/40, 687 retrace + 575 spur rejections,
+mean presented 1.6** — shared origin corridors beyond the 2.5 km grace are NECESSARY doubling in
+funnel-topology towns; an assembly gate cannot distinguish necessary from lazy, the presentation
+ranking can. Quality preferences belong at PRESENTATION (rank dirty below clean, never starve the
+pool); assembly rejects only unambiguous junk. This is the third time the pattern reproduced
+(u-turns round 2/4, spurs round 5→6, retrace round 6) — recorded as the standing shape for M4.
+**State: 3/40 on the EIGHT-criterion AC**; presented-best distribution measured: retrace ≤ 1,200 m
+on 23/38 bests, 8 bests fully clean (0 m); tail = Caledon 7.2 km / Campbellford 5.5 km /
+Georgetown 4.6 km / Peterborough 4.1 km — towns where NO clean candidate exists in the pool, i.e.
+a GENERATION-diversity question (return-corridor variety), the top M4 item alongside the calibration
+razors. **178/178 tests** (+4: retrace semantics ×2, block-spin window split, grace).

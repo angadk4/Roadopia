@@ -1,13 +1,15 @@
 /**
  * SPK-15 — loop-generation quality report (THE core product gate).
  *
- * Runs the M3 deterministic pipeline over 15 FIXED loop briefs spread across the
- * corridor (origins × durations × characters) and reports, per brief:
+ * Runs the M3 deterministic pipeline over FIXED loop briefs spread across the
+ * region (40 as of BD-22: origins × durations × characters, cities AND rural
+ * between-city origins, corner-to-corner of the owner coverage circle) and
+ * reports, per brief:
  *   presented   — distinct candidates after diversify (target ≥ K_PRESENT = 4)
  *   maxOverlap  — max pairwise edge_overlap among presented (must ≤ τ = 0.6)
  *   selfOverlap — mean/max of presented (loops already filtered at 0.15 assembly cap)
  *   feasible    — count passing the M3-T11 gates
- *   durErr      — best candidate's |duration−target|/target
+ *   durErr      — best candidate's |duration−target|/target (AC: ≤ 25 %, BD-21)
  *   curviness   — best candidate's C7 (1/km)
  *   ms          — wall time for the brief
  * plus an overall verdict against the SPK-15 AC. Honest output — the numbers are
@@ -19,7 +21,7 @@
 import type { LineString } from '@shared/types';
 import { Client } from 'pg';
 
-import { generateLoopCandidates } from '../backend/src/planner/candidates';
+import { generateLoopCandidates, resizedSpeed } from '../backend/src/planner/candidates';
 import { measureCurvature } from '../backend/src/planner/curvature';
 import {
   diversify,
@@ -27,13 +29,18 @@ import {
   prefilterByDuration,
   TAU_OVERLAP_DEFAULT,
 } from '../backend/src/planner/diversify';
-import { assembleLoop } from '../backend/src/planner/loop';
+import { assembleLoop, RETRACE_RUN_SOFT_M } from '../backend/src/planner/loop';
 import { pairOverlap } from '../backend/src/planner/overlap';
 import { parseRules } from '../backend/src/planner/parse_rules';
 import { weightsForPreset } from '../backend/src/planner/presets';
 import { retrieveAnchorPoints, retrieveCandidates } from '../backend/src/planner/retrieve';
 import { buildScope } from '../backend/src/planner/scope';
-import { mergeWeights, scoreCandidate } from '../backend/src/planner/score';
+import {
+  mergeWeights,
+  scoreCandidate,
+  uturnCount,
+  UTURN_PRESENT_PENALTY,
+} from '../backend/src/planner/score';
 import { validateCandidate } from '../backend/src/planner/validate';
 
 const DB_URL =
@@ -77,6 +84,17 @@ const BRIEFS: string[] = [
   '1 hour twisty loop from Milton',
   '90 minute loop from Mississauga',
   '90 minute twisty loop from Orangeville',
+  // --- rural / between-cities origins (owner round 3: "the loops should be in
+  // the cities AND the surroundings... all areas in between", BD-21) ---
+  '2 hour loop from Creemore',
+  '90 minute twisty loop from Belfountain',
+  '1 hour backroads loop from St. Jacobs',
+  // --- region v4: the owner coverage circle (BD-22) — NW wedge (Grey/Bruce,
+  // Blue Mountains) and the eastern Trent Hills fringe ---
+  '2 hour twisty loop from Collingwood',
+  '2 hour scenic loop from Owen Sound',
+  '90 minute loop from Orillia',
+  '90 minute loop from Campbellford',
 ];
 
 interface BriefReport {
@@ -87,6 +105,17 @@ interface BriefReport {
   meanSelfOverlap: number;
   maxSelfOverlap: number;
   durErrPct: number | null;
+  /** Best route's SIGNED duration error % (negative = shorter than asked). */
+  durErrSignedPct: number | null;
+  bestDurationS: number | null;
+  bestDistanceM: number | null;
+  /** U-turn maneuvers in the presented best (AC: must be 0, owner round 4). */
+  bestUturns: number | null;
+  /** Spur events in the presented best (AC: must be 0, owner round 5). */
+  bestSpurs: number | null;
+  /** Longest same-road doubling in the best, metres (AC ≤ soft cap, round 6). */
+  bestRetraceM: number | null;
+  targetS: number;
   curviness: number | null;
   ms: number;
   pass: boolean;
@@ -114,7 +143,13 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
   // rungs exactly as runPlanner would (τ ×1.3, θ ×0.67) and note the assist —
   // SPK-15 reports the PRESENTED experience, first-pass purity noted honestly.
   // One search pass: scope → retrieve → generate → assemble; returns the funnel.
-  const searchPass = async (tauMult: number, theta?: number) => {
+  const baseSpeed = constraints.avoid.highways ? 42 : 55;
+  const searchPass = async (
+    tauMult: number,
+    theta?: number,
+    avgSpeedKmh?: number,
+    idPrefix?: string,
+  ) => {
     const scope = await buildScope(VALHALLA, {
       origin,
       shape: 'loop',
@@ -129,7 +164,8 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
       anchorSpots: retrieved.spots.length > 0,
       durationS,
       anchorPoints,
-      avgSpeedKmh: constraints.avoid.highways ? 42 : 55,
+      avgSpeedKmh: avgSpeedKmh ?? baseSpeed,
+      ...(idPrefix !== undefined ? { idPrefix } : {}),
     });
     const attempts = await Promise.all(
       candidates.map(async (c) => {
@@ -166,7 +202,29 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
   const first = await searchPass(1);
   let candidates = first.candidates;
   let attempts = first.attempts;
-  const okFirst = attempts.filter((a): a is NonNullable<typeof a> => a !== null && a.accepted);
+  const okOf = (atts: typeof attempts) =>
+    atts.filter((a): a is NonNullable<typeof a> => a !== null && a.accepted);
+
+  // Duration-resize retry (owner rounds 3+6, mirrors runPlanner): a batch
+  // median >25 % off target ⇒ regenerate with the miss-scaled speed; up to TWO
+  // attempts, each judged on the LATEST batch (prefixed ids never collide).
+  let batchOk = okOf(attempts);
+  let sizingV = baseSpeed;
+  for (let attempt = 1; attempt <= 2 && batchOk.length > 0; attempt++) {
+    const durs = batchOk.map((a) => a.route.duration_s).sort((x, y) => x - y);
+    const median = durs[Math.floor(durs.length / 2)]!;
+    if (Math.abs(median - durationS) / durationS <= 0.25) break;
+    sizingV = resizedSpeed(sizingV, durationS, median);
+    const rz = await searchPass(1, undefined, sizingV, `rz${attempt}-`);
+    candidates = [...candidates, ...rz.candidates];
+    attempts = [...attempts, ...rz.attempts];
+    batchOk = okOf(rz.attempts);
+    notes.push(
+      `resized×${attempt} (median ${Math.round(median / 60)} min vs target ${Math.round(durationS / 60)} min → v ${Math.round(sizingV)})`,
+    );
+  }
+
+  const okFirst = okOf(attempts);
   if (distinctCount(okFirst) < K_PRESENT_DEFAULT) {
     const second = await searchPass(1.3, 0.4);
     const seenIds = new Set(candidates.map((c) => c.id));
@@ -221,13 +279,17 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
       },
       weights,
     );
-    return { a, curv, breakdown };
+    // presentation key: any u-turn, wide-window spur (block spins), or notable
+    // there-and-back ranks below every clean route (rounds 2–6)
+    const dirty = uturnCount(a.route) > 0 || a.spursWide > 0 || a.retraceRunM > RETRACE_RUN_SOFT_M;
+    const presentKey = breakdown.score - (dirty ? UTURN_PRESENT_PENALTY : 0);
+    return { a, curv, breakdown, presentKey };
   });
 
   const { kept } = diversify(
     scored.map((s) => ({
       id: s.a.candidate.id,
-      score: s.breakdown.score,
+      score: s.presentKey,
       geometry: s.a.route.geometry,
       payload: s,
     })),
@@ -247,7 +309,7 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
     });
     if (verdict.feasible) {
       feasible++;
-      if (!best || s.breakdown.score > best.breakdown.score) best = s;
+      if (!best || s.presentKey > best.presentKey) best = s;
     }
   }
 
@@ -265,18 +327,30 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
     : 0;
   const maxSelf = selfOverlaps.length ? Math.max(...selfOverlaps) : 0;
 
-  const durErrPct = best ? (Math.abs(best.a.route.duration_s - durationS) / durationS) * 100 : null;
+  const durErrSignedPct = best ? ((best.a.route.duration_s - durationS) / durationS) * 100 : null;
+  const durErrPct = durErrSignedPct === null ? null : Math.abs(durErrSignedPct);
   if (candidates.length < K_PRESENT_DEFAULT) notes.push(`only ${candidates.length} generated`);
   if (assembled.length < kept.length) notes.push('assembly rejections occurred');
 
   // AC: ≥K distinct, overlap ≤ τ, feasible, LOW self-overlap = mean under the soft
-  // line (0.15) with nothing past the hard-reject zone (assembly enforces 0.30).
+  // line (0.15) with nothing past the hard-reject zone (assembly enforces 0.30),
+  // (BD-21) the presented best within ±25 % of the asked duration, and
+  // (BD-22/23, owner rounds 4–5) the presented best is U-TURN-FREE and SPUR-FREE.
+  const bestUturns = best ? uturnCount(best.a.route) : null;
+  const bestSpurs = best ? best.a.spursWide : null;
+  const bestRetraceM = best ? best.a.retraceRunM : null;
   const pass =
     kept.length >= K_PRESENT_DEFAULT &&
     maxPairOverlap <= TAU_OVERLAP_DEFAULT &&
     feasible > 0 &&
     meanSelf <= 0.15 &&
-    maxSelf <= 0.3;
+    maxSelf <= 0.3 &&
+    durErrPct !== null &&
+    durErrPct <= 25 &&
+    bestUturns === 0 &&
+    bestSpurs === 0 &&
+    bestRetraceM !== null &&
+    bestRetraceM <= RETRACE_RUN_SOFT_M;
 
   return {
     brief,
@@ -286,6 +360,13 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
     meanSelfOverlap: meanSelf,
     maxSelfOverlap: maxSelf,
     durErrPct,
+    durErrSignedPct,
+    bestDurationS: best ? best.a.route.duration_s : null,
+    bestDistanceM: best ? best.a.route.distance_m : null,
+    bestUturns,
+    bestSpurs,
+    bestRetraceM,
+    targetS: durationS,
     curviness: best ? best.curv.curviness : null,
     bestGeometry: best ? best.a.route.geometry : null,
     ms: performance.now() - t0,
@@ -314,6 +395,13 @@ async function main(): Promise<void> {
         meanSelfOverlap: 0,
         maxSelfOverlap: 0,
         durErrPct: null,
+        durErrSignedPct: null,
+        bestDurationS: null,
+        bestDistanceM: null,
+        bestUturns: null,
+        bestSpurs: null,
+        bestRetraceM: null,
+        targetS: 0,
         curviness: null,
         ms: 0,
         pass: false,
@@ -332,21 +420,38 @@ async function main(): Promise<void> {
   // Dump the best route per brief for the [HUMAN] drivability inspection
   // (paste eval/spk15-routes.geojson into geojson.io — gitignored artifact).
   const { writeFile } = await import('node:fs/promises');
+  // Owner round 3: the old properties carried NO routed duration/distance, so a
+  // 4 h route read as "90 minute loop" in geojson.io. name/routed_min/distance_km
+  // now state the truth per feature; stroke colours pass green / fail red.
   const featureCollection = {
     type: 'FeatureCollection',
     features: reports
       .filter((r) => r.bestGeometry !== null)
-      .map((r) => ({
-        type: 'Feature',
-        properties: {
-          brief: r.brief,
-          pass: r.pass,
-          durErrPct: r.durErrPct,
-          curviness: r.curviness,
-          meanSelfOverlap: r.meanSelfOverlap,
-        },
-        geometry: r.bestGeometry,
-      })),
+      .map((r) => {
+        const routedMin = r.bestDurationS === null ? null : Math.round(r.bestDurationS / 60);
+        const km = r.bestDistanceM === null ? null : Math.round(r.bestDistanceM / 100) / 10;
+        return {
+          type: 'Feature',
+          properties: {
+            name: `${r.brief} — routed ${routedMin ?? '?'} min / ${km ?? '?'} km${r.pass ? '' : ' (FAIL)'}`,
+            brief: r.brief,
+            pass: r.pass,
+            target_min: Math.round(r.targetS / 60),
+            routed_min: routedMin,
+            distance_km: km,
+            durErrSignedPct: r.durErrSignedPct === null ? null : Math.round(r.durErrSignedPct),
+            uturns: r.bestUturns,
+            spurs: r.bestSpurs,
+            retrace_m: r.bestRetraceM === null ? null : Math.round(r.bestRetraceM),
+            curviness: r.curviness,
+            meanSelfOverlap: r.meanSelfOverlap,
+            stroke: r.pass ? '#1a9850' : '#d73027',
+            'stroke-width': 3,
+            'stroke-opacity': 0.9,
+          },
+          geometry: r.bestGeometry,
+        };
+      }),
   };
   await writeFile(
     new URL('./spk15-routes.geojson', import.meta.url),
@@ -363,11 +468,12 @@ async function main(): Promise<void> {
       pad('maxOv', 7) +
       pad('selfOv μ/max', 14) +
       pad('durErr%', 9) +
+      pad('min', 6) +
       pad('curv', 7) +
       pad('ms', 7) +
       'verdict',
   );
-  console.log('-'.repeat(110));
+  console.log('-'.repeat(116));
   for (const r of reports) {
     console.log(
       pad(r.brief.slice(0, 44), 46) +
@@ -375,7 +481,13 @@ async function main(): Promise<void> {
         pad(r.feasible, 6) +
         pad(r.maxPairOverlap.toFixed(2), 7) +
         pad(`${r.meanSelfOverlap.toFixed(2)}/${r.maxSelfOverlap.toFixed(2)}`, 14) +
-        pad(r.durErrPct === null ? '—' : r.durErrPct.toFixed(0), 9) +
+        pad(
+          r.durErrSignedPct === null
+            ? '—'
+            : `${r.durErrSignedPct >= 0 ? '+' : ''}${r.durErrSignedPct.toFixed(0)}`,
+          9,
+        ) +
+        pad(r.bestDurationS === null ? '—' : Math.round(r.bestDurationS / 60), 6) +
         pad(r.curviness === null ? '—' : r.curviness.toFixed(2), 7) +
         pad(Math.round(r.ms), 7) +
         (r.pass ? 'PASS' : `FAIL ${r.notes.join('; ')}`),
@@ -396,7 +508,7 @@ async function main(): Promise<void> {
   console.log(`mean wall time per brief: ${Math.round(meanMs)} ms`);
   console.log('\n-- SPK-15 AC --');
   console.log(
-    `≥ K_PRESENT distinct, overlap ≤ τ, low self-overlap, feasible: ` +
+    `≥ K_PRESENT distinct, overlap ≤ τ, low self-overlap, durErr ≤ 25 %, u-turn+spur-free best, retrace ≤ ${RETRACE_RUN_SOFT_M} m, feasible: ` +
       `${passed === reports.length ? 'PASS (all briefs)' : `${passed}/${reports.length} briefs — inspect FAIL rows`}`,
   );
 }

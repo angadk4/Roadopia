@@ -1,7 +1,14 @@
 import type { LatLng } from '@shared/types';
 import { describe, expect, it } from 'vitest';
 
-import { bearingDeg, generateAtoBCandidates, generateLoopCandidates, sectorOf } from './candidates';
+import {
+  bearingDeg,
+  countryClassFactor,
+  generateAtoBCandidates,
+  generateLoopCandidates,
+  resizedSpeed,
+  sectorOf,
+} from './candidates';
 import type { CandidateSegment, CandidateSpot } from './retrieve';
 
 /**
@@ -145,6 +152,83 @@ describe('generateLoopCandidates (M3-T06)', () => {
     expect(sectorOf(44.9, 8)).toBe(0);
     expect(sectorOf(45, 8)).toBe(1);
     expect(sectorOf(359.9, 8)).toBe(7);
+  });
+});
+
+describe('country-road preference + duration resize (BD-21, owner round 3)', () => {
+  it('countryClassFactor prefers township/county lanes over arterials', () => {
+    expect(countryClassFactor('unclassified')).toBe(1);
+    expect(countryClassFactor('tertiary')).toBeGreaterThan(countryClassFactor('secondary'));
+    expect(countryClassFactor('secondary')).toBeGreaterThan(countryClassFactor('primary'));
+    expect(countryClassFactor('residential')).toBeLessThanOrEqual(0.15);
+  });
+
+  it('an identical cluster weighs less as secondary than as tertiary (class-scaled weight)', () => {
+    const tert = [segment(at(0, 10), 3), segment(at(1, 10), 3)];
+    const sec = [segment(at(90, 10), 3), segment(at(91, 10), 3)].map((s) => ({
+      ...s,
+      highway: 'secondary',
+    }));
+    const out = generateLoopCandidates(ORIGIN, [...tert, ...sec], [], { nCandidates: 8 });
+    // single-cluster candidates only (pairs sum both weights); the tertiary
+    // cluster sits north (sector 0), the secondary one east (sector 1–2)
+    const singles = out.filter((c) => !c.id.includes('+'));
+    const tertCand = singles.find((c) => c.sector === 0)!;
+    const secCand = singles.find((c) => c.sector !== 0)!;
+    expect(tertCand.clusterWeight).toBeGreaterThan(secCand.clusterWeight);
+  });
+
+  it('residential-only material yields NO candidates (no crescent fallback)', () => {
+    const res = ruralSegments().map((s) => ({ ...s, highway: 'residential' }));
+    expect(generateLoopCandidates(ORIGIN, res, [])).toEqual([]);
+  });
+
+  it('idPrefix namespaces candidate ids (resize-merge collision safety)', () => {
+    const plain = generateLoopCandidates(ORIGIN, ruralSegments(), []);
+    const prefixed = generateLoopCandidates(ORIGIN, ruralSegments(), [], { idPrefix: 'rz-' });
+    expect(prefixed.length).toBeGreaterThan(0);
+    expect(prefixed.every((c) => c.id.startsWith('rz-'))).toBe(true);
+    const plainIds = new Set(plain.map((c) => c.id));
+    expect(prefixed.every((c) => !plainIds.has(c.id))).toBe(true);
+  });
+
+  it('traversal waypoints are INSET vertices, never the road tips (anti-spur, BD-23)', () => {
+    // one long dense-vertex curvy road: 11 vertices ~400 m apart
+    const coords: [number, number][] = Array.from({ length: 11 }, (_, i) => [
+      -79.87 + i * 0.005,
+      43.35 + (i % 2) * 0.001,
+    ]);
+    const seg: CandidateSegment = {
+      id: 'long1',
+      osmWayId: '9001',
+      name: 'Long Twisty Rd',
+      highway: 'tertiary',
+      lengthM: 4_100,
+      curviness: 4,
+      geometry: { type: 'LineString', coordinates: coords },
+    };
+    const out = generateLoopCandidates(ORIGIN, [seg], []);
+    expect(out.length).toBeGreaterThan(0);
+    const tips = [coords[0]!, coords[coords.length - 1]!];
+    for (const c of out) {
+      for (const w of c.waypoints) {
+        for (const [tLng, tLat] of tips) {
+          expect(Math.abs(w.lat - tLat) > 1e-9 || Math.abs(w.lng - tLng) > 1e-9).toBe(true);
+        }
+      }
+    }
+    // and the span points DO lie on the road's interior vertices
+    const onSegment = out[0]!.waypoints.filter((w) =>
+      coords.some(([lng, lat]) => Math.abs(w.lat - lat) < 1e-9 && Math.abs(w.lng - lng) < 1e-9),
+    );
+    expect(onSegment.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('resizedSpeed scales by the observed miss and clamps to sane sizing speeds', () => {
+    expect(resizedSpeed(55, 5400, 10800)).toBeCloseTo(27.5, 5); // 2× over-long → half speed
+    expect(resizedSpeed(55, 5400, 2700)).toBe(90); // 2× short → 110 clamps to 90
+    expect(resizedSpeed(55, 5400, 100_000)).toBe(15); // absurd miss clamps to floor
+    expect(resizedSpeed(55, 5400, 0)).toBe(55); // guard: no median, no change
   });
 });
 

@@ -109,8 +109,9 @@ export async function assembleAtoB(
   if (selfOverlap > selfOverlapCap) {
     rejectReasons.push(`self_overlap ${selfOverlap.toFixed(2)} > ${selfOverlapCap}`);
   }
-  // U-turns are never fun (owner round 2): hard-reject repeat offenders only;
-  // a single u-turn is scored down (zero-tolerance starved the pool).
+  // U-turns are never fun (owner rounds 2–4): assembly rejects repeat offenders
+  // only; presentation is strictly u-turn-averse (see loop.ts for the history —
+  // assembly-level zero tolerance starved pools twice).
   const uturns = route.maneuvers.filter((m) => m.type.startsWith('uturn')).length;
   if (uturns >= 2) rejectReasons.push(`uturns ${uturns}`);
 

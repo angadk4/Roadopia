@@ -41,10 +41,14 @@ export interface WeightVector {
 
 export const DEFAULT_WEIGHTS: WeightVector = {
   dur: 0.3,
-  cur: 0.3,
-  stop: 0.2,
+  // owner round 5 ("more twisty, more fun"): curviness 0.3 → 0.35, stops 0.15
+  // → 0.10 (required stops stay hard-checked at validation regardless)
+  cur: 0.35,
+  stop: 0.1,
   scenic: 0, // GATED OFF until [GATE-S] (Hard rule C)
-  overlap: 0.15,
+  // owner round 3: "avoid the same road twice at all costs" — overlap pressure
+  // raised 0.15 → 0.25 (the hard caps stay; scoring separates the survivors)
+  overlap: 0.25,
   uturn: 0.1,
 };
 
@@ -65,11 +69,25 @@ export function curvFit(curviness: number, twistinessPref: number | null): numbe
   return Math.max(0, 1 - Math.abs(curviness - target) / CURV_REF);
 }
 
+/** Count of u-turn maneuvers in a routed result. */
+export function uturnCount(route: RouteThroughOutput): number {
+  return route.maneuvers.filter((m) => m.type.startsWith('uturn')).length;
+}
+
 /** U-turn penalty: fraction of maneuvers that are u-turns, saturating at 3. */
 export function uturnPenalty(route: RouteThroughOutput): number {
-  const uturns = route.maneuvers.filter((m) => m.type.startsWith('uturn')).length;
-  return Math.min(1, uturns / 3);
+  return Math.min(1, uturnCount(route) / 3);
 }
+
+/**
+ * Presentation-layer u-turn aversion (owner rounds 2–4): subtract this from a
+ * candidate's PRESENTATION key when its route contains any u-turn — scores live
+ * in [-0.35, 1], so 10 is lexicographic (every clean route outranks every
+ * u-turn route). Assembly still admits single-u-turn routes (hard zero
+ * tolerance starved pools twice: 3/33 round 2, 8/36 round 4) — this makes them
+ * pure last-resort material rather than pool poison.
+ */
+export const UTURN_PRESENT_PENALTY = 10;
 
 export interface ScoreBreakdown {
   score: number;

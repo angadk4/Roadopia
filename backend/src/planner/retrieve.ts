@@ -22,6 +22,28 @@ export const THETA_CURVY_DEFAULT = 0.6;
 export const SEGMENT_LIMIT_PER_RING = 300;
 export const SPOT_LIMIT_PER_RING = 100;
 
+/**
+ * Road classes the planner never retrieves (owner round 3 / BD-21): residential
+ * is 66 % of the corpus and 98 % of the top-500 by per-km curvature — short
+ * suburban curls buried every real country road under the old rank-and-limit.
+ * The rest are defensive (absent from today's corpus but poison if a future
+ * extract admits them: ramps read as "curvy", service/track aren't drives).
+ * Excluded INSIDE the RPC (migration 0004) so the filter precedes the limit.
+ */
+export const EXCLUDED_HIGHWAY_CLASSES: string[] = [
+  'residential',
+  'service',
+  'living_street',
+  'track',
+  'motorway',
+  'trunk',
+  'motorway_link',
+  'trunk_link',
+  'primary_link',
+  'secondary_link',
+  'tertiary_link',
+];
+
 /** §3.4 stop-type → DB spot-type mapping; null = no DB coverage yet (disclose). */
 const STOP_TO_SPOT_TYPE: Record<StopType, string | null> = {
   coffee: 'coffee',
@@ -91,13 +113,16 @@ export async function retrieveAnchorPoints(
   for (const ring of scope.rings) {
     const polygon = JSON.stringify(ringToGeoJsonPolygon(ring));
     // ST_PointN(geom, 1): a real on-road VERTEX, not a centroid — centroids of
-    // curved roads sit off the roadway and snap badly (owner round 2).
+    // curved roads sit off the roadway and snap badly (owner round 2). A
+    // mid-vertex variant was tried (round 5) and REGRESSED: forcing interior
+    // points creates in-and-back retraces when the through-path passes the
+    // tips. Class exclusion lives INSIDE the RPC (BD-21), pre-limit.
     const rows = await db.query<{ lat: number; lng: number }>(
       `select st_y(st_pointn(geom, 1))::float8 as lat, st_x(st_pointn(geom, 1))::float8 as lng
        from find_curvy_roads(p_west := 0, p_south := 0, p_east := 0, p_north := 0,
-                             p_polygon := $1::jsonb, p_min_curviness := 0, p_limit := $2)
-       where highway <> 'residential'`,
-      [polygon, limit],
+                             p_polygon := $1::jsonb, p_min_curviness := 0, p_limit := $2,
+                             p_exclude_highway := $3)`,
+      [polygon, limit, EXCLUDED_HIGHWAY_CLASSES],
     );
     for (const r of rows.rows) points.push({ lat: Number(r.lat), lng: Number(r.lng) });
   }
@@ -135,8 +160,9 @@ export async function retrieveCandidates(
               circum_curvature_per_km as curviness,
               st_asgeojson(geom) as geometry
        from find_curvy_roads(p_west := 0, p_south := 0, p_east := 0, p_north := 0,
-                             p_polygon := $1::jsonb, p_min_curviness := $2, p_limit := $3)`,
-      [polygon, theta, segmentLimit],
+                             p_polygon := $1::jsonb, p_min_curviness := $2, p_limit := $3,
+                             p_exclude_highway := $4)`,
+      [polygon, theta, segmentLimit, EXCLUDED_HIGHWAY_CLASSES],
     );
     for (const row of seg.rows) {
       segments.set(row.id, {

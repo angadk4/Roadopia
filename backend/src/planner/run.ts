@@ -23,15 +23,21 @@ import type { Client } from 'pg';
 import { getElevationProfile } from '../valhalla/elevation';
 
 import { assembleAtoB } from './atob';
-import { generateAtoBCandidates, generateLoopCandidates } from './candidates';
+import { generateAtoBCandidates, generateLoopCandidates, resizedSpeed } from './candidates';
 import { measureCurvature } from './curvature';
 import { diversify, prefilterByDuration } from './diversify';
-import { assembleLoop } from './loop';
+import { assembleLoop, RETRACE_RUN_SOFT_M } from './loop';
 import { weightsForPreset } from './presets';
 import { initialParams, nextRelaxation, type SearchParams } from './relax';
 import { retrieveAnchorPoints, retrieveCandidates } from './retrieve';
 import { buildScope } from './scope';
-import { mergeWeights, scoreCandidate, type ScoreBreakdown } from './score';
+import {
+  mergeWeights,
+  scoreCandidate,
+  uturnCount,
+  UTURN_PRESENT_PENALTY,
+  type ScoreBreakdown,
+} from './score';
 import { validateCandidate, type ValidationVerdict } from './validate';
 
 export const WALL_CLOCK_BUDGET_MS = 25_000;
@@ -157,6 +163,7 @@ export async function runPlanner(
     curviness: number;
     validation: ValidationVerdict;
   } | null = null;
+  let bestPresentKey = -Infinity;
 
   // --- iteration loop (cap 3 / wall clock) ---
   for (let iteration = 1; iteration <= ITERATION_CAP && !outOfBudget(); iteration++) {
@@ -227,13 +234,14 @@ export async function runPlanner(
     // generate
     step(events, 'generate_candidates', 'started');
     const anchorPoints = isLoop ? await retrieveAnchorPoints(deps.db, scope) : [];
+    // no-highway loops average backroad speeds — size clusters accordingly
+    const sizingSpeed = params.avoid.highways ? 42 : 55;
     const candidates = isLoop
       ? generateLoopCandidates(origin, retrieved.segments, retrieved.spots, {
           anchorSpots: retrieved.spots.length > 0,
           durationS, // duration-sized cluster choice (SPK-15)
           anchorPoints, // any-curviness return anchors (SPK-15 run 7)
-          // no-highway loops average backroad speeds — size clusters accordingly
-          avgSpeedKmh: params.avoid.highways ? 42 : 55,
+          avgSpeedKmh: sizingSpeed,
         })
       : generateAtoBCandidates(origin, destination!, retrieved.segments, retrieved.spots, {
           anchorSpots: retrieved.spots.length > 0,
@@ -242,45 +250,87 @@ export async function runPlanner(
 
     // route all candidates in PARALLEL (§27; failures drop, never crash the run)
     step(events, 'route_candidates', 'started');
-    const routed = (
-      await Promise.all(
-        candidates.map(async (candidate) => {
-          try {
-            if (isLoop) {
-              const a = await assembleLoop(deps.valhallaUrl, origin, candidate, {
-                exclude_highways: params.avoid.highways,
-                exclude_tolls: params.avoid.tolls,
-                exclude_ferries: params.avoid.ferries,
+    const routeAll = async (cands: typeof candidates) =>
+      (
+        await Promise.all(
+          cands.map(async (candidate) => {
+            try {
+              if (isLoop) {
+                const a = await assembleLoop(deps.valhallaUrl, origin, candidate, {
+                  exclude_highways: params.avoid.highways,
+                  exclude_tolls: params.avoid.tolls,
+                  exclude_ferries: params.avoid.ferries,
+                });
+                return {
+                  candidate,
+                  route: a.route,
+                  selfOverlap: a.selfOverlap,
+                  spursWide: a.spursWide,
+                  retraceRunM: a.retraceRunM,
+                  closureM: a.closureM as number | null,
+                  assemblyAccepted: a.accepted,
+                };
+              }
+              const a = await assembleAtoB(deps.valhallaUrl, origin, destination!, candidate, {
+                costingOptions: {
+                  exclude_highways: params.avoid.highways,
+                  exclude_tolls: params.avoid.tolls,
+                  exclude_ferries: params.avoid.ferries,
+                },
               });
               return {
                 candidate,
                 route: a.route,
                 selfOverlap: a.selfOverlap,
-                closureM: a.closureM as number | null,
+                spursWide: 0,
+                retraceRunM: 0,
+                closureM: null as number | null,
                 assemblyAccepted: a.accepted,
               };
+            } catch {
+              return null; // no-route candidates drop; the ladder handles emptiness
             }
-            const a = await assembleAtoB(deps.valhallaUrl, origin, destination!, candidate, {
-              costingOptions: {
-                exclude_highways: params.avoid.highways,
-                exclude_tolls: params.avoid.tolls,
-                exclude_ferries: params.avoid.ferries,
-              },
-            });
-            return {
-              candidate,
-              route: a.route,
-              selfOverlap: a.selfOverlap,
-              closureM: null as number | null,
-              assemblyAccepted: a.accepted,
-            };
-          } catch {
-            return null; // no-route candidates drop; the ladder handles emptiness
-          }
-        }),
-      )
-    ).filter((r): r is NonNullable<typeof r> => r !== null && r.assemblyAccepted);
-    step(events, 'route_candidates', 'completed', `${routed.length} routable candidates`);
+          }),
+        )
+      ).filter((r): r is NonNullable<typeof r> => r !== null && r.assemblyAccepted);
+    let routed = await routeAll(candidates);
+
+    // Duration-resize retry (owner rounds 3+6: "timings"): when a batch's
+    // MEDIAN duration misses the target by > 25 %, the sizing speed was wrong
+    // for this terrain/costing — regenerate with the speed scaled by the
+    // observed miss and pool the rounds (prefixed ids never collide). Up to
+    // TWO attempts (round 6); each attempt's trigger is judged on the LATEST
+    // batch so early bad candidates don't mask a converged regeneration.
+    let resizeNote = '';
+    if (isLoop && constraints.duration_target_s !== null) {
+      const target = constraints.duration_target_s;
+      let sizingV = sizingSpeed;
+      let batch = routed;
+      for (let attempt = 1; attempt <= 2 && batch.length > 0 && !outOfBudget(); attempt++) {
+        const durs = batch.map((r) => r.route.duration_s).sort((a, b) => a - b);
+        const median = durs[Math.floor(durs.length / 2)]!;
+        if (Math.abs(median - target) / target <= 0.25) break;
+        sizingV = resizedSpeed(sizingV, target, median);
+        const resized = generateLoopCandidates(origin, retrieved.segments, retrieved.spots, {
+          anchorSpots: retrieved.spots.length > 0,
+          durationS,
+          anchorPoints,
+          avgSpeedKmh: sizingV,
+          idPrefix: `rz${attempt}-`,
+        });
+        batch = await routeAll(resized);
+        routed = [...routed, ...batch];
+        resizeNote += `; resized (median ${Math.round(median / 60)} vs target ${Math.round(
+          target / 60,
+        )} min → v ${Math.round(sizingV)} km/h)`;
+      }
+    }
+    step(
+      events,
+      'route_candidates',
+      'completed',
+      `${routed.length} routable candidates${resizeNote}`,
+    );
 
     // score (curvature measured on FINAL geometry) + diversify + validate
     step(events, 'score_rank', 'started');
@@ -304,7 +354,13 @@ export async function runPlanner(
         },
         baseWeights,
       );
-      return { r, curv, breakdown };
+      // presentation key: any u-turn, wide-window spur (block spins), or
+      // notable there-and-back ranks below every clean route (rounds 2–6) —
+      // last-resort material, never preferred content
+      const dirty =
+        uturnCount(r.route) > 0 || r.spursWide > 0 || r.retraceRunM > RETRACE_RUN_SOFT_M;
+      const presentKey = breakdown.score - (dirty ? UTURN_PRESENT_PENALTY : 0);
+      return { r, curv, breakdown, presentKey };
     });
     step(events, 'score_rank', 'completed', `${scored.length} scored`);
 
@@ -312,7 +368,7 @@ export async function runPlanner(
     const diversified = diversify(
       scored.map((s) => ({
         id: s.r.candidate.id,
-        score: s.breakdown.score,
+        score: s.presentKey,
         geometry: s.r.route.geometry,
         payload: s,
       })),
@@ -341,7 +397,8 @@ export async function runPlanner(
       );
       if (!verdict.feasible) continue;
       feasibleThisRound++;
-      if (!best || s.breakdown.score > best.score.score) {
+      if (!best || s.presentKey > bestPresentKey) {
+        bestPresentKey = s.presentKey;
         best = {
           routed: {
             route: s.r.route,

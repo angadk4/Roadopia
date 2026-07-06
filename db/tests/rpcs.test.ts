@@ -104,6 +104,23 @@ describe('find_curvy_roads — bbox form (M2-T08)', () => {
     expect(ms).toBeLessThan(BUDGET_MS);
   });
 
+  it('p_exclude_highway filters classes BEFORE the rank/limit (BD-21)', async (ctx) => {
+    if (!db) return ctx.skip();
+    const [r, ms] = await timed(() =>
+      db!.query<{ highway: string }>(
+        `select highway from find_curvy_roads(
+           p_west := -80.05, p_south := 43.15, p_east := -79.75, p_north := 43.35,
+           p_min_curviness := 0.6, p_limit := 100,
+           p_exclude_highway := array['residential'])`,
+      ),
+    );
+    // a dense Hamilton bbox: post-limit filtering used to leave ~2 % real roads;
+    // in-function filtering must return a FULL page of non-residential rows
+    expect(r.rowCount).toBe(100);
+    expect(r.rows.every((x) => x.highway !== 'residential')).toBe(true);
+    expect(ms).toBeLessThan(BUDGET_MS);
+  });
+
   it('radius form find_curvy_roads_near (BD-13 prefilter) returns thresholded, ranked rows fast', async (ctx) => {
     if (!db) return ctx.skip();
     const [r, ms] = await timed(() =>

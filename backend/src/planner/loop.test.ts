@@ -5,7 +5,7 @@ import { routeThrough } from '../valhalla/route';
 
 import type { WaypointCandidate } from './candidates';
 import { assembleLoop, EPSILON_CLOSURE_M } from './loop';
-import { selfOverlapRatio } from './overlap';
+import { maxRetraceRunM, selfOverlapRatio, spurEvents, SPUR_WINDOW_WIDE_STEPS } from './overlap';
 
 /**
  * M3-T07 — loop assembly against the LIVE local Valhalla (pinned tiles). Self-skips
@@ -114,6 +114,186 @@ describe('assembleLoop (M3-T07, live engine)', () => {
       ]),
     );
     expect(loop.closureM).toBeLessThanOrEqual(EPSILON_CLOSURE_M);
+  });
+});
+
+describe('spurEvents — synthetic sanity (engine-free, BD-23)', () => {
+  const LAT = 43.3;
+  const lngPerM = 1 / (111_320 * Math.cos((LAT * Math.PI) / 180));
+  const latPerM = 1 / 111_320;
+
+  /** Eastbound line at `lat` from x0..x1 metres, 25 m spacing. */
+  const east = (lat: number, x0: number, x1: number): [number, number][] => {
+    const pts: [number, number][] = [];
+    for (let x = x0; x <= x1; x += 25) pts.push([-79.9 + x * lngPerM, lat]);
+    return pts;
+  };
+
+  it('a mid-route in-and-back spur counts exactly one event', () => {
+    // east 2.5 km, dive north 300 m and retrace, continue east 2.5 km
+    const northSpur: [number, number][] = [];
+    for (let y = 0; y <= 300; y += 25) northSpur.push([-79.9 + 2500 * lngPerM, LAT + y * latPerM]);
+    const back = [...northSpur].reverse();
+    const line = {
+      type: 'LineString' as const,
+      coordinates: [...east(LAT, 0, 2500), ...northSpur, ...back, ...east(LAT, 2525, 5000)],
+    };
+    expect(spurEvents(line)).toBe(1);
+  });
+
+  it('a switchback hairpin (parallel legs ~65 m apart) is NOT a spur', () => {
+    const out = east(LAT, 0, 1000);
+    const back = [...east(LAT + 65 * latPerM, 0, 1000)].reverse();
+    const hairpin = { type: 'LineString' as const, coordinates: [...out, ...back] };
+    expect(spurEvents(hairpin)).toBe(0);
+  });
+
+  it('a clean rectangle loop has zero spur events', () => {
+    const rect = {
+      type: 'LineString' as const,
+      coordinates: [
+        ...east(LAT, 0, 2000),
+        ...Array.from(
+          { length: 40 },
+          (_, i) => [-79.9 + 2000 * lngPerM, LAT + (i + 1) * 25 * latPerM] as [number, number],
+        ),
+        ...[...east(LAT + 1000 * latPerM, 0, 2000)].reverse(),
+        ...Array.from(
+          { length: 40 },
+          (_, i) => [-79.9, LAT + (1000 - (i + 1) * 25) * latPerM] as [number, number],
+        ),
+      ],
+    };
+    expect(spurEvents(rect)).toBe(0);
+  });
+
+  it('a full-block neighbourhood spin (in on X, around the block, out on X) is caught', () => {
+    // round 6: the 400 m window missed block circuits — repeats come back
+    // ~800 m of route later; the 1 km window catches them
+    const inX: [number, number][] = east(LAT, 0, 300);
+    const block: [number, number][] = [
+      ...Array.from(
+        { length: 8 },
+        (_, i) => [-79.9 + 300 * lngPerM, LAT + (i + 1) * 25 * latPerM] as [number, number],
+      ),
+      ...Array.from(
+        { length: 8 },
+        (_, i) => [-79.9 + (300 + (i + 1) * 25) * lngPerM, LAT + 200 * latPerM] as [number, number],
+      ),
+      ...Array.from(
+        { length: 8 },
+        (_, i) => [-79.9 + 500 * lngPerM, LAT + (200 - (i + 1) * 25) * latPerM] as [number, number],
+      ),
+      ...Array.from(
+        { length: 8 },
+        (_, i) => [-79.9 + (500 - (i + 1) * 25) * lngPerM, LAT] as [number, number],
+      ),
+    ];
+    const outX = [...east(LAT, 0, 300)].reverse();
+    const line = { type: 'LineString' as const, coordinates: [...inX, ...block, ...outX] };
+    // WIDE window (presentation/AC) catches the block spin; the NARROW
+    // assembly window does not — by design (round 6: a wide assembly gate
+    // starved every pool; the split keeps pools alive and presentation clean)
+    expect(spurEvents(line, undefined, undefined, SPUR_WINDOW_WIDE_STEPS)).toBeGreaterThanOrEqual(
+      1,
+    );
+    expect(spurEvents(line)).toBe(0);
+  });
+
+  it('spurs inside the origin grace radius are exempt', () => {
+    const northSpur: [number, number][] = [];
+    for (let y = 0; y <= 300; y += 25) northSpur.push([-79.9 + 500 * lngPerM, LAT + y * latPerM]);
+    const back = [...northSpur].reverse();
+    const line = {
+      type: 'LineString' as const,
+      coordinates: [...east(LAT, 0, 500), ...northSpur, ...back, ...east(LAT, 525, 1500)],
+    };
+    expect(spurEvents(line, { lat: LAT, lng: -79.9 + 500 * lngPerM })).toBe(0);
+    expect(spurEvents(line)).toBe(1);
+  });
+});
+
+describe('maxRetraceRunM — synthetic sanity (engine-free, BD-24)', () => {
+  const LAT = 43.3;
+  const lngPerM = 1 / (111_320 * Math.cos((LAT * Math.PI) / 180));
+  const latPerM = 1 / 111_320;
+  const east = (lat: number, x0: number, x1: number): [number, number][] => {
+    const pts: [number, number][] = [];
+    for (let x = x0; x <= x1; x += 50) pts.push([-79.9 + x * lngPerM, lat]);
+    return pts;
+  };
+
+  it('an IMMEDIATE there-and-back counts both passes (2 km road ≈ 4 km run)', () => {
+    // out 5 km east, retrace 2 km west on the SAME road, then head north away —
+    // the turnaround joins the passes into one contiguous doubled-travel run
+    const out = east(LAT, 0, 5000);
+    const retrace = [...east(LAT, 3000, 5000)].reverse();
+    const away = Array.from(
+      { length: 60 },
+      (_, i) => [-79.9 + 3000 * lngPerM, LAT + (i + 1) * 50 * latPerM] as [number, number],
+    );
+    const line = { type: 'LineString' as const, coordinates: [...out, ...retrace, ...away] };
+    const run = maxRetraceRunM(line);
+    expect(run).toBeGreaterThan(3_200);
+    expect(run).toBeLessThan(4_800);
+  });
+
+  it('a SEPARATED same-road doubling (out early, back late) measures ≈ the road length', () => {
+    // the owner round-6 case: enter on road X, big middle loop, return on X.
+    // X = 3 km east; middle = 2 km north, 2 km east, 2 km south; return west
+    // along X. The passes are ~6 km of route apart → each is its own run.
+    const X = east(LAT, 0, 3000);
+    const middle: [number, number][] = [
+      ...Array.from(
+        { length: 40 },
+        (_, i) => [-79.9 + 3000 * lngPerM, LAT + (i + 1) * 50 * latPerM] as [number, number],
+      ),
+      ...Array.from(
+        { length: 40 },
+        (_, i) =>
+          [-79.9 + (3000 + (i + 1) * 50) * lngPerM, LAT + 2000 * latPerM] as [number, number],
+      ),
+      ...Array.from(
+        { length: 40 },
+        (_, i) =>
+          [-79.9 + 5000 * lngPerM, LAT + (2000 - (i + 1) * 50) * latPerM] as [number, number],
+      ),
+      ...[...east(LAT, 3000, 5000)].reverse().slice(1),
+    ];
+    const line = {
+      type: 'LineString' as const,
+      coordinates: [...X, ...middle, ...[...X].reverse()],
+    };
+    const run = maxRetraceRunM(line);
+    expect(run).toBeGreaterThan(2_200);
+    expect(run).toBeLessThan(6_500);
+  });
+
+  it('a clean rectangle has no retrace run; origin-street doubling is graced', () => {
+    const rect = {
+      type: 'LineString' as const,
+      coordinates: [
+        ...east(LAT, 0, 3000),
+        ...Array.from(
+          { length: 40 },
+          (_, i) => [-79.9 + 3000 * lngPerM, LAT + (i + 1) * 50 * latPerM] as [number, number],
+        ),
+        ...[...east(LAT + 2000 * latPerM, 0, 3000)].reverse(),
+        ...Array.from(
+          { length: 40 },
+          (_, i) => [-79.9, LAT + (2000 - (i + 1) * 50) * latPerM] as [number, number],
+        ),
+      ],
+    };
+    expect(maxRetraceRunM(rect)).toBe(0);
+
+    // 1.5 km out-and-back that starts AT the origin: graced within 2.5 km
+    const spur = {
+      type: 'LineString' as const,
+      coordinates: [...east(LAT, 0, 1500), ...[...east(LAT, 0, 1500)].reverse()],
+    };
+    expect(maxRetraceRunM(spur, undefined, { lat: LAT, lng: -79.9 })).toBe(0);
+    expect(maxRetraceRunM(spur)).toBeGreaterThan(1_000);
   });
 });
 

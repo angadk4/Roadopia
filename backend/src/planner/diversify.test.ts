@@ -1,7 +1,7 @@
 import type { LineString } from '@shared/types';
 import { describe, expect, it } from 'vitest';
 
-import { diversify } from './diversify';
+import { diversify, prefilterByDuration } from './diversify';
 import { edgeOverlapRatio, pairOverlap } from './overlap';
 
 /**
@@ -86,5 +86,34 @@ describe('diversify (M3-T09)', () => {
     const r1 = diversify(inputs);
     const r2 = diversify([...inputs].reverse());
     expect(r1.kept.map((k) => k.id)).toEqual(r2.kept.map((k) => k.id));
+  });
+});
+
+describe('prefilterByDuration (BD-21, owner round 3)', () => {
+  const items = [
+    { id: 'a', d: 5400 },
+    { id: 'b', d: 9000 },
+    { id: 'c', d: 12000 },
+  ];
+  const dur = (i: { d: number }) => i.d;
+
+  it('keeps only in-band candidates when any exist', () => {
+    expect(prefilterByDuration(items, 5400, dur).map((i) => i.id)).toEqual(['a']);
+  });
+
+  it('whole pool misses ⇒ keeps ONLY the single closest (no wrong-length flood)', () => {
+    expect(prefilterByDuration(items, 1000, dur).map((i) => i.id)).toEqual(['a']);
+  });
+
+  it('no target ⇒ untouched', () => {
+    expect(prefilterByDuration(items, null, dur)).toEqual(items);
+  });
+
+  it('deterministic on ties: the first closest wins', () => {
+    const tie = [
+      { id: 'x', d: 800 },
+      { id: 'y', d: 1200 },
+    ];
+    expect(prefilterByDuration(tie, 1000, dur, 0.1).map((i) => i.id)).toEqual(['x']);
   });
 });

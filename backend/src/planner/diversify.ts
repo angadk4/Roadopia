@@ -19,13 +19,20 @@ export const K_PRESENT_DEFAULT = 4;
  * Duration prefilter (SPK-15 owner finding: "timings seem off"): candidates whose
  * routed duration misses the target by more than this fraction are dropped BEFORE
  * dedup — they crowd the presented set with wrong-length loops. Applied only when
- * at least one candidate survives it (never empties the set). M4 tunes.
+ * at least one candidate survives it (never empties the set). 0.5→0.35 (owner
+ * round 6, "increase time accuracy"): with the resize retry recentring pools,
+ * the presented set can afford the tighter band. M4 tunes.
  */
-export const DURATION_PREFILTER = 0.5;
+export const DURATION_PREFILTER = 0.35;
 
 /**
  * Drop wrong-duration candidates ahead of dedup. `duration` extracts seconds from
  * a candidate; no target (null) ⇒ pass-through unchanged.
+ *
+ * Fallback (owner round 3): when NOTHING lands inside the band, keep only the
+ * single closest candidate — best-so-far honesty without presenting a pool of
+ * wrong-length loops (a 173 %-off "90 minute" loop shipped under the old
+ * keep-everything fallback). Deterministic: strict-lt keeps the first minimum.
  */
 export function prefilterByDuration<T>(
   candidates: T[],
@@ -35,7 +42,17 @@ export function prefilterByDuration<T>(
 ): T[] {
   if (targetS === null || targetS <= 0) return candidates;
   const within = candidates.filter((c) => Math.abs(duration(c) - targetS) / targetS <= maxErr);
-  return within.length > 0 ? within : candidates;
+  if (within.length > 0) return within;
+  let best: T | null = null;
+  let bestErr = Infinity;
+  for (const c of candidates) {
+    const err = Math.abs(duration(c) - targetS) / targetS;
+    if (err < bestErr) {
+      best = c;
+      bestErr = err;
+    }
+  }
+  return best === null ? [] : [best];
 }
 
 export interface Diversifiable {
