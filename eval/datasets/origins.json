@@ -1,0 +1,74 @@
+[
+  {
+    "id": "org-hamilton",
+    "name": "Hamilton",
+    "lat": 43.2557,
+    "lng": -79.8711,
+    "archetype": "dense_urban"
+  },
+  {
+    "id": "org-mississauga",
+    "name": "Mississauga",
+    "lat": 43.589,
+    "lng": -79.6441,
+    "archetype": "dense_urban"
+  },
+  {
+    "id": "org-milton",
+    "name": "Milton",
+    "lat": 43.5083,
+    "lng": -79.8774,
+    "archetype": "suburban_edge"
+  },
+  {
+    "id": "org-newmarket",
+    "name": "Newmarket",
+    "lat": 44.0592,
+    "lng": -79.4613,
+    "archetype": "suburban_edge"
+  },
+  {
+    "id": "org-hockley",
+    "name": "Hockley",
+    "lat": 43.99,
+    "lng": -80.02,
+    "archetype": "rural_twisty_rich"
+  },
+  {
+    "id": "org-creemore",
+    "name": "Creemore",
+    "lat": 44.3266,
+    "lng": -80.1064,
+    "archetype": "rural_twisty_rich"
+  },
+  { "id": "org-cayuga", "name": "Cayuga", "lat": 42.9459, "lng": -79.8563, "archetype": "sparse" },
+  {
+    "id": "org-port-perry",
+    "name": "Port Perry",
+    "lat": 44.1006,
+    "lng": -78.943,
+    "archetype": "sparse"
+  },
+  {
+    "id": "org-cobourg",
+    "name": "Cobourg",
+    "lat": 43.9593,
+    "lng": -78.1677,
+    "archetype": "water_adjacent"
+  },
+  {
+    "id": "org-owen-sound",
+    "name": "Owen Sound",
+    "lat": 44.569,
+    "lng": -80.9406,
+    "archetype": "water_adjacent"
+  },
+  {
+    "id": "org-belfountain",
+    "name": "Belfountain",
+    "lat": 43.7926,
+    "lng": -80.0117,
+    "archetype": "escarpment"
+  },
+  { "id": "org-grimsby", "name": "Grimsby", "lat": 43.2, "lng": -79.562, "archetype": "escarpment" }
+]

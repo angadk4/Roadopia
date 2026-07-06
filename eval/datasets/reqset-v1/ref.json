@@ -1,0 +1,791 @@
+[
+  {
+    "id": "ref-001",
+    "split": "ref",
+    "turns": ["2 hour loop from Belfountain", "actually make it 90 minutes and add a coffee stop"],
+    "origin_id": "org-belfountain",
+    "tags": {
+      "shape": "loop",
+      "duration_band": "medium",
+      "archetype": "escarpment",
+      "constraints": ["stops_coffee"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "medium",
+    "gold": {
+      "final_constraints": {
+        "origin": { "lat": 43.7926, "lng": -80.0117 },
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 5400,
+        "distance_target_m": null,
+        "stops": [{ "type": "coffee", "count": 1, "importance": "nice_to_have" }],
+        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": [],
+        "scenic_pref": null,
+        "twistiness_pref": null,
+        "intensity": null,
+        "preset": null,
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 overrides the duration (7200 s -> 5400 s) and adds a nice-to-have coffee stop; the Belfountain origin and loop shape persist from turn 1."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-002",
+    "split": "ref",
+    "turns": [
+      "give me a chill 1 hour loop from Milton, nothing intense",
+      "actually no highways please",
+      "and can you make it about 75 minutes"
+    ],
+    "origin_id": "org-milton",
+    "tags": {
+      "shape": "loop",
+      "duration_band": "medium",
+      "archetype": "suburban_edge",
+      "constraints": ["no_highway", "intensity_chill"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "medium",
+    "gold": {
+      "final_constraints": {
+        "origin": { "lat": 43.5083, "lng": -79.8774 },
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 4500,
+        "distance_target_m": null,
+        "stops": [],
+        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": [],
+        "scenic_pref": null,
+        "twistiness_pref": null,
+        "intensity": "chill",
+        "preset": "chill",
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 adds the highway exclusion and turn 3 overrides the duration (3600 s -> 4500 s); the chill intensity/preset from turn 1 persists."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-003",
+    "split": "ref",
+    "turns": [
+      "hour and a half of nice flowing backroads out of Creemore, back where i started",
+      "twistier please, and throw in a viewpoint stop"
+    ],
+    "origin_id": "org-creemore",
+    "tags": {
+      "shape": "loop",
+      "duration_band": "medium",
+      "archetype": "rural_twisty_rich",
+      "constraints": ["twistiness", "stops_viewpoint"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "medium",
+    "gold": {
+      "final_constraints": {
+        "origin": { "lat": 44.3266, "lng": -80.1064 },
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 5400,
+        "distance_target_m": null,
+        "stops": [{ "type": "viewpoint", "count": 1, "importance": "nice_to_have" }],
+        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": ["twisty", "backroad"],
+        "scenic_pref": null,
+        "twistiness_pref": 0.7,
+        "intensity": null,
+        "preset": "twisty",
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 shifts the character from flowing to twisty (pref ~0.7) and adds a nice-to-have viewpoint stop; the backroad character, 90-minute target, and Creemore loop persist."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-004",
+    "split": "ref",
+    "turns": [
+      "quick 40 minute loop from Kilbride",
+      "start from Milton instead",
+      "oh and i need a fuel stop, running low"
+    ],
+    "origin_id": null,
+    "tags": {
+      "shape": "loop",
+      "duration_band": "short",
+      "archetype": "suburban_edge",
+      "constraints": ["stops_fuel"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "medium",
+    "gold": {
+      "final_constraints": {
+        "origin": "Milton",
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 2400,
+        "distance_target_m": null,
+        "stops": [{ "type": "fuel", "count": 1, "importance": "required" }],
+        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": [],
+        "scenic_pref": null,
+        "twistiness_pref": null,
+        "intensity": null,
+        "preset": null,
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 replaces the Kilbride origin with Milton; turn 3 adds a required fuel stop ('need', running low); the 40-minute loop target persists from turn 1."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-005",
+    "split": "ref",
+    "turns": [
+      "2 hour scenic loop from Hamilton with a coffee stop and a lunch stop",
+      "skip the lunch actually, just the coffee"
+    ],
+    "origin_id": "org-hamilton",
+    "tags": {
+      "shape": "loop",
+      "duration_band": "medium",
+      "archetype": "dense_urban",
+      "constraints": ["scenic", "stops_coffee"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "easy",
+    "gold": {
+      "final_constraints": {
+        "origin": { "lat": 43.2557, "lng": -79.8711 },
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 7200,
+        "distance_target_m": null,
+        "stops": [{ "type": "coffee", "count": 1, "importance": "nice_to_have" }],
+        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": ["scenic"],
+        "scenic_pref": 0.7,
+        "twistiness_pref": null,
+        "intensity": null,
+        "preset": "scenic",
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 removes the food stop; the coffee stop, scenic character, 2-hour target, and Hamilton origin all persist from turn 1."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-006",
+    "split": "ref",
+    "turns": [
+      "show me a couple of lakeside loop options from Cobourg, around an hour",
+      "more like the second one but longer, maybe 2 hrs 15"
+    ],
+    "origin_id": "org-cobourg",
+    "tags": {
+      "shape": "loop",
+      "duration_band": "long",
+      "archetype": "water_adjacent",
+      "constraints": ["scenic"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "hard",
+    "gold": {
+      "final_constraints": {
+        "origin": { "lat": 43.9593, "lng": -78.1677 },
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 8100,
+        "distance_target_m": null,
+        "stops": [],
+        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": ["coastal"],
+        "scenic_pref": null,
+        "twistiness_pref": null,
+        "intensity": null,
+        "preset": null,
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": ["more like the second one"],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.7, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 overrides the duration to 8100 s; 'more like the second one' cannot bind to a concrete route in gold, so it is recorded as ambiguous while the lakeside/coastal character and Cobourg loop persist."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-007",
+    "split": "ref",
+    "turns": [
+      "90 min loop from Pelham through wine country, something scenic",
+      "actually no highways and keep it paved, my car sits low"
+    ],
+    "origin_id": null,
+    "tags": {
+      "shape": "loop",
+      "duration_band": "medium",
+      "archetype": "escarpment",
+      "constraints": ["no_highway", "surface_paved", "scenic"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "medium",
+    "gold": {
+      "final_constraints": {
+        "origin": "Pelham",
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 5400,
+        "distance_target_m": null,
+        "stops": [],
+        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": true },
+        "surface_pref": "paved",
+        "character": ["scenic", "rural"],
+        "scenic_pref": 0.7,
+        "twistiness_pref": null,
+        "intensity": null,
+        "preset": "scenic",
+        "weights": null,
+        "location_constraints": [{ "kind": "near", "text": "wine country" }],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 adds highway and unpaved exclusions (paved surface pref, low car); the scenic wine-country loop from Pelham at 90 minutes persists from turn 1."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-008",
+    "split": "ref",
+    "turns": [
+      "half-day drive from Fonthill and back, backroads only",
+      "make it 3 hours tops",
+      "add a couple of coffee stops"
+    ],
+    "origin_id": null,
+    "tags": {
+      "shape": "loop",
+      "duration_band": "long",
+      "archetype": "escarpment",
+      "constraints": ["no_highway", "stops_coffee"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "medium",
+    "gold": {
+      "final_constraints": {
+        "origin": "Fonthill",
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 10800,
+        "distance_target_m": null,
+        "stops": [{ "type": "coffee", "count": 2, "importance": "nice_to_have" }],
+        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": ["backroad"],
+        "scenic_pref": null,
+        "twistiness_pref": null,
+        "intensity": null,
+        "preset": "backroads",
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 pins the vague 'half-day' to an explicit 10800 s cap; turn 3 adds two nice-to-have coffee stops; backroads-only (highways avoided) persists from turn 1."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-009",
+    "split": "ref",
+    "turns": [
+      "easy hour loop around Smithville, flat and gentle",
+      "hmm, make it twistier actually, i want some fun corners",
+      "but still nothing too spirited"
+    ],
+    "origin_id": null,
+    "tags": {
+      "shape": "loop",
+      "duration_band": "medium",
+      "archetype": "sparse",
+      "constraints": ["twistiness"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "medium",
+    "gold": {
+      "final_constraints": {
+        "origin": "Smithville",
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 3600,
+        "distance_target_m": null,
+        "stops": [],
+        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": ["twisty"],
+        "scenic_pref": null,
+        "twistiness_pref": 0.7,
+        "intensity": "moderate",
+        "preset": null,
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.85, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 overrides the gentle character with twisty (~0.7); turn 3 caps intensity at moderate (off gentle but below spirited); the one-hour Smithville loop persists."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-010",
+    "split": "ref",
+    "turns": [
+      "morning coffee loop from Caledonia, 45 min or so",
+      "actually start from Smithville, and make it an hour"
+    ],
+    "origin_id": null,
+    "tags": {
+      "shape": "loop",
+      "duration_band": "medium",
+      "archetype": "sparse",
+      "constraints": ["stops_coffee"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "easy",
+    "gold": {
+      "final_constraints": {
+        "origin": "Smithville",
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 3600,
+        "distance_target_m": null,
+        "stops": [{ "type": "coffee", "count": 1, "importance": "nice_to_have" }],
+        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": [],
+        "scenic_pref": null,
+        "twistiness_pref": null,
+        "intensity": null,
+        "preset": "coffee_stop",
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 replaces Caledonia with Smithville as origin and overrides the duration (2700 s -> 3600 s); the coffee-loop intent persists."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-011",
+    "split": "ref",
+    "turns": [
+      "hour long loop from Hamilton up the escarpment",
+      "like that but with more sweeping bends, and add 30 minutes"
+    ],
+    "origin_id": "org-hamilton",
+    "tags": {
+      "shape": "loop",
+      "duration_band": "medium",
+      "archetype": "dense_urban",
+      "constraints": ["twistiness"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "hard",
+    "gold": {
+      "final_constraints": {
+        "origin": { "lat": 43.2557, "lng": -79.8711 },
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 5400,
+        "distance_target_m": null,
+        "stops": [],
+        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": ["flowing"],
+        "scenic_pref": null,
+        "twistiness_pref": 0.5,
+        "intensity": null,
+        "preset": null,
+        "weights": null,
+        "location_constraints": [{ "kind": "near", "text": "the escarpment" }],
+        "ambiguous_terms": ["like that"],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.75, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 is relative: +30 minutes on the 60-minute base (-> 5400 s) plus a flowing/sweeping character (moderate twistiness ~0.5); the escarpment near-constraint and Hamilton origin persist."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-012",
+    "split": "ref",
+    "turns": [
+      "3 hr loop from Creemore with a lunch stop and a fuel stop",
+      "no gravel please",
+      "drop the lunch stop, we'll eat before we head out"
+    ],
+    "origin_id": "org-creemore",
+    "tags": {
+      "shape": "loop",
+      "duration_band": "long",
+      "archetype": "rural_twisty_rich",
+      "constraints": ["surface_paved", "stops_fuel"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "medium",
+    "gold": {
+      "final_constraints": {
+        "origin": { "lat": 44.3266, "lng": -80.1064 },
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 10800,
+        "distance_target_m": null,
+        "stops": [{ "type": "fuel", "count": 1, "importance": "nice_to_have" }],
+        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": true },
+        "surface_pref": "paved",
+        "character": [],
+        "scenic_pref": null,
+        "twistiness_pref": null,
+        "intensity": null,
+        "preset": null,
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 adds the unpaved exclusion (paved surface pref); turn 3 removes the food stop; the fuel stop and 3-hour Creemore loop persist from turn 1."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-013",
+    "split": "ref",
+    "turns": [
+      "short 30 min loop from Belfountain, something twisty",
+      "actually i've got more time, lets do 2 and a half hours",
+      "and mix in some forest roads"
+    ],
+    "origin_id": "org-belfountain",
+    "tags": {
+      "shape": "loop",
+      "duration_band": "long",
+      "archetype": "escarpment",
+      "constraints": ["twistiness"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "medium",
+    "gold": {
+      "final_constraints": {
+        "origin": { "lat": 43.7926, "lng": -80.0117 },
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 9000,
+        "distance_target_m": null,
+        "stops": [],
+        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": ["twisty", "forest"],
+        "scenic_pref": null,
+        "twistiness_pref": 0.7,
+        "intensity": null,
+        "preset": "twisty",
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 lifts the duration from 1800 s to 9000 s; turn 3 adds forest character alongside the persisting twisty preference (~0.7) from turn 1."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-014",
+    "split": "ref",
+    "turns": [
+      "loop from Kilbride, about an hour, avoid the 401",
+      "actually just avoid all highways",
+      "add a coffee stop, that's a must",
+      "and can we do 90 minutes instead"
+    ],
+    "origin_id": null,
+    "tags": {
+      "shape": "loop",
+      "duration_band": "medium",
+      "archetype": "escarpment",
+      "constraints": ["no_highway", "stops_coffee"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "hard",
+    "gold": {
+      "final_constraints": {
+        "origin": "Kilbride",
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 5400,
+        "distance_target_m": null,
+        "stops": [{ "type": "coffee", "count": 1, "importance": "required" }],
+        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": [],
+        "scenic_pref": null,
+        "twistiness_pref": null,
+        "intensity": null,
+        "preset": null,
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 broadens the 401-specific avoid into a full highway exclusion (subsuming it); turn 3 adds a required coffee stop ('a must'); turn 4 overrides the duration to 5400 s."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-015",
+    "split": "ref",
+    "turns": [
+      "two hour lakeshore drive from Cobourg that loops back home, with a viewpoint stop",
+      "make that two viewpoints and keep us off the big highways"
+    ],
+    "origin_id": "org-cobourg",
+    "tags": {
+      "shape": "loop",
+      "duration_band": "medium",
+      "archetype": "water_adjacent",
+      "constraints": ["stops_viewpoint", "no_highway", "scenic"],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "medium",
+    "gold": {
+      "final_constraints": {
+        "origin": { "lat": 43.9593, "lng": -78.1677 },
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 7200,
+        "distance_target_m": null,
+        "stops": [{ "type": "viewpoint", "count": 2, "importance": "nice_to_have" }],
+        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": ["coastal"],
+        "scenic_pref": null,
+        "twistiness_pref": null,
+        "intensity": null,
+        "preset": null,
+        "weights": null,
+        "location_constraints": [],
+        "ambiguous_terms": [],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.9, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 raises the viewpoint count 1 -> 2 and adds the highway exclusion; the 2-hour coastal loop from Cobourg persists from turn 1."
+    },
+    "added_in": "reqset-v1"
+  },
+  {
+    "id": "ref-016",
+    "split": "ref",
+    "turns": [
+      "give me somethin like that grand river loop from Caledonia again, about an hour",
+      "shorter, 45 minutes, and skip the fuel stop this time"
+    ],
+    "origin_id": null,
+    "tags": {
+      "shape": "loop",
+      "duration_band": "short",
+      "archetype": "sparse",
+      "constraints": [],
+      "composition": "combined",
+      "tractability": "clearly_feasible",
+      "special": ["refinement"]
+    },
+    "difficulty": "hard",
+    "gold": {
+      "final_constraints": {
+        "origin": "Caledonia",
+        "destination": null,
+        "shape": "loop",
+        "duration_target_s": 2700,
+        "distance_target_m": null,
+        "stops": [],
+        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "surface_pref": "any",
+        "character": [],
+        "scenic_pref": null,
+        "twistiness_pref": null,
+        "intensity": null,
+        "preset": null,
+        "weights": null,
+        "location_constraints": [{ "kind": "near", "text": "Grand River" }],
+        "ambiguous_terms": ["that grand river loop"],
+        "missing": [],
+        "contradictions": [],
+        "confidence": { "overall": 0.65, "fields": {} },
+        "clarification": { "needed": false, "question": null },
+        "unsafe_flag": false,
+        "out_of_region_flag": false,
+        "prompt_injection_flag": false
+      },
+      "expected_disposition": "proceed",
+      "merge_rationale": "Turn 2 overrides the duration (3600 s -> 2700 s) and explicitly excludes the fuel stop the referenced past route implied (final stops empty); 'that grand river loop' cannot bind to a route in gold, so it stays a near-Grand-River constraint plus an ambiguous term."
+    },
+    "added_in": "reqset-v1"
+  }
+]

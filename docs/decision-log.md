@@ -446,3 +446,22 @@ on 23/38 bests, 8 bests fully clean (0 m); tail = Caledon 7.2 km / Campbellford 
 Georgetown 4.6 km / Peterborough 4.1 km — towns where NO clean candidate exists in the pool, i.e.
 a GENERATION-diversity question (return-corridor variety), the top M4 item alongside the calibration
 razors. **178/178 tests** (+4: retrace semantics ×2, block-spin window split, grace).
+
+**BD-25 — SPK-15 PASSED (owner verdict, 2026-07-06): the deterministic planner generates the
+product.** Six owner drivability rounds (BD-17…BD-24) took the loop generator from 1/15 to a machine
+whose presented routes are class-filtered country roads, duration-sized (mean err 18 %), and clean
+of u-turns/spurs/doublings wherever a clean candidate exists — with every owner complaint now a
+MEASURED metric in the 40-brief harness (durErr, uturns, spurs, retrace_m, self-overlap, pairwise
+distinctness). Owner verdict after inspecting the labelled geojson across six rounds: routes
+structurally right — "time to move on"; rounds committed (43f983c), CI green. SPK-15 closes
+**PASSED with tunables**; the composite (3/40 on the eight-criterion AC) is explicitly a CALIBRATION
+number, not a launch gate — every threshold in it is a candidate constant. **Handoff to M4, in
+priority order:** (1) return-corridor generation diversity (the Caledon 7.2 km retrace tail — towns
+where NO clean pool candidate exists); (2) calibrate the razors on DEV/VAL (0.15 meanSelf, ±25 %
+duration band, retrace 1,200 m, density-aware K_PRESENT for flat farmland, TAU_OVERLAP, θ,
+LOOP_LENGTH_FACTOR, resize clamps); (3) the Grimsby/Cobourg pathologies (escarpment mesh; lakeshore
+funnel → relax-with-disclosure design); (4) richer traversal chaining with pool-health guards;
+(5) driven ground-truth labels replacing the cartographic set (BD-13 obligation). Standing design
+rule proven three times across the rounds: quality preferences rank at PRESENTATION; assembly
+rejects only unambiguous junk. M1's blocking chain is now fully green (SPK-08/04/10/15);
+SPK-09/SPK-19 + SPK-01/03 ride later milestones per plan.
