@@ -2,9 +2,9 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "types": ["node"],
-    // The data package is run directly by tsx/vitest (no build step), and its modules
-    // import siblings with explicit .ts extensions; allow that under noEmit typecheck.
-    "allowImportingTsExtensions": true,
+    
+    
+    
     "noEmit": true
   },
   "include": ["curvature/**/*.ts"]

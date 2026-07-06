@@ -3,10 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "loop-quality": "tsx loop_quality.ts"
   },
   "devDependencies": {
+    "@types/pg": "^8.20.0",
     "@vitest/coverage-v8": "^4.1.9",
+    "pg": "^8.22.0",
+    "tsx": "^4.23.0",
     "vitest": "^4.1.9"
   }
 }

@@ -17,10 +17,10 @@ import { writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { computeCurvature, DEFAULT_PARAMS, type Tags } from './compute.ts';
-import { baseName, LABEL_BASENAME_SET } from './labels.ts';
-import { percentile } from './stats.ts';
-import type { LonLat } from './geometry.ts';
+import { computeCurvature, DEFAULT_PARAMS, type Tags } from './compute';
+import { baseName, LABEL_BASENAME_SET } from './labels';
+import { percentile } from './stats';
+import type { LonLat } from './geometry';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const INPUT = join(HERE, 'roads.geojsonl');

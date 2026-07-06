@@ -7,9 +7,9 @@ import {
   toLocalXY,
   turnAngleDeg,
   type LonLat,
-} from './geometry.ts';
-import { computeCurvature, DEFAULT_PARAMS, isJunctionGeometry } from './compute.ts';
-import { gridFalsePositiveRate, percentile, ranks, spearman } from './stats.ts';
+} from './geometry';
+import { computeCurvature, DEFAULT_PARAMS, isJunctionGeometry } from './compute';
+import { gridFalsePositiveRate, percentile, ranks, spearman } from './stats';
 
 const EARTH_RADIUS_M = 6_371_008.8;
 const DEG2RAD = Math.PI / 180;

@@ -79,16 +79,31 @@ describe('domain schemas round-trip parse/serialize', () => {
     expectRoundTrip(SpotSchema, spot);
   });
 
-  it('ParsedConstraints', () => {
+  it('ParsedConstraints (§3.4 shape)', () => {
     const pc: ParsedConstraints = {
-      origin_area: origin,
-      duration_target_s: 5400,
-      duration_tolerance: 0.1,
+      origin,
+      destination: null,
       shape: 'loop',
-      character_prefs: ['twisty', 'flowing'],
-      hard_constraints: { no_highways: true, no_tolls: false, no_ferries: false, no_unpaved: true },
-      desired_stops: [{ type: 'coffee', count: 1 }],
+      duration_target_s: 5400,
+      distance_target_m: null,
+      stops: [{ type: 'coffee', count: 1, importance: 'nice_to_have' }],
+      avoid: { highways: true, tolls: false, ferries: false, unpaved: true },
+      surface_pref: 'paved',
+      character: ['twisty', 'flowing'],
+      scenic_pref: 0.6,
+      twistiness_pref: 0.8,
+      intensity: 'moderate',
+      preset: null,
       weights: { curviness: 0.6, scenic: 0.3, duration: 0.1 },
+      location_constraints: [],
+      ambiguous_terms: [],
+      missing: [],
+      contradictions: [],
+      confidence: { overall: 0.9, fields: {} },
+      clarification: { needed: false, question: null },
+      unsafe_flag: false,
+      out_of_region_flag: false,
+      prompt_injection_flag: false,
     };
     expectRoundTrip(ParsedConstraintsSchema, pc);
   });

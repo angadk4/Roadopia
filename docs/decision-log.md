@@ -215,3 +215,22 @@ not manifest for this option. Posture: keep the flag **true** (harmless, explici
 mandatory result-scan caveat** (verify returned road classes; never trust request flags blindly — spec
 §11/§28). The "impossible exclusion → no-route" case wasn't force-constructed (dense corridor); M3's
 relaxation-ladder tests exercise no-route handling naturally.
+
+**BD-17 — SPK-15 iteration findings + planner parameter changes (2026-07-05, IN PROGRESS).** Six
+instrumented runs of the loop-quality report (15 fixed briefs, real stack). Trajectory: **1/15 → 2/15 →
+3/15 → 0/15 (regression, reverted) → 3/15 (current best)**; mean presented 1.1→2.7; mean duration error
+33 %→23 %; ~280 ms/brief wall. **Parameter/design changes shipped:** (a) **duration-sized cluster
+choice** — clusters ranked by weight × fit to `d* = T*·v/LOOP_LENGTH_FACTOR` (v=55 km/h, factor 2.4;
+biggest durErr win); (b) **two-tier self-overlap** — 0.15 stays the soft scoring/validation line, assembly
+hard-rejects only > 0.30 (`SELF_OVERLAP_HARD_REJECT`) — 0.15-as-hard-filter killed legitimate circuits;
+(c) **origin-grace 2.5 km** in `selfOverlapRatio` — funnel-topology towns (Grimsby) force approach-road
+reuse on every real loop; repeats near the origin are exempt, doubling back FAR from home still counts;
+(d) return anchors = segment-first (widened to sectors ≥2 away) with synthetic bearing-point fallback —
+**synthetic-ONLY was tried and REGRESSED** (returns left the curvy band, curviness −25 %; reverted).
+**Open problems (the spike's remaining 2 days):** (1) **band-topology retrace** — where all curvy roads
+form one band (escarpment), out/return legs collapse onto the same road; candidate ideas: parallel-road
+return biasing via a second lower-θ retrieval for anchors, Valhalla `exclude_polygons` on the outbound
+corridor, or multi-cluster chaining; (2) **presented < K_PRESENT (mean 2.7 vs 4)** — same-cluster
+variants dedup to one; needs more distinct clusters per Ω (raise K_CLUSTERS, chain 2 clusters/loop) or
+accept K_PRESENT=3 (an M4 [GATE] question); (3) durErr tail (49–79 %) on band briefs where the only
+curvy cluster sits at a fixed distance. All tunables remain candidates — M4 freezes.

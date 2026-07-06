@@ -14,9 +14,9 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { haversineMeters } from './geometry.ts';
-import { baseName, LABELS, type Ordinal } from './labels.ts';
-import { gridFalsePositiveRate, spearman } from './stats.ts';
+import { haversineMeters } from './geometry';
+import { baseName, LABELS, type Ordinal } from './labels';
+import { gridFalsePositiveRate, spearman } from './stats';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MATCH_RADIUS_M = 5000;

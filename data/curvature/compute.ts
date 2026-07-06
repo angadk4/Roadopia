@@ -25,7 +25,7 @@ import {
   resample,
   turnAngleDeg,
   type LonLat,
-} from './geometry.ts';
+} from './geometry';
 
 /** Tunable preprocessing/curvature parameters — candidate values, finalised at M4. */
 export interface CurvatureParams {
