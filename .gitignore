@@ -41,6 +41,8 @@ data/**
 !data/regions/
 !data/regions/*.poly
 !data/extract.sh
+# tracked SPK-08 provenance (1KB: md5s + way counts; §22 manifests + CI read it — NOT the big pbf)
+!data/extract-manifest.json
 # tracked SPK-04 deliverables (routing extract filter + VPS tile build + probe)
 !data/extract-routing.sh
 !data/build_tiles.sh
