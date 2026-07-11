@@ -21,9 +21,14 @@ import { fileURLToPath } from 'node:url';
 
 import Anthropic from '@anthropic-ai/sdk';
 
-/** USD per MTok — Haiku 4.5 (claude-api reference, cached 2026-06). */
+/**
+ * USD per MTok (claude-api reference, cached 2026-06). Exactly the two models
+ * the docs pin (Master Spec §25 / Dep Verification §5): Haiku 4.5 for
+ * parse/correct, Sonnet 4.6 for select/explain — Hard rule F routing.
+ */
 export const PRICES: Record<string, { inPerMTok: number; outPerMTok: number }> = {
   'claude-haiku-4-5': { inPerMTok: 1, outPerMTok: 5 },
+  'claude-sonnet-4-6': { inPerMTok: 3, outPerMTok: 15 },
 };
 export const MODEL_ALLOWLIST = Object.keys(PRICES);
 export const DEFAULT_BUDGET_USD = 2;

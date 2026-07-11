@@ -1,0 +1,35 @@
+{
+  "pairs": [
+    {
+      "pair": "pair-01",
+      "exampleId": "val-002",
+      "brief": "Sunday morning escape from Mississauga — about two hours, wanna end up on quiet backroads and see as little of the city as possible",
+      "aIs": "R1"
+    },
+    {
+      "pair": "pair-02",
+      "exampleId": "val-009",
+      "brief": "make me a proper day out of Creemore — four hours or so, mix of forest and open farm roads, one viewpoint stop is a must, and keep me off gravel",
+      "aIs": "R4"
+    },
+    {
+      "pair": "pair-03",
+      "exampleId": "val-016",
+      "brief": "heading out from Stouffville after work, 45 min tops, a quiet coffee somewhere would be nice",
+      "aIs": "R1"
+    },
+    {
+      "pair": "pair-04",
+      "exampleId": "val-022",
+      "brief": "three hour loop from Stouffville but make literally all of it twisty — no long straights — and paved the entire way",
+      "aIs": "R1"
+    }
+  ],
+  "automated": {
+    "r1_gold": 1,
+    "r4_gold": 1,
+    "agreement": 0.5,
+    "latency_ms": 2546.078354166666,
+    "cost_usd": 0.00353025
+  }
+}

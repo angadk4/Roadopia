@@ -7,7 +7,12 @@
     "loop-quality": "tsx loop_quality.ts",
     "baselines": "tsx run_baselines.ts",
     "gate-c": "tsx experiments/gate_c.ts",
-    "gate-a": "tsx experiments/gate_a.ts"
+    "gate-a": "tsx experiments/gate_a.ts",
+    "ranking": "tsx experiments/ranking.ts",
+    "gate-f": "tsx experiments/gate_f.ts",
+    "gate-w": "tsx experiments/gate_w.ts",
+    "smoke": "tsx smoke.ts",
+    "gate-s": "tsx experiments/gate_s.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",

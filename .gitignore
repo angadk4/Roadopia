@@ -49,6 +49,8 @@ data/**
 !data/valhalla_probe.py
 # tracked M2-T06 loader (curvy_segments rows into the data tier)
 !data/load_curvy.ts
+# tracked M4-T07 [GATE-S] scenic-layer loader (generated .geojsonl/.pbf stay ignored)
+!data/load_scenic.ts
 # tracked M2-T09 POI extractor (generated pois.geojsonl / pois.json stay ignored)
 !data/extract_pois.ts
 # tracked SPK-10 data package — source only (generated .geojsonl/.csv stay ignored)

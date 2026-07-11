@@ -1,0 +1,44 @@
+{
+  "experiment_id": "gate-r-ranking",
+  "code_commit": "b04a532745d3f1f3b2f1b3fddac6515d31bd3d87",
+  "prompt_versions": {},
+  "model": {
+    "id": "claude-sonnet-4-6",
+    "params": {
+      "temperature": 0,
+      "max_tokens": 300,
+      "structured_outputs": true
+    },
+    "n_repeats": 3
+  },
+  "routing_data": {
+    "extract_date": "2026-07-06T18:18:18Z",
+    "filtered_md5": "66f5f92fe2968a8f9603b727dcc1657b",
+    "filtered_ways": 275377,
+    "source_md5": "56dacf51f2b34e935fa557057d2be8f9"
+  },
+  "region": {
+    "id": "south-central-ontario",
+    "poly_md5": "7bbf85b3522270cce12ee44918547c3d"
+  },
+  "scoring_config": {
+    "id": "default-weights-v1",
+    "weights": {}
+  },
+  "user_weight_config": "none (defaults)",
+  "seed": 42,
+  "dataset": {
+    "split": "val",
+    "version": "reqset-v1"
+  },
+  "timestamp": "2026-07-11T21:43:32.655Z",
+  "environment": {
+    "valhalla": "pinned v3.7.0 (local compose)",
+    "host": "local"
+  },
+  "cost_ledger": {
+    "total_usd": 0.096147,
+    "llm_calls": 27,
+    "notes": "direct API (one-shot experiment); DEV smoke included in ledger"
+  }
+}

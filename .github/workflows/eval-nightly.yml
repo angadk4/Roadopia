@@ -1,0 +1,44 @@
+# Scheduled eval (M4-T14) — the NIGHTLY slice of the CI-vs-scheduled split
+# (Protocol §26: full eval on merges/nightly, smoke per push).
+#
+# What runs HERE: dataset validation + rules-parser floor + the LLM prompt
+# gate (only if the ANTHROPIC_API_KEY secret is configured; budget-capped at
+# $0.10/run inside the cost-guarded client — Hard rule F, so the nightly LLM
+# ceiling is ~$3/month).
+#
+# What does NOT run here (honest limitation): the planner-in-the-loop full
+# runs (baselines, loop-quality, gate-r/f/w) need live Valhalla + Supabase,
+# which this runner does not have. Those run locally/VPS via:
+#   pnpm -C eval run baselines | loop-quality | ranking | gate-f | gate-w
+# Batch API (50 % off) is adopted for recurring LLM evals when a hosted eval
+# runner with services exists (§26).
+#
+# No secrets are committed; the key comes only from GitHub Actions secrets
+# (Hard rule H). Without the secret the LLM step self-skips and the job still
+# gates the deterministic checks.
+
+name: Eval (nightly)
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # 06:00 UTC daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  eval-smoke:
+    name: Eval smoke (full-depth nightly)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C eval run smoke
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

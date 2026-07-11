@@ -42,6 +42,23 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
 
+  eval-smoke:
+    name: Eval smoke gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Per-push slice (M4-T14): dataset integrity + rules-parser floor. The
+      # LLM prompt gate self-skips without the ANTHROPIC_API_KEY secret (it is
+      # exercised on the nightly schedule — eval-nightly.yml — to keep per-push
+      # cost at $0); the full planner-in-the-loop runs stay local/VPS.
+      - run: pnpm -C eval run smoke
+
   test:
     name: Test (${{ matrix.package }})
     runs-on: ubuntu-latest

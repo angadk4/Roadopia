@@ -496,8 +496,8 @@ per-dimension table published as the honest equivalent — limitation recorded).
 eval/reports/labeler-agreement.md. LLM-spend for T08/T11 ACK'd by owner ("ok to spend some
 money in testing") — est. $5–15, Batch+cached, tracked separately from the $30 production cap.
 
-**BD-28 — [GATE-A] DECIDED: ADOPT the LLM parser for M5-T03 (M4-T11, 2026-07-11; owner
-ratification pending).** First real-LLM experiment, run through the new COST-GUARDED client
+**BD-28 — [GATE-A] DECIDED: ADOPT the LLM parser for M5-T03 (M4-T11, 2026-07-11;
+owner-ratified 2026-07-11).** First real-LLM experiment, run through the new COST-GUARDED client
 (Hard rule F: Haiku-only allowlist, per-call output cap, hard $2 budget with pre-call worst-case
 projection, full ledger; 4 unit tests). Variant: claude-haiku-4-5, temperature 0, structured
 outputs (§3.4 JSON schema), gazetteer post-resolution so the LLM EMITS NO GEOGRAPHY (Hard rule A —
@@ -514,3 +514,63 @@ eval/runs/gate-a-parse-ablation/manifest.json) — tracked separately from the $
 Batch deferred to recurring runs (M4-T14) per §26. Decision: **M5-T03 builds the Haiku parser as
 primary with the rules parser as the deterministic fallback** (schema is parser-agnostic; the
 fallback also serves cost-kill-switch mode). Report: eval/reports/parse-ablation.md.
+
+**BD-29 — [GATE-F] DECIDED: KEEP the deterministic correction stack; LLM repair NOT adopted
+(M4-T09, 2026-07-11; owner ratification pending).** Pre-registered in the script header before
+any result (τ_fix = 10 pp): adopt F4 (Haiku maps the failure summary to a bounded move,
+deterministic executes) only if efficacy ≥ deterministic + 10 pp AND no new-violation rise AND
+within latency. Seeds: 9 first-pass failures from 31 runnable DEV briefs (§16). **Result:
+identical efficacy 11 % vs 11 % (all three repeats), new violations 0 % both, F4 5.4× slower
+(5 488 ms vs 1 025 ms)** → two criteria failed → default F1 (deterministic repair) + F2
+(generate-more) + F5 (relaxation/best-so-far) stands; M5-T08 LLM correction is NOT built.
+Substantive finding: 8/9 seeds are unrepairable by ANY move in the set — the binding failure is
+duration-vs-tolerance (0.10), which is M4-T12 calibration evidence (§21 DURATION_TOLERANCE "set
+to the band where most feasible routes land"), not a correction-strategy gap. Stability: 0/9
+move-sequence flips; invalid outputs 0/75. Cost $0.0589. Report: eval/reports/correction.md +
+manifest eval/runs/gate-f-correction/.
+
+**BD-30 — [GATE-W] DECIDED: W1 (presets only) for the MVP; sliders deferred, PRESET_WEIGHTS
+frozen (M4-T10, 2026-07-11; owner ratification pending).** Pre-registered rule: ship W2
+(presets + clamped sliders) only if sliders are direction-correct AND clamp ranges exist AND
+defaults are stable AND presets are in character. On 6 fixed (brief, origin) pairs — one per
+archetype, sweeps re-finalizing a FIXED pool (weights touch scoring only): **presets passed
+6/6 on every dominant-axis check → PRESET_WEIGHTS (M3-T10 vectors) are FROZEN as-is**; but
+slider responsiveness was UNMEASURABLE (4/6 pools hold only 1-2 candidates — nothing to
+re-rank; ρ undefined), no clamp window cleared the degeneracy bar at the default point, and
+defaults missed the ±25 % stability bar on 2 briefs (e.g. 85 min for a 60 ask). → **W1
+presets-only ships; sliders are a post-MVP revisit** requiring a fatter pool (N_CANDIDATES ↑ =
+new config id + fresh VAL pass per §21). The failures are duration-control findings (same root
+as BD-29), not weight-machinery findings — recorded honestly per §24. Cost $0. Report:
+eval/reports/weights.md + manifest eval/runs/gate-w-weights/.
+
+**BD-31 — [GATE-R] DECIDED: KEEP R1 + R6 (deterministic top-1 + LLM explanation only); LLM
+selection NOT adopted (M4-T08, 2026-07-11; owner ratification pending).** Completed by the
+owner's blind pairwise sheet (4 pairs, §20.1: randomized A/B, provenance sealed until after
+judging). Result: R4 preferred 2/3 non-tie (67 % — above the 60 % point bar) but the Wilson
+95 % lower bound is 21 % ≪ the pre-registered >50 % requirement → criterion 1 failed → default
+stands. The other criteria had cleared (gold satisfaction TIED 1.000/1.000; latency 2 546 ms;
+cost $0.0035/selection; agreement 50 % < 90 % floor). Honesty notes recorded: (a) at n=3
+non-tie judgments even 3/3 could not clear Wilson >50 % — the small disagreement sample
+structurally favoured the default, exactly the §24 "practical > statistical" design (no
+evidence ≠ evidence against); (b) Sonnet's 50 % flip rate across identical reruns is
+independent §24 instability evidence AGAINST adoption. M5-T08 (LLM selection/correction) is
+NOT built — with BD-29 this closes both halves of Pre-Build R1's gated question. Revisit only
+with a larger VAL disagreement sample (new config id). Cost $0.0961 total.
+Report: eval/reports/ranking.md + sealed-then-unsealed key in eval/runs/gate-r-ranking/.
+
+**BD-32 — [GATE-S] DECIDED: labels/signals only (S0/S1); numeric scenic scoring NOT adopted;
+scenic weight stays 0 (M4-T07, 2026-07-11; owner ratification pending).** Pre-registered
+before any correlation: a numeric scenic term ships only if a cumulative variant reaches
+ρ ≥ 0.70 vs the owner's scenic ordinal (the BD-26 bar for numeric terms). Ground truth: the
+owner's 40-road SCENIC sheet (all 40 rated, 40/40 matched in corpus). Data built for the test:
+scenic_features table (osmium re-filter of the clipped extract → 77 028 water + 111 768
+forest features, PostGIS-loaded via data/load_scenic.ts). **Result: best variant S6
+(viewpoints + water + forest − urban-density) ρ = 0.538 < 0.70 → no variant ships.** Ladder:
+S2 tags+viewpoints −0.008 · S3 +water 0.288 · S4 +forest 0.371 · S6 −urban 0.538 · S7 +class
+0.462 (class awareness HURTS). Singles: water 0.300, urban(−) 0.300, forest 0.234, viewpoints
+≈0 (402 spots too sparse), class −0.074. Findings: ZERO scenic=yes ways exist in the whole
+region (S1 is no-data in Ontario); S5 elevation excluded (no DEM; spec §32 keeps elevation
+display-only). Ships instead: scenic spots/labels SHOWN + concrete grounded facts in
+explanations ("passes 2 viewpoints, ~6 km along water") — §13.3 language rules binding; no
+numeric scenic score exists anywhere (Hard rule C). The protocol's [H] hypothesis is now
+measured fact. Cost $0. Report: eval/reports/scenic.md.
