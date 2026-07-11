@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "test": "vitest run",
-    "loop-quality": "tsx loop_quality.ts"
+    "loop-quality": "tsx loop_quality.ts",
+    "baselines": "tsx run_baselines.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
