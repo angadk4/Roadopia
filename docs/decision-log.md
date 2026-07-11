@@ -465,3 +465,33 @@ funnel → relax-with-disclosure design); (4) richer traversal chaining with poo
 rule proven three times across the rounds: quality preferences rank at PRESENTATION; assembly
 rejects only unambiguous junk. M1's blocking chain is now fully green (SPK-08/04/10/15);
 SPK-09/SPK-19 + SPK-01/03 ride later milestones per plan.
+
+**BD-26 — [GATE-C] DECIDED: numeric fun-scoring NOT adopted; C7 + θ=0.6 FROZEN in the retrieval
+role (M4-T06, 2026-07-11).** Ground truth: the owner's 40-road driven rating sheet (1–5, zero
+blanks — replaces SPK-10's cartographic labels per BD-13). Pre-registered before computation:
+pass iff Spearman ρ ≥ 0.70 AND grid-FP ≤ 0.15; simplest passing formula wins; nothing passes ⇒
+no numeric fun score. Result: C2 ρ=.396 · C4 .404 · C7 .398 · **C7×L .511 (best)** · log C7
+.398 · composite C8 .404 — **no formula clears the bar**; per the rule, road-level numeric
+fun-scoring is NOT adopted (no user-facing twisty/fun score; labels/signals only — Hard rule C
+posture). **The retrieval role is validated instead: 10/10 owner-fun roads (rating ≥4) surface
+at θ=0.6, all with traversal-eligible ≥1.2 km segments** → **FROZEN: formula C7
+(circum_curvature_per_km) + THETA_CURVY = 0.6** — confirming the values already in code
+(no code delta; M3-T05's dependency resolved). Honest positive: the best single predictor of
+owner fun (C7×length, ρ .511) is exactly the generator's cluster-ranking key (BD-21) —
+the ranking design is validated by driven ground truth. Honest negative (eval page): per-km
+density ranks urban squiggles above flowing rural roads; road-level fun needs context —
+future work, never a shipped score. Report: eval/reports/curvature.md.
+
+**BD-27 — M4-T03 second-labeler pass DONE: agreement measured, 2 gold defects fixed
+(2026-07-11).** Owner labeled 13/67 DEV+VAL (~19 %) blind. Agreement: duration 13/13 · stops
+11/13 · STATED avoid rules 13/13 · dispositions 10/13 · avoid flags overall 40/52 — every miss
+is ONE systematic prior ("no highways/paved only" implicitly assumed on ~70 % of briefs), which
+ADJUDICATES to text-grounded parsing and VALIDATES the routing defaults (country bias +
+class-filtered retrieval already honor the prior). Gold amended by adjudication: dev-018
+(great_road stops → twisty/backroad character) and dev-033 ("on backroads" → avoid.highways
+true + backroads preset); reqset-v1 changelog updated; require-gold validation still 0 errors.
+Product notes (M7 UX): owner wants more clarifying questions than §3.5 permits, and expects
+current-location defaulting instead of the no-origin clarify. κ not computed (prose sheet;
+per-dimension table published as the honest equivalent — limitation recorded). Report:
+eval/reports/labeler-agreement.md. LLM-spend for T08/T11 ACK'd by owner ("ok to spend some
+money in testing") — est. $5–15, Batch+cached, tracked separately from the $30 production cap.

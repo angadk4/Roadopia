@@ -16,13 +16,21 @@
     "difficulty": "easy",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.99, "lng": -80.02 },
+        "origin": {
+          "lat": 43.99,
+          "lng": -80.02
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 5400,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["twisty"],
         "scenic_pref": null,
@@ -34,8 +42,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.95, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.95,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -63,13 +77,27 @@
     "difficulty": "medium",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.9593, "lng": -78.1677 },
+        "origin": {
+          "lat": 43.9593,
+          "lng": -78.1677
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 7200,
         "distance_target_m": null,
-        "stops": [{ "type": "coffee", "count": 1, "importance": "nice_to_have" }],
-        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "coffee",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": true,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["scenic"],
         "scenic_pref": 0.7,
@@ -81,8 +109,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -113,13 +147,21 @@
     "difficulty": "easy",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.7926, "lng": -80.0117 },
+        "origin": {
+          "lat": 43.7926,
+          "lng": -80.0117
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 1800,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "paved",
         "character": ["twisty"],
         "scenic_pref": null,
@@ -131,8 +173,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.92, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.92,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -160,13 +208,27 @@
     "difficulty": "easy",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.5083, "lng": -79.8774 },
+        "origin": {
+          "lat": 43.5083,
+          "lng": -79.8774
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 3600,
         "distance_target_m": null,
-        "stops": [{ "type": "coffee", "count": 1, "importance": "nice_to_have" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "coffee",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -178,8 +240,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -207,13 +275,21 @@
     "difficulty": "medium",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.2557, "lng": -79.8711 },
+        "origin": {
+          "lat": 43.2557,
+          "lng": -79.8711
+        },
         "destination": "Brantford",
         "shape": "a_to_b",
         "duration_target_s": null,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": true,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["backroad"],
         "scenic_pref": null,
@@ -225,8 +301,14 @@
         "ambiguous_terms": ["the back way"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.85, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.85,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -259,8 +341,19 @@
         "shape": "loop",
         "duration_target_s": 7200,
         "distance_target_m": null,
-        "stops": [{ "type": "food", "count": 1, "importance": "nice_to_have" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "food",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -272,7 +365,10 @@
         "ambiguous_terms": ["nice"],
         "missing": ["origin"],
         "contradictions": [],
-        "confidence": { "overall": 0.6, "fields": {} },
+        "confidence": {
+          "overall": 0.6,
+          "fields": {}
+        },
         "clarification": {
           "needed": true,
           "question": "Where should the loop start - your current location, or a town?"
@@ -310,7 +406,12 @@
         "duration_target_s": 5400,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": true },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": true
+        },
         "surface_pref": "any",
         "character": ["twisty", "backroad"],
         "scenic_pref": null,
@@ -322,8 +423,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.88, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.88,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -351,13 +458,27 @@
     "difficulty": "medium",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.9593, "lng": -78.1677 },
+        "origin": {
+          "lat": 43.9593,
+          "lng": -78.1677
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 10800,
         "distance_target_m": null,
-        "stops": [{ "type": "rest", "count": 1, "importance": "nice_to_have" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "rest",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["coastal"],
         "scenic_pref": null,
@@ -365,12 +486,23 @@
         "intensity": "chill",
         "preset": "chill",
         "weights": null,
-        "location_constraints": [{ "kind": "near", "text": "along the lake" }],
+        "location_constraints": [
+          {
+            "kind": "near",
+            "text": "along the lake"
+          }
+        ],
         "ambiguous_terms": ["lazy Sunday cruise", "three hours or so"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.8, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.8,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -398,13 +530,27 @@
     "difficulty": "easy",
     "gold": {
       "constraints": {
-        "origin": { "lat": 42.9459, "lng": -79.8563 },
+        "origin": {
+          "lat": 42.9459,
+          "lng": -79.8563
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 9000,
         "distance_target_m": null,
-        "stops": [{ "type": "fuel", "count": 1, "importance": "required" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "fuel",
+            "count": 1,
+            "importance": "required"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["rural"],
         "scenic_pref": null,
@@ -416,8 +562,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.92, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.92,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -445,13 +597,27 @@
     "difficulty": "easy",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.7926, "lng": -80.0117 },
+        "origin": {
+          "lat": 43.7926,
+          "lng": -80.0117
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 3600,
         "distance_target_m": null,
-        "stops": [{ "type": "viewpoint", "count": 1, "importance": "nice_to_have" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "viewpoint",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -463,8 +629,14 @@
         "ambiguous_terms": ["a lookout or two"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.85, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.85,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -492,13 +664,21 @@
     "difficulty": "easy",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.2557, "lng": -79.8711 },
+        "origin": {
+          "lat": 43.2557,
+          "lng": -79.8711
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 2400,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": true, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": true,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -510,8 +690,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.93, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.93,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -545,7 +731,12 @@
         "duration_target_s": null,
         "distance_target_m": 150000,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "paved",
         "character": ["backroad"],
         "scenic_pref": null,
@@ -557,8 +748,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.92, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.92,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -586,17 +783,37 @@
     "difficulty": "hard",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.5083, "lng": -79.8774 },
+        "origin": {
+          "lat": 43.5083,
+          "lng": -79.8774
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 1200,
         "distance_target_m": null,
         "stops": [
-          { "type": "coffee", "count": 1, "importance": "nice_to_have" },
-          { "type": "viewpoint", "count": 1, "importance": "nice_to_have" },
-          { "type": "food", "count": 1, "importance": "nice_to_have" }
+          {
+            "type": "coffee",
+            "count": 1,
+            "importance": "nice_to_have"
+          },
+          {
+            "type": "viewpoint",
+            "count": 1,
+            "importance": "nice_to_have"
+          },
+          {
+            "type": "food",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
         ],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -613,8 +830,14 @@
             "description": "Three stops cannot fit inside a 20-minute loop"
           }
         ],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -648,7 +871,12 @@
         "duration_target_s": 3600,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["coastal"],
         "scenic_pref": null,
@@ -656,7 +884,12 @@
         "intensity": null,
         "preset": null,
         "weights": null,
-        "location_constraints": [{ "kind": "near", "text": "Lake Erie shoreline" }],
+        "location_constraints": [
+          {
+            "kind": "near",
+            "text": "Lake Erie shoreline"
+          }
+        ],
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [
@@ -665,8 +898,14 @@
             "description": "Lake Erie shoreline is roughly 90 minutes one-way from Kitchener - unreachable inside a 1 hour loop"
           }
         ],
-        "confidence": { "overall": 0.88, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.88,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -697,13 +936,21 @@
     "difficulty": "easy",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.5083, "lng": -79.8774 },
+        "origin": {
+          "lat": 43.5083,
+          "lng": -79.8774
+        },
         "destination": "Guelph",
         "shape": "a_to_b",
         "duration_target_s": 3600,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["scenic"],
         "scenic_pref": 0.7,
@@ -715,8 +962,14 @@
         "ambiguous_terms": ["hour tops"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.88, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.88,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -750,7 +1003,12 @@
         "duration_target_s": null,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": true,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -762,8 +1020,14 @@
         "ambiguous_terms": ["whole afternoon"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.85, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.85,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -797,7 +1061,12 @@
         "duration_target_s": 2700,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["backroad"],
         "scenic_pref": null,
@@ -809,8 +1078,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -838,17 +1113,25 @@
     "difficulty": "medium",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.99, "lng": -80.02 },
+        "origin": {
+          "lat": 43.99,
+          "lng": -80.02
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 5400,
         "distance_target_m": null,
-        "stops": [{ "type": "great_road", "count": 2, "importance": "nice_to_have" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
-        "character": [],
+        "character": ["twisty", "backroad"],
         "scenic_pref": null,
-        "twistiness_pref": null,
+        "twistiness_pref": 0.7,
         "intensity": null,
         "preset": null,
         "weights": null,
@@ -856,15 +1139,21 @@
         "ambiguous_terms": ["a couple of the great driving roads"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.85, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.85,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
       },
       "expected_disposition": "proceed",
       "acceptable_relaxations": [],
-      "rationale": "'String together a couple of great driving roads' is a great_road stop request, count 2 from 'a couple'."
+      "rationale": "ADJUDICATED (M4-T03, owner): great-driving-roads is route CHARACTER, not stop requests; twisty/backroad character with pref 0.7."
     },
     "added_in": "reqset-v1"
   },
@@ -885,13 +1174,21 @@
     "difficulty": "easy",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.2557, "lng": -79.8711 },
+        "origin": {
+          "lat": 43.2557,
+          "lng": -79.8711
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 2100,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -899,12 +1196,23 @@
         "intensity": null,
         "preset": null,
         "weights": null,
-        "location_constraints": [{ "kind": "avoid", "text": "downtown core" }],
+        "location_constraints": [
+          {
+            "kind": "avoid",
+            "text": "downtown core"
+          }
+        ],
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.92, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.92,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -932,13 +1240,27 @@
     "difficulty": "medium",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.7926, "lng": -80.0117 },
+        "origin": {
+          "lat": 43.7926,
+          "lng": -80.0117
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 7200,
         "distance_target_m": null,
-        "stops": [{ "type": "coffee", "count": 1, "importance": "nice_to_have" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": true },
+        "stops": [
+          {
+            "type": "coffee",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": true
+        },
         "surface_pref": "any",
         "character": ["twisty"],
         "scenic_pref": null,
@@ -950,8 +1272,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -984,8 +1312,19 @@
         "shape": "loop",
         "duration_target_s": 2400,
         "distance_target_m": null,
-        "stops": [{ "type": "coffee", "count": 1, "importance": "nice_to_have" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "coffee",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -997,8 +1336,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1032,7 +1377,12 @@
         "duration_target_s": 10800,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["forest", "scenic"],
         "scenic_pref": 0.7,
@@ -1044,8 +1394,14 @@
         "ambiguous_terms": ["good fall colours"],
         "missing": ["origin"],
         "contradictions": [],
-        "confidence": { "overall": 0.55, "fields": {} },
-        "clarification": { "needed": true, "question": "Where should this loop start from?" },
+        "confidence": {
+          "overall": 0.55,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": true,
+          "question": "Where should this loop start from?"
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1073,13 +1429,21 @@
     "difficulty": "medium",
     "gold": {
       "constraints": {
-        "origin": { "lat": 42.9459, "lng": -79.8563 },
+        "origin": {
+          "lat": 42.9459,
+          "lng": -79.8563
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 2700,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["twisty"],
         "scenic_pref": null,
@@ -1091,8 +1455,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1128,8 +1498,19 @@
         "shape": "loop",
         "duration_target_s": 5400,
         "distance_target_m": null,
-        "stops": [{ "type": "food", "count": 1, "importance": "required" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "food",
+            "count": 1,
+            "importance": "required"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -1141,8 +1522,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1170,13 +1557,21 @@
     "difficulty": "medium",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.9593, "lng": -78.1677 },
+        "origin": {
+          "lat": 43.9593,
+          "lng": -78.1677
+        },
         "destination": "Uxbridge",
         "shape": "a_to_b",
         "duration_target_s": null,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": true, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": true,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["backroad"],
         "scenic_pref": null,
@@ -1188,8 +1583,14 @@
         "ambiguous_terms": ["rolling"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.85, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.85,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1223,10 +1624,23 @@
         "duration_target_s": 12600,
         "distance_target_m": null,
         "stops": [
-          { "type": "fuel", "count": 1, "importance": "nice_to_have" },
-          { "type": "viewpoint", "count": 1, "importance": "nice_to_have" }
+          {
+            "type": "fuel",
+            "count": 1,
+            "importance": "nice_to_have"
+          },
+          {
+            "type": "viewpoint",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
         ],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["rural"],
         "scenic_pref": null,
@@ -1238,8 +1652,14 @@
         "ambiguous_terms": ["viewpoint over the water"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.88, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.88,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1273,7 +1693,12 @@
         "duration_target_s": null,
         "distance_target_m": 60000,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["twisty"],
         "scenic_pref": null,
@@ -1285,8 +1710,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.87, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.87,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1314,13 +1745,21 @@
     "difficulty": "medium",
     "gold": {
       "constraints": {
-        "origin": { "lat": 42.9459, "lng": -79.8563 },
+        "origin": {
+          "lat": 42.9459,
+          "lng": -79.8563
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 7200,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["rural", "backroad"],
         "scenic_pref": null,
@@ -1332,8 +1771,14 @@
         "ambiguous_terms": ["kinda prefer gravel"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.85, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.85,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1361,13 +1806,21 @@
     "difficulty": "medium",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.99, "lng": -80.02 },
+        "origin": {
+          "lat": 43.99,
+          "lng": -80.02
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 5400,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["twisty"],
         "scenic_pref": null,
@@ -1379,8 +1832,14 @@
         "ambiguous_terms": ["proper driving roads"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.85, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.85,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1414,7 +1873,12 @@
         "duration_target_s": 1800,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -1426,8 +1890,14 @@
         "ambiguous_terms": ["whatever's nice"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.8, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.8,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1455,16 +1925,32 @@
     "difficulty": "hard",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.2557, "lng": -79.8711 },
+        "origin": {
+          "lat": 43.2557,
+          "lng": -79.8711
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 7200,
         "distance_target_m": null,
         "stops": [
-          { "type": "fuel", "count": 1, "importance": "required" },
-          { "type": "coffee", "count": 1, "importance": "required" }
+          {
+            "type": "fuel",
+            "count": 1,
+            "importance": "required"
+          },
+          {
+            "type": "coffee",
+            "count": 1,
+            "importance": "required"
+          }
         ],
-        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": true,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["scenic"],
         "scenic_pref": 0.7,
@@ -1476,8 +1962,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.88, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.88,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1513,8 +2005,19 @@
         "shape": "loop",
         "duration_target_s": 7200,
         "distance_target_m": null,
-        "stops": [{ "type": "coffee", "count": 1, "importance": "nice_to_have" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "coffee",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["flowing"],
         "scenic_pref": null,
@@ -1522,12 +2025,23 @@
         "intensity": null,
         "preset": null,
         "weights": null,
-        "location_constraints": [{ "kind": "near", "text": "river roads" }],
+        "location_constraints": [
+          {
+            "kind": "near",
+            "text": "river roads"
+          }
+        ],
         "ambiguous_terms": ["a couple hours", "somewhere cute"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.75, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.75,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1561,7 +2075,12 @@
         "duration_target_s": null,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": true,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["backroad"],
         "scenic_pref": null,
@@ -1569,19 +2088,30 @@
         "intensity": null,
         "preset": "backroads",
         "weights": null,
-        "location_constraints": [{ "kind": "avoid", "text": "downtown Hamilton" }],
+        "location_constraints": [
+          {
+            "kind": "avoid",
+            "text": "downtown Hamilton"
+          }
+        ],
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.85, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.85,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
       },
       "expected_disposition": "proceed",
       "acceptable_relaxations": [],
-      "rationale": "A-to-B between two DEV towns with an avoid-area on downtown Hamilton; the construction detail is the avoid reason, not a constraint itself."
+      "rationale": "ADJUDICATED (M4-T03, owner): 'on backroads' is a mode directive — highway exclusion + backroads preset, alongside the downtown-Hamilton avoid."
     },
     "added_in": "reqset-v1"
   },
@@ -1602,13 +2132,27 @@
     "difficulty": "easy",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.9593, "lng": -78.1677 },
+        "origin": {
+          "lat": 43.9593,
+          "lng": -78.1677
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 14400,
         "distance_target_m": null,
-        "stops": [{ "type": "rest", "count": 1, "importance": "required" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "rest",
+            "count": 1,
+            "importance": "required"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -1620,8 +2164,14 @@
         "ambiguous_terms": ["every couple hours"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.85, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.85,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1649,13 +2199,21 @@
     "difficulty": "medium",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.5083, "lng": -79.8774 },
+        "origin": {
+          "lat": 43.5083,
+          "lng": -79.8774
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 3600,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "paved",
         "character": ["twisty"],
         "scenic_pref": null,
@@ -1663,12 +2221,23 @@
         "intensity": null,
         "preset": null,
         "weights": null,
-        "location_constraints": [{ "kind": "avoid", "text": "the 401 corridor" }],
+        "location_constraints": [
+          {
+            "kind": "avoid",
+            "text": "the 401 corridor"
+          }
+        ],
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1704,8 +2273,19 @@
         "shape": "loop",
         "duration_target_s": 5400,
         "distance_target_m": null,
-        "stops": [{ "type": "viewpoint", "count": 1, "importance": "nice_to_have" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "viewpoint",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["forest"],
         "scenic_pref": null,
@@ -1717,8 +2297,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1746,13 +2332,27 @@
     "difficulty": "hard",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.2557, "lng": -79.8711 },
+        "origin": {
+          "lat": 43.2557,
+          "lng": -79.8711
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 1500,
         "distance_target_m": null,
-        "stops": [{ "type": "viewpoint", "count": 2, "importance": "nice_to_have" }],
-        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "viewpoint",
+            "count": 2,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": true,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -1764,8 +2364,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1799,7 +2405,12 @@
         "duration_target_s": 7200,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": true, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": true,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["scenic"],
         "scenic_pref": 0.7,
@@ -1811,8 +2422,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1845,8 +2462,19 @@
         "shape": "a_to_b",
         "duration_target_s": null,
         "distance_target_m": null,
-        "stops": [{ "type": "food", "count": 1, "importance": "nice_to_have" }],
-        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "food",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": true,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -1858,8 +2486,14 @@
         "ambiguous_terms": ["the long way round", "got all day"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.8, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.8,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1893,7 +2527,12 @@
         "duration_target_s": null,
         "distance_target_m": 80000,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["twisty", "flowing"],
         "scenic_pref": null,
@@ -1905,8 +2544,14 @@
         "ambiguous_terms": ["mix of twisty and flowing"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.85, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.85,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1940,7 +2585,12 @@
         "duration_target_s": 2700,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": true, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": true,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["scenic"],
         "scenic_pref": 0.7,
@@ -1952,8 +2602,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -1989,8 +2645,19 @@
         "shape": "loop",
         "duration_target_s": 2100,
         "distance_target_m": null,
-        "stops": [{ "type": "coffee", "count": 1, "importance": "required" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": true },
+        "stops": [
+          {
+            "type": "coffee",
+            "count": 1,
+            "importance": "required"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": true
+        },
         "surface_pref": "any",
         "character": [],
         "scenic_pref": null,
@@ -2002,8 +2669,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.9, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.9,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -2038,17 +2711,37 @@
     "difficulty": "hard",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.5083, "lng": -79.8774 },
+        "origin": {
+          "lat": 43.5083,
+          "lng": -79.8774
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 10800,
         "distance_target_m": null,
         "stops": [
-          { "type": "coffee", "count": 1, "importance": "nice_to_have" },
-          { "type": "food", "count": 1, "importance": "nice_to_have" },
-          { "type": "viewpoint", "count": 1, "importance": "nice_to_have" }
+          {
+            "type": "coffee",
+            "count": 1,
+            "importance": "nice_to_have"
+          },
+          {
+            "type": "food",
+            "count": 1,
+            "importance": "nice_to_have"
+          },
+          {
+            "type": "viewpoint",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
         ],
-        "avoid": { "highways": false, "tolls": true, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": true,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "paved",
         "character": ["twisty"],
         "scenic_pref": null,
@@ -2060,8 +2753,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.88, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.88,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -2092,13 +2791,21 @@
     "difficulty": "easy",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.99, "lng": -80.02 },
+        "origin": {
+          "lat": 43.99,
+          "lng": -80.02
+        },
         "destination": null,
         "shape": "loop",
         "duration_target_s": 3600,
         "distance_target_m": null,
         "stops": [],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["backroad"],
         "scenic_pref": null,
@@ -2110,8 +2817,14 @@
         "ambiguous_terms": [],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.85, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.85,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false
@@ -2139,13 +2852,27 @@
     "difficulty": "medium",
     "gold": {
       "constraints": {
-        "origin": { "lat": 43.99, "lng": -80.02 },
+        "origin": {
+          "lat": 43.99,
+          "lng": -80.02
+        },
         "destination": "Belfountain",
         "shape": "a_to_b",
         "duration_target_s": 2700,
         "distance_target_m": null,
-        "stops": [{ "type": "fuel", "count": 1, "importance": "nice_to_have" }],
-        "avoid": { "highways": false, "tolls": false, "ferries": false, "unpaved": false },
+        "stops": [
+          {
+            "type": "fuel",
+            "count": 1,
+            "importance": "nice_to_have"
+          }
+        ],
+        "avoid": {
+          "highways": false,
+          "tolls": false,
+          "ferries": false,
+          "unpaved": false
+        },
         "surface_pref": "any",
         "character": ["twisty"],
         "scenic_pref": null,
@@ -2157,8 +2884,14 @@
         "ambiguous_terms": ["good driving roads"],
         "missing": [],
         "contradictions": [],
-        "confidence": { "overall": 0.8, "fields": {} },
-        "clarification": { "needed": false, "question": null },
+        "confidence": {
+          "overall": 0.8,
+          "fields": {}
+        },
+        "clarification": {
+          "needed": false,
+          "question": null
+        },
         "unsafe_flag": false,
         "out_of_region_flag": false,
         "prompt_injection_flag": false

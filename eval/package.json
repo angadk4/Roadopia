@@ -5,7 +5,8 @@
   "scripts": {
     "test": "vitest run",
     "loop-quality": "tsx loop_quality.ts",
-    "baselines": "tsx run_baselines.ts"
+    "baselines": "tsx run_baselines.ts",
+    "gate-c": "tsx experiments/gate_c.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
