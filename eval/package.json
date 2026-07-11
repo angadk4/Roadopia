@@ -6,7 +6,8 @@
     "test": "vitest run",
     "loop-quality": "tsx loop_quality.ts",
     "baselines": "tsx run_baselines.ts",
-    "gate-c": "tsx experiments/gate_c.ts"
+    "gate-c": "tsx experiments/gate_c.ts",
+    "gate-a": "tsx experiments/gate_a.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
@@ -16,6 +17,7 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
     "zod": "^4.4.3"
   }
 }

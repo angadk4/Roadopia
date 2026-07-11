@@ -1,0 +1,44 @@
+{
+  "experiment_id": "gate-a-parse-ablation",
+  "code_commit": "9fb6edd12cea92a024d7478d9a322ebf79a53b33",
+  "prompt_versions": {},
+  "model": {
+    "id": "claude-haiku-4-5",
+    "params": {
+      "temperature": 0,
+      "max_tokens": 1500,
+      "structured_outputs": true
+    },
+    "n_repeats": 3
+  },
+  "routing_data": {
+    "extract_date": "2026-07-06T18:18:18Z",
+    "filtered_md5": "66f5f92fe2968a8f9603b727dcc1657b",
+    "filtered_ways": 275377,
+    "source_md5": "56dacf51f2b34e935fa557057d2be8f9"
+  },
+  "region": {
+    "id": "south-central-ontario",
+    "poly_md5": "7bbf85b3522270cce12ee44918547c3d"
+  },
+  "scoring_config": {
+    "id": "n/a (parse-only)",
+    "weights": {}
+  },
+  "user_weight_config": "none (defaults)",
+  "seed": 42,
+  "dataset": {
+    "split": "dev+val+adv",
+    "version": "reqset-v1"
+  },
+  "timestamp": "2026-07-11T20:55:17.382Z",
+  "environment": {
+    "valhalla": "pinned v3.7.0 (local compose)",
+    "host": "local"
+  },
+  "cost_ledger": {
+    "total_usd": 0.9128030000000004,
+    "llm_calls": 259,
+    "notes": "direct API (one-shot experiment); Batch adopted for recurring runs at M4-T14"
+  }
+}

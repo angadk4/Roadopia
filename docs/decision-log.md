@@ -480,7 +480,7 @@ at θ=0.6, all with traversal-eligible ≥1.2 km segments** → **FROZEN: formul
 owner fun (C7×length, ρ .511) is exactly the generator's cluster-ranking key (BD-21) —
 the ranking design is validated by driven ground truth. Honest negative (eval page): per-km
 density ranks urban squiggles above flowing rural roads; road-level fun needs context —
-future work, never a shipped score. Report: eval/reports/curvature.md.
+future work, never a shipped score. Report: eval/reports/curvature.md. **Owner-ratified 2026-07-11** ("Ratified, and you can continue").
 
 **BD-27 — M4-T03 second-labeler pass DONE: agreement measured, 2 gold defects fixed
 (2026-07-11).** Owner labeled 13/67 DEV+VAL (~19 %) blind. Agreement: duration 13/13 · stops
@@ -495,3 +495,22 @@ current-location defaulting instead of the no-origin clarify. κ not computed (p
 per-dimension table published as the honest equivalent — limitation recorded). Report:
 eval/reports/labeler-agreement.md. LLM-spend for T08/T11 ACK'd by owner ("ok to spend some
 money in testing") — est. $5–15, Batch+cached, tracked separately from the $30 production cap.
+
+**BD-28 — [GATE-A] DECIDED: ADOPT the LLM parser for M5-T03 (M4-T11, 2026-07-11; owner
+ratification pending).** First real-LLM experiment, run through the new COST-GUARDED client
+(Hard rule F: Haiku-only allowlist, per-call output cap, hard $2 budget with pre-call worst-case
+projection, full ledger; 4 unit tests). Variant: claude-haiku-4-5, temperature 0, structured
+outputs (§3.4 JSON schema), gazetteer post-resolution so the LLM EMITS NO GEOGRAPHY (Hard rule A —
+place-name strings only, resolved by the same deterministic lookup the rules parser uses), zod
+validation incl. §3.5 cross-field rules, one retry, N=3 repeats. Pre-registered rule (in the
+script header before computation): adopt iff VAL parse_accuracy ≥ rules AND VAL
+clarification_appropriateness ≥ rules AND ADV disposition_accuracy ≥ rules. **Result: all three
+cleared** — VAL accuracy 0.916 vs 0.852 · VAL clarification 0.500 vs 0.125 · ADV disposition 0.961
+vs 0.882 (the LLM catches unsafe/injection/out-of-region BETTER than the rules). Stability: 6/84
+briefs flipped a key field across repeats (~7 %, reported per §24); invalid outputs 7/259 calls,
+all recovered by the single retry or nulled honestly; mean latency ~2.5 s (well inside the 25 s
+budget). **Cost: $0.9128 total** (259 calls; ledger in the §22 manifest
+eval/runs/gate-a-parse-ablation/manifest.json) — tracked separately from the $30 production cap;
+Batch deferred to recurring runs (M4-T14) per §26. Decision: **M5-T03 builds the Haiku parser as
+primary with the rules parser as the deterministic fallback** (schema is parser-agnostic; the
+fallback also serves cost-kill-switch mode). Report: eval/reports/parse-ablation.md.
