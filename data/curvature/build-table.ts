@@ -136,11 +136,14 @@ async function main(): Promise<void> {
   console.log(`scored (curvy_segments rows): ${scored}`);
   console.log(`skipped (short/junction/degenerate): ${skipped}`);
   console.log(`labeled-set ways matched:    ${labeled.length}`);
+  // reduce, not spread: Math.max(...arr) exceeds the V8 argument limit past
+  // ~124k rows (hit at region v5's 133 865 segments)
+  const maxOf = (arr: number[]): number => arr.reduce((m, v) => (v > m ? v : m), -Infinity);
   console.log(
-    `length m  — p50 ${percentile(lengths, 0.5).toFixed(0)} / p90 ${percentile(lengths, 0.9).toFixed(0)} / max ${Math.max(...lengths).toFixed(0)}`,
+    `length m  — p50 ${percentile(lengths, 0.5).toFixed(0)} / p90 ${percentile(lengths, 0.9).toFixed(0)} / max ${maxOf(lengths).toFixed(0)}`,
   );
   console.log(
-    `C7 (1/km) — p50 ${percentile(c7s, 0.5).toFixed(2)} / p90 ${percentile(c7s, 0.9).toFixed(2)} / p99 ${percentile(c7s, 0.99).toFixed(2)} / max ${Math.max(...c7s).toFixed(2)}`,
+    `C7 (1/km) — p50 ${percentile(c7s, 0.5).toFixed(2)} / p90 ${percentile(c7s, 0.9).toFixed(2)} / p99 ${percentile(c7s, 0.99).toFixed(2)} / max ${maxOf(c7s).toFixed(2)}`,
   );
   console.log(`TSV size: ${(tsvBytes / 1e6).toFixed(2)} MB (geometry-dominated proxy for table size)`);
   console.log(`wrote ${TSV_OUT}`);

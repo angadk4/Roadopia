@@ -64,10 +64,15 @@ describe('parseRules — canonical briefs (gold fixture)', () => {
   });
 
   it('7) origin in a known outside city → out-of-region redirect', () => {
-    // Toronto moved IN-region with the BD-19 expansion; London stays outside.
-    const pc = parseRules('A nice drive from London around the lake');
+    // Toronto moved IN with BD-19; London moved IN with the BD-38 v5 west
+    // expansion — Sarnia is now the canonical still-outside western city.
+    const pc = parseRules('A nice drive from Sarnia around the lake');
     expect(pc.out_of_region_flag).toBe(true);
     expect(resolveDisposition(pc)).toBe('redirect_out_of_region');
+
+    const london = parseRules('A 2 hour loop from London');
+    expect(london.out_of_region_flag).toBe(false);
+    expect(london.origin).toEqual({ lat: 42.9849, lng: -81.2453 });
 
     const toronto = parseRules('A 1 hour loop from Toronto');
     expect(toronto.out_of_region_flag).toBe(false);

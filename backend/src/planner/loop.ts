@@ -17,12 +17,13 @@ import type { WaypointCandidate } from './candidates';
 import {
   maxRetraceRunM,
   microloopEvents,
+  microloopPositions,
   selfOverlapRatio,
   spurEvents,
   SPUR_WINDOW_WIDE_STEPS,
   ORIGIN_GRACE_RADIUS_M,
 } from './overlap';
-import { maxResidentialRunM, residentialShareOf } from './residential';
+import { maxResidentialRunInfo, residentialShareOf } from './residential';
 
 /** Loop-closure tolerance ε (m): both routed endpoints within this of the origin. */
 export const EPSILON_CLOSURE_M = 300;
@@ -85,6 +86,8 @@ export interface AssembledLoop {
   residentialShare: number | null;
   /** Longest contiguous residential run (m) outside grace; null = trace failed. */
   residentialRunM: number | null;
+  /** Midpoint [lng, lat] of that run — the repair pass aims at it. */
+  residentialRunMid: [number, number] | null;
   /** Small closed circuits (crescent/block spins) outside the origin grace
    *  (round 8) — two-tier: assembly rejects ≥2, presentation demotes ≥1. */
   microloops: number;
@@ -177,19 +180,23 @@ export async function assembleLoop(
   // must not starve the pool; presentation/AC treat null as unknown-dirty.
   let residentialShare: number | null = null;
   let residentialRunM: number | null = null;
+  let residentialRunMid: [number, number] | null = null;
   if (rejectReasons.length === 0) {
     try {
       const edges = await traceRoadClasses(baseUrl, route.geometry);
       residentialShare = residentialShareOf(edges, route.geometry, origin);
       // round 8b: the absolute run (same edges, no extra call) — the share
       // scales with route length, a subdivision weave does not
-      residentialRunM = maxResidentialRunM(edges, route.geometry, origin);
+      const runInfo = maxResidentialRunInfo(edges, route.geometry, origin);
+      residentialRunM = runInfo.runM;
+      residentialRunMid = runInfo.mid;
       if (residentialShare > RESIDENTIAL_HARD_SHARE) {
         rejectReasons.push(`residential ${(residentialShare * 100).toFixed(0)}%`);
       }
     } catch {
       residentialShare = null;
       residentialRunM = null;
+      residentialRunMid = null;
     }
   }
 
@@ -203,8 +210,91 @@ export async function assembleLoop(
     retraceRunM,
     residentialShare,
     residentialRunM,
+    residentialRunMid,
     microloops,
     accepted: rejectReasons.length === 0,
     rejectReasons,
   };
+}
+
+// --- round 9: detect-and-repair (owner rounds 7–8b made the detectors; this
+// pass USES them: when a route carries a LOCALIZED offence — a micro-loop or
+// an over-cap residential run — drop the waypoint nearest the offence and
+// re-route; the connector that dragged the route through the neighbourhood
+// disappears with its waypoint) -------------------------------------------
+
+/** Max repair re-routes per candidate (latency-bounded; §33 spirit). */
+export const REPAIR_PASS_CAP = 2;
+
+/** Weighted offence magnitude — micro-loops dominate, then over-cap run metres. */
+function offenceScore(a: AssembledLoop): number {
+  return a.microloops * 10_000 + Math.max(0, (a.residentialRunM ?? 0) - RESIDENTIAL_RUN_SOFT_M);
+}
+
+/** [lng, lat] of the worst LOCALIZED offence, or null when nothing repairable. */
+function offencePosition(a: AssembledLoop, origin: LatLng): readonly [number, number] | null {
+  const loops = microloopPositions(a.route.geometry, origin);
+  if (loops.length > 0) return loops[0]!;
+  if ((a.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M) return a.residentialRunMid;
+  return null;
+}
+
+/** Prefer accepted over rejected, then the smaller offence (ties keep `b`). */
+function preferred(a: AssembledLoop, b: AssembledLoop): AssembledLoop {
+  if (a.accepted !== b.accepted) return a.accepted ? a : b;
+  return offenceScore(a) < offenceScore(b) ? a : b;
+}
+
+/**
+ * assembleLoop + up to REPAIR_PASS_CAP targeted waypoint-drop repairs.
+ * Spot-anchored candidates are returned unrepaired (which waypoint is the
+ * requested stop is not recoverable here — dropping it would silently lose
+ * the stop). Returns the cleanest attempt; the original wins ties.
+ */
+export async function assembleLoopWithRepair(
+  baseUrl: string,
+  origin: LatLng,
+  candidate: WaypointCandidate,
+  costingOptions?: AutoCostingOptions,
+  opts: { selfOverlapCap?: number; middleType?: 'through' | 'via' } = {},
+): Promise<AssembledLoop & { repairsApplied: number }> {
+  let current = await assembleLoop(baseUrl, origin, candidate, costingOptions, opts);
+  if (candidate.spotIds.length > 0) return { ...current, repairsApplied: 0 };
+
+  let best = current;
+  let bestRepairs = 0;
+  let cand = candidate;
+  for (let pass = 1; pass <= REPAIR_PASS_CAP; pass++) {
+    if (current.accepted && offenceScore(current) === 0) break; // already clean
+    const pos = offencePosition(current, origin);
+    if (pos === null) break; // nothing localizable — not this pass's problem
+    if (cand.waypoints.length < 3) break; // dropping below 2 waypoints = out-and-back
+    let nearest = 0;
+    let nearestD = Infinity;
+    cand.waypoints.forEach((w, i) => {
+      const d = Math.hypot(
+        (w.lng - pos[0]) * 111_320 * Math.cos((43.2 * Math.PI) / 180),
+        (w.lat - pos[1]) * 111_320,
+      );
+      if (d < nearestD) {
+        nearestD = d;
+        nearest = i;
+      }
+    });
+    cand = {
+      ...cand,
+      id: `${cand.id}-rp${pass}`,
+      waypoints: cand.waypoints.filter((_, i) => i !== nearest),
+    };
+    try {
+      current = await assembleLoop(baseUrl, origin, cand, costingOptions, opts);
+    } catch {
+      break; // repair route failed outright — keep the best so far
+    }
+    if (preferred(current, best) === current) {
+      best = current;
+      bestRepairs = pass;
+    }
+  }
+  return { ...best, repairsApplied: bestRepairs };
 }

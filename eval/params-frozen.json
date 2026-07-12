@@ -1,5 +1,5 @@
 {
-  "config_id": "frozen-m4t12-v4",
+  "config_id": "frozen-m4t12-v5",
   "frozen_at": "2026-07-11",
   "discipline": "§21: tuned on DEV only, validated on VAL; any later change = new config id + fresh VAL pass",
   "params": {
@@ -45,7 +45,8 @@
     "MICROLOOP_CLOSE_M": 30,
     "MICROLOOP_AREA_M2": 3000,
     "RESIDENTIAL_RUN_SOFT_M": 500,
-    "RESIDENTIAL_RUN_BRIDGE_M": 250
+    "RESIDENTIAL_RUN_BRIDGE_M": 250,
+    "REPAIR_PASS_CAP": 2
   },
   "provenance": {
     "gates": ["BD-26 C", "BD-28 A", "BD-29 F", "BD-30 W", "BD-31 R", "BD-32 S"],
@@ -55,6 +56,7 @@
     "val_regression_fallback": false,
     "round7": "residential measurement gate (trace_attributes) — sweep kept engine-default maneuver_penalty (30 cost 5.3% curviness; 15 no exposure gain); eval/reports/residential.md",
     "round8": "micro-loop (crescent/block-spin) detector — small closed circuits invisible to spur/u-turn/residential metrics; 18/40 routes carried one (validated on corpus incl. the owner-reported St. Jacobs case)",
-    "round8b": "maxResidentialRunM — Bolton 1.3km subdivision weave hid at 4% share on a 101km route; absolute run cap (ratio-vs-run lesson applied to road class)"
+    "round8b": "maxResidentialRunM — Bolton 1.3km subdivision weave hid at 4% share on a 101km route; absolute run cap (ratio-vs-run lesson applied to road class)",
+    "round9": "detect-and-repair: drop waypoint nearest a detected micro-loop / over-cap residential run, ≤2 passes, best-of; clean bests 12→17, spin bests 16→8, composite 4→8"
   }
 }

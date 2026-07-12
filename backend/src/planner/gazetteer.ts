@@ -93,17 +93,44 @@ const IN_REGION: Record<string, GazetteerHit> = {
   paris: { name: 'Paris', lat: 43.193, lng: -80.3844 },
   elora: { name: 'Elora', lat: 43.6829, lng: -80.431 },
   fergus: { name: 'Fergus', lat: 43.7054, lng: -80.3777 },
+  // --- region v5: west-to-London expansion (owner-directed, BD-38) — London,
+  // the Erie shore, and everything between the old west edge and Lake Huron ---
+  london: { name: 'London', lat: 42.9849, lng: -81.2453 },
+  'st. thomas': { name: 'St. Thomas', lat: 42.7746, lng: -81.1896 },
+  'st thomas': { name: 'St. Thomas', lat: 42.7746, lng: -81.1896 },
+  'port stanley': { name: 'Port Stanley', lat: 42.6665, lng: -81.214 },
+  aylmer: { name: 'Aylmer', lat: 42.7712, lng: -80.9857 },
+  tillsonburg: { name: 'Tillsonburg', lat: 42.8631, lng: -80.7267 },
+  ingersoll: { name: 'Ingersoll', lat: 43.0389, lng: -80.8836 },
+  woodstock: { name: 'Woodstock', lat: 43.1315, lng: -80.7574 },
+  stratford: { name: 'Stratford', lat: 43.3701, lng: -80.9821 },
+  'st. marys': { name: 'St. Marys', lat: 43.2594, lng: -81.1406 },
+  'st marys': { name: 'St. Marys', lat: 43.2594, lng: -81.1406 },
+  delhi: { name: 'Delhi', lat: 42.8542, lng: -80.4997 },
+  simcoe: { name: 'Simcoe', lat: 42.8368, lng: -80.3044 },
+  'port dover': { name: 'Port Dover', lat: 42.7823, lng: -80.2029 },
+  ayr: { name: 'Ayr', lat: 43.2874, lng: -80.4543 },
+  'new hamburg': { name: 'New Hamburg', lat: 43.3794, lng: -80.7122 },
+  strathroy: { name: 'Strathroy', lat: 42.9558, lng: -81.6226 },
+  exeter: { name: 'Exeter', lat: 43.3502, lng: -81.4859 },
+  'grand bend': { name: 'Grand Bend', lat: 43.3123, lng: -81.7563 },
+  bayfield: { name: 'Bayfield', lat: 43.562, lng: -81.6999 },
+  goderich: { name: 'Goderich', lat: 43.7419, lng: -81.7107 },
+  lucan: { name: 'Lucan', lat: 43.1858, lng: -81.4036 },
+  dorchester: { name: 'Dorchester', lat: 42.9836, lng: -81.0708 },
+  thamesford: { name: 'Thamesford', lat: 43.0653, lng: -80.9986 },
 };
 
 /** Famous nearby-but-OUTSIDE places → deterministic out-of-region redirect.
  *  (BD-19: the south-central-ontario expansion moved the GTA/Durham/headwaters
- *  cities INTO the region; only genuinely-outside places remain here.) */
+ *  cities INTO the region; BD-38 v5 moved London/Stratford IN — only genuinely-
+ *  outside places remain here.) */
 const OUT_OF_REGION = new Set([
-  'london',
   'ottawa',
   'kingston',
   'sudbury',
-  'stratford',
+  'sarnia',
+  'chatham',
   'montreal',
   'buffalo',
   'new york',

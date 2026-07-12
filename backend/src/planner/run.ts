@@ -27,7 +27,7 @@ import { generateAtoBCandidates, generateLoopCandidates, resizedSpeed } from './
 import { measureCurvature } from './curvature';
 import { diversify, prefilterByDuration } from './diversify';
 import {
-  assembleLoop,
+  assembleLoopWithRepair,
   RESIDENTIAL_RUN_SOFT_M,
   RESIDENTIAL_SOFT_SHARE,
   RETRACE_RUN_SOFT_M,
@@ -261,7 +261,8 @@ export async function runPlanner(
           cands.map(async (candidate) => {
             try {
               if (isLoop) {
-                const a = await assembleLoop(deps.valhallaUrl, origin, candidate, {
+                // round 9: targeted waypoint-drop repair rides on every assembly
+                const a = await assembleLoopWithRepair(deps.valhallaUrl, origin, candidate, {
                   exclude_highways: params.avoid.highways,
                   exclude_tolls: params.avoid.tolls,
                   exclude_ferries: params.avoid.ferries,

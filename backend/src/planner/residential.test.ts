@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { TraceEdge } from '../valhalla/trace';
 
-import { maxResidentialRunM, residentialShareOf } from './residential';
+import { maxResidentialRunInfo, maxResidentialRunM, residentialShareOf } from './residential';
 
 /**
  * Round 7 — residential exposure math. Geometry: a straight west→east line at
@@ -90,6 +90,20 @@ describe('maxResidentialRunM (owner round 8b: Bolton subdivision weave)', () => 
     const edges = [edge('residential', 1_800), edge('tertiary', TOTAL_M - 1_800)];
     // the 1.8 km residential leg starts AT the origin — midpoint 900 m < 2.5 km grace
     expect(maxResidentialRunM(edges, LINE, ORIGIN)).toBe(0);
+  });
+
+  it('reports the run midpoint for repair aiming', () => {
+    const edges = [
+      edge('tertiary', 10_000),
+      edge('residential', 2_000),
+      edge('tertiary', TOTAL_M - 12_000),
+    ];
+    const info = maxResidentialRunInfo(edges, LINE, ORIGIN);
+    expect(info.runM).toBeCloseTo(2_000, 0);
+    // run spans 10-12 km along the line; midpoint ≈ 11 km east
+    const lngM = 111_320 * Math.cos((43.2 * Math.PI) / 180);
+    const dx = (info.mid![0] - ORIGIN.lng) * lngM;
+    expect(Math.abs(dx - 11_000)).toBeLessThan(600);
   });
 
   it('returns 0 on empty inputs', () => {

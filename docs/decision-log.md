@@ -658,3 +658,46 @@ owner axis (spin + share + run + u-turn + spur). This CONFIRMS the priority of t
 generation-side unit (BD-35): deterministic repair moves that re-route around detected
 residential runs / micro-loops — the detectors now exist to drive them. Report: geojson
 `res_run_m` per feature; params-frozen.json v4. Tests 212 green.
+
+**BD-37 — Round 9: detect-and-repair pass shipped (drop the waypoint nearest the offence);
+config frozen-m4t12-v5 (2026-07-12; owner ratification pending).** The owner-approved unit
+closing the loop on rounds 7–8b: the detectors LOCALIZE offences now (microloopPositions —
+refined to the tightest closure so a lollipop stem cannot mis-aim it; maxResidentialRunInfo
+returns the run midpoint), and `assembleLoopWithRepair` acts on them — when an assembled
+candidate carries a micro-loop or an over-cap residential run, DROP the waypoint nearest the
+offence and re-route (≤ 2 passes; best-of selection where accepted beats rejected and the
+smaller offence wins ties toward the original; spot-anchored candidates skipped — which
+waypoint is the requested stop is not recoverable, dropping it would silently lose the stop;
+candidates at 2 waypoints skipped — dropping to 1 makes an out-and-back). Wired at ALL
+assembly sites (run.ts production, eval pipeline, loop_quality). **40-brief evidence:
+fully-clean bests 12 → 17 · spin-carrying bests 16 → 8 (halved) · over-run-cap bests 20 → 16
+· composite 4 → 8 · Orillia flipped from 11 % residential / −53 % duration to 0 % / +19 %.**
+Honest residuals now have NAMED causes: (a) 2-waypoint candidates are un-drop-repairable —
+a SHIFT-repair variant is the identified follow-up (Bolton's case); (b) structurally
+residential-bound stretches (Kilbride 10.1 km run, Owen Sound 8.5 km, Campbellford 7.9 km —
+region/data reality, not planner behaviour). Wall cost ≈ +0.8 s mean per brief (1 737 ms).
++7 tests (134 backend). Report: geojson per-feature + BUILD_LOG table.
+
+**BD-38 — Region v5: west-to-London expansion (owner round 10, 2026-07-12; owner ratification
+pending).** Owner: "extend out to London too and cover all cities in between… routes anywhere
+within the circle." Poly bbox −81.10→**−81.85** W (London, Stratford, the Huron shore to
+Goderich/Grand Bend) and 42.75→**42.55** S (Port Stanley / the Erie shore); N/E edges
+unchanged. Full data-tier rebuild on the same pinned Ontario snapshot: filtered ways
+275 377 → **303 432** · curvy_segments 120 348 → **133 865** (51 MB) · POIs 4 778 → **5 040** ·
+scenic_features 188 796 → **228 499** · routing extract 315 936 ways → Valhalla tiles 73 →
+**81 MB** (build 201 s, peak RSS 253 MiB — comfortably VPS-sized). Probes: London routes on
+its own Dundas St; Goderich→Bayfield routes. Gazetteer +22 towns IN (incl. every requested
+in-between: Woodstock/Ingersoll/Stratford/St. Marys/Tillsonburg/Delhi/Simcoe/Port Dover/
+Strathroy/Exeter/…); London+Stratford REMOVED from the out-of-region set (Sarnia/Chatham
+added as the western redirects); LLM parse prompt updated to match. **Gold amendment:**
+adv-008 ("loop from London") redirect_out_of_region → proceed — invalidated by the region
+change, not mislabeled; changelog appended; 2 test fixtures updated to Sarnia (assertions
+unchanged). 8 west briefs added to the 48-brief harness: ALL 8 route on day one — **London
+PASSES the full composite outright**, Delhi passes, the rest fail only familiar
+alternate-count/duration bars with clean bests (res 0–1 %, spin-free). Composite 10/48.
+Found+fixed at v5 scale: Math.max spread overflow past ~124 k rows (build-table) and THREE
+stale-intermediate traps in the rebuild chain (roads.geojsonl / pois.geojsonl / tiles'
+routing extract — each regenerates from the fresh clip now, recorded in BUILD_LOG).
+**Deploy note ([HUMAN] later): the VPS still serves v4 tiles — rebuild there before any
+external link.** Config unchanged (frozen-m4t12-v5; params are geography-independent);
+extract-manifest.json carries the v5 provenance.

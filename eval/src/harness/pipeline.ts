@@ -30,6 +30,7 @@ import {
 import { lookupInRegion } from '../../../backend/src/planner/gazetteer';
 import {
   assembleLoop,
+  assembleLoopWithRepair,
   RESIDENTIAL_RUN_SOFT_M,
   RESIDENTIAL_SOFT_SHARE,
   RETRACE_RUN_SOFT_M,
@@ -171,7 +172,8 @@ export async function runSearchPass(
   const attempts = await Promise.all(
     candidates.map(async (c) => {
       try {
-        return await assembleLoop(
+        // round 9: targeted waypoint-drop repair rides on every assembly
+        return await assembleLoopWithRepair(
           valhallaUrl,
           origin,
           c,

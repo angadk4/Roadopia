@@ -1,6 +1,6 @@
 {
   "region_id": "south-central-ontario",
-  "region_poly": { "path": "data/regions/south-central-ontario.poly", "md5": "7bbf85b3522270cce12ee44918547c3d" },
+  "region_poly": { "path": "data/regions/south-central-ontario.poly", "md5": "19014f2809f2ab85cfcff346fddba5d3" },
   "source": {
     "url": "https://download.geofabrik.de/north-america/canada/ontario-latest.osm.pbf",
     "file": "ontario-latest.osm.pbf",
@@ -8,15 +8,15 @@
     "bytes": 965700559,
     "freshly_downloaded": "no"
   },
-  "extract_date": "2026-07-06T18:18:18Z",
+  "extract_date": "2026-07-12T20:53:42Z",
   "osmium": { "image": "debian:bookworm-slim", "version": "osmium version 1.15.0" },
   "filter": {
     "roads": "w/highway=primary,secondary,tertiary,unclassified,residential,primary_link,secondary_link,tertiary_link",
     "pois": "n/amenity=cafe,fuel,restaurant n/tourism=viewpoint n/natural=peak"
   },
   "outputs": {
-    "clipped":  { "file": "region-clipped.osm.pbf",  "md5": "777940e3605412353a220a193a1cbf99",  "bytes": 253479724 },
-    "filtered": { "file": "region-filtered.osm.pbf", "md5": "66f5f92fe2968a8f9603b727dcc1657b", "bytes": 24667430,
-                  "nodes": 1476770, "ways": 275377 }
+    "clipped":  { "file": "region-clipped.osm.pbf",  "md5": "3e23c2a3ce07b021f805f33f25bf167e",  "bytes": 286104344 },
+    "filtered": { "file": "region-filtered.osm.pbf", "md5": "10f0ba9fffb7b66c908fa75040180367", "bytes": 26741844,
+                  "nodes": 1605218, "ways": 303432 }
   }
 }

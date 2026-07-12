@@ -94,36 +94,48 @@ export const RESIDENTIAL_RUN_BRIDGE_M = 250;
  * exactly the round-6 ratio-vs-run lesson, applied to road class). Runs
  * bridge non-residential gaps ≤ RESIDENTIAL_RUN_BRIDGE_M.
  */
-export function maxResidentialRunM(
+export interface ResidentialRunInfo {
+  runM: number;
+  /** Midpoint [lng, lat] of the longest run — the repair pass (round 9)
+   *  drops the waypoint nearest it. Null when no run exists. */
+  mid: [number, number] | null;
+}
+
+export function maxResidentialRunInfo(
   edges: TraceEdge[],
   geometry: LineString,
   origin: LatLng,
   graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
-): number {
+): ResidentialRunInfo {
   const coords = geometry.coordinates as Array<[number, number]>;
-  if (coords.length < 2 || edges.length === 0) return 0;
+  if (coords.length < 2 || edges.length === 0) return { runM: 0, mid: null };
   const cum: number[] = [0];
   for (let i = 1; i < coords.length; i++) {
     cum.push(cum[i - 1]! + haversineM(coords[i - 1]!, coords[i]!));
   }
   const geomLen = cum[cum.length - 1]!;
   const traceLen = edges.reduce((s, e) => s + e.lengthM, 0);
-  if (geomLen === 0 || traceLen === 0) return 0;
+  if (geomLen === 0 || traceLen === 0) return { runM: 0, mid: null };
   const scale = geomLen / traceLen;
   const originLngLat: [number, number] = [origin.lng, origin.lat];
 
   let best = 0;
+  let bestEndPos = 0;
   let run = 0;
   let gap = 0;
   let pos = 0;
   for (const e of edges) {
-    const mid = pointAt(coords, cum, (pos + e.lengthM / 2) * scale);
+    const startPos = pos;
+    const mid = pointAt(coords, cum, (startPos + e.lengthM / 2) * scale);
     pos += e.lengthM;
     const graced = haversineM(mid, originLngLat) <= graceRadiusM;
     if (!graced && e.roadClass === 'residential') {
       run += gap + e.lengthM; // bridge the swallowed gap
       gap = 0;
-      if (run > best) best = run;
+      if (run > best) {
+        best = run;
+        bestEndPos = pos;
+      }
     } else if (run > 0 && !graced && gap + e.lengthM <= RESIDENTIAL_RUN_BRIDGE_M) {
       gap += e.lengthM; // short connector — run may continue
     } else {
@@ -131,5 +143,19 @@ export function maxResidentialRunM(
       gap = 0;
     }
   }
-  return best;
+  if (best === 0) return { runM: 0, mid: null };
+  return {
+    runM: best,
+    mid: pointAt(coords, cum, (bestEndPos - best / 2) * scale),
+  };
+}
+
+/** Longest contiguous residential run in metres (see maxResidentialRunInfo). */
+export function maxResidentialRunM(
+  edges: TraceEdge[],
+  geometry: LineString,
+  origin: LatLng,
+  graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
+): number {
+  return maxResidentialRunInfo(edges, geometry, origin, graceRadiusM).runM;
 }

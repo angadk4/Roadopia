@@ -13,6 +13,7 @@
   "changelog": [
     "reqset-v1 — M4-T01 scaffold: 6 splits, 12 pinned origins (2 per §5 archetype), 6 seed examples (gold: null); gold labels + fill-to-target land at M4-T02",
     "reqset-v1 — M4-T02 fill (same version: no experiment ever recorded the scaffold state): 127 examples, ALL gold-labeled per §7 (45 dev / 22 val / 27 test / 17 adv / 16 ref multi-turn); origin allocation keeps DEV/VAL/TEST disjoint; second-labeler agreement subset (M4-T03) pending — owner",
-    "reqset-v1 — M4-T03 adjudication (owner second-labeler pass, 13 examples ~19%): dev-018 gold amended (great_road stops → twisty/backroad character), dev-033 gold amended (backroads → avoid.highways true + preset); no experiment other than baselines had consumed the prior labels (dev-033 was an unroutable-origin error record there — no metric impact)."
+    "reqset-v1 — M4-T03 adjudication (owner second-labeler pass, 13 examples ~19%): dev-018 gold amended (great_road stops → twisty/backroad character), dev-033 gold amended (backroads → avoid.highways true + preset); no experiment other than baselines had consumed the prior labels (dev-033 was an unroutable-origin error record there — no metric impact).",
+    "2026-07-12 (BD-38 region v5): adv-008 amended redirect_out_of_region → proceed — the west-to-London expansion moved London IN-region; the v4-era label was invalidated by the region change, not mislabeled. tags.special unsupported_region removed; origin resolved to coords."
   ]
 }

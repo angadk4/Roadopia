@@ -30,7 +30,7 @@ import {
   TAU_OVERLAP_DEFAULT,
 } from '../backend/src/planner/diversify';
 import {
-  assembleLoop,
+  assembleLoopWithRepair,
   RESIDENTIAL_RUN_SOFT_M,
   RESIDENTIAL_SOFT_SHARE,
   RETRACE_RUN_SOFT_M,
@@ -100,6 +100,16 @@ const BRIEFS: string[] = [
   '2 hour scenic loop from Owen Sound',
   '90 minute loop from Orillia',
   '90 minute loop from Campbellford',
+  // --- region v5: west-to-London expansion (owner round 10, BD-38) — London,
+  // the Erie shore, the Huron shore, and the in-between towns ---
+  '2 hour loop from London',
+  '90 minute twisty loop from Stratford',
+  '1 hour loop from Woodstock',
+  '90 minute backroads loop from St. Thomas',
+  '1 hour loop from Port Stanley',
+  '1 hour backroads loop from Delhi',
+  '2 hour scenic loop from Grand Bend',
+  '90 minute loop from Goderich',
 ];
 
 interface BriefReport {
@@ -181,7 +191,8 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
     const attempts = await Promise.all(
       candidates.map(async (c) => {
         try {
-          return await assembleLoop(VALHALLA, origin, c, {
+          // round 9: targeted waypoint-drop repair rides on every assembly
+          return await assembleLoopWithRepair(VALHALLA, origin, c, {
             exclude_highways: constraints.avoid.highways,
             exclude_tolls: constraints.avoid.tolls,
             exclude_ferries: constraints.avoid.ferries,
@@ -347,6 +358,8 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
 
   const durErrSignedPct = best ? ((best.a.route.duration_s - durationS) / durationS) * 100 : null;
   const durErrPct = durErrSignedPct === null ? null : Math.abs(durErrSignedPct);
+  const repairedKept = kept.filter((k) => k.id.includes('-rp')).length;
+  if (repairedKept > 0) notes.push(`repaired×${repairedKept}`);
   if (candidates.length < K_PRESENT_DEFAULT) notes.push(`only ${candidates.length} generated`);
   if (assembled.length < kept.length) notes.push('assembly rejections occurred');
 

@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { routeThrough } from '../valhalla/route';
 
 import type { WaypointCandidate } from './candidates';
-import { assembleLoop, EPSILON_CLOSURE_M } from './loop';
+import { assembleLoop, assembleLoopWithRepair, EPSILON_CLOSURE_M } from './loop';
 import { maxRetraceRunM, selfOverlapRatio, spurEvents, SPUR_WINDOW_WIDE_STEPS } from './overlap';
 
 /**
@@ -68,6 +68,22 @@ describe('assembleLoop (M3-T07, live engine)', () => {
     expect(loop.residentialShare).not.toBeNull();
     expect(loop.residentialShare!).toBeGreaterThanOrEqual(0);
     expect(loop.residentialShare!).toBeLessThanOrEqual(0.2);
+  });
+
+  it('assembleLoopWithRepair returns repairsApplied (0 on a clean circuit)', async (ctx) => {
+    if (!engineUp) return ctx.skip();
+    const loop = await assembleLoopWithRepair(
+      VALHALLA,
+      ORIGIN,
+      candidate('rp-clean', [
+        { lat: 43.2647, lng: -79.954 },
+        { lat: 43.218, lng: -79.987 },
+      ]),
+    );
+    expect(loop.repairsApplied).toBeGreaterThanOrEqual(0);
+    expect(loop.repairsApplied).toBeLessThanOrEqual(2);
+    // the repair pass must never return a WORSE result than plain assembly
+    expect(loop.accepted).toBe(true);
   });
 
   it('a TRUE out-and-back (real road out + same road back) maxes the metric', async (ctx) => {

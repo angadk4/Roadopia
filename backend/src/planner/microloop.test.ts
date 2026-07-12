@@ -1,7 +1,7 @@
 import type { LineString } from '@shared/types';
 import { describe, expect, it } from 'vitest';
 
-import { microloopEvents } from './overlap';
+import { microloopEvents, microloopPositions } from './overlap';
 
 /**
  * Round 8 — micro-loop (crescent/block-spin) detection. Synthetic geometry at
@@ -60,6 +60,16 @@ describe('microloopEvents (owner round 8: crescent/block spins)', () => {
       for (const x of xs) coords.push([ORIGIN.lng + x / lngM, y]);
     }
     expect(microloopEvents({ type: 'LineString', coordinates: coords }, ORIGIN)).toBe(0);
+  });
+
+  it('reports the closure position near the circle (repair aiming)', () => {
+    const route = circleRoute(120, 8_000);
+    const pos = microloopPositions(route, ORIGIN);
+    expect(pos.length).toBe(1);
+    // closure point sits on the circle ~8 km east of origin
+    const lngM = 111_320 * Math.cos((43.2 * Math.PI) / 180);
+    const dx = (pos[0]![0] - ORIGIN.lng) * lngM;
+    expect(Math.abs(dx - 8_000)).toBeLessThan(400);
   });
 
   it('counts distinct spins separately', () => {

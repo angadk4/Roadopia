@@ -299,17 +299,20 @@ export const MICROLOOP_CLOSE_M = 30;
 export const MICROLOOP_AREA_M2 = 3_000;
 const MICROLOOP_RESAMPLE_M = 20;
 
-/** Count of small closed circuits outside the origin grace radius. */
-export function microloopEvents(
+/**
+ * Closure points ([lng, lat]) of small closed circuits outside the origin
+ * grace radius — the repair pass (round 9) drops the waypoint nearest one.
+ */
+export function microloopPositions(
   geometry: LineString,
   origin?: { lat: number; lng: number },
   graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
-): number {
+): LonLat[] {
   const pts = resample(
     geometry.coordinates.map(([lon, lat]) => [lon, lat] as LonLat),
     MICROLOOP_RESAMPLE_M,
   );
-  if (pts.length < 3) return 0;
+  if (pts.length < 3) return [];
   const latM = 111_320;
   const lngM = 111_320 * Math.cos((43.2 * Math.PI) / 180);
   const dM = (a: LonLat, b: LonLat): number =>
@@ -326,7 +329,7 @@ export function microloopEvents(
 
   const minSteps = Math.ceil(MICROLOOP_MIN_M / MICROLOOP_RESAMPLE_M);
   const maxSteps = Math.ceil(MICROLOOP_MAX_M / MICROLOOP_RESAMPLE_M);
-  let events = 0;
+  const positions: LonLat[] = [];
   let i = 0;
   while (i < pts.length) {
     let advanced = false;
@@ -336,8 +339,27 @@ export function microloopEvents(
         const graced =
           origin !== undefined && dM(pts[i]!, [origin.lng, origin.lat]) <= graceRadiusM;
         if (!graced && area(pts.slice(i, j + 1)) > MICROLOOP_AREA_M2) {
-          events++;
-          i = j; // consume the cycle; scan onward from its closure
+          // Refine to the TIGHTEST closure inside [i, j]: a lollipop's
+          // out-and-back stem closes first, putting the naive position up to
+          // ~(MAX−cycle)/2 before the actual circle mouth — bad aim for the
+          // repair pass. The minimal-cycle pair IS the mouth.
+          let bi = i;
+          let bj = j;
+          for (let k = i; k <= j - minSteps; k++) {
+            const kMax = Math.min(j, k + (bj - bi) - 1); // only strictly tighter
+            for (let m = k + minSteps; m <= kMax; m++) {
+              if (
+                dM(pts[k]!, pts[m]!) < MICROLOOP_CLOSE_M &&
+                area(pts.slice(k, m + 1)) > MICROLOOP_AREA_M2
+              ) {
+                bi = k;
+                bj = m;
+                break;
+              }
+            }
+          }
+          positions.push(pts[bi]!);
+          i = j; // consume the whole event window; scan onward from its closure
           advanced = true;
         }
         break; // first closure decides this i (closed or too small — move on)
@@ -345,5 +367,14 @@ export function microloopEvents(
     }
     if (!advanced) i++;
   }
-  return events;
+  return positions;
+}
+
+/** Count of small closed circuits outside the origin grace radius. */
+export function microloopEvents(
+  geometry: LineString,
+  origin?: { lat: number; lng: number },
+  graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
+): number {
+  return microloopPositions(geometry, origin, graceRadiusM).length;
 }
