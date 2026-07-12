@@ -114,15 +114,18 @@ describe('generateLoopCandidates (M3-T06)', () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
+  // The two mechanism tests below pin nSectors: 8 — their fixture geometry was
+  // laid out for 45° wedges. The DEFAULT is frozen at 4 (M4-T12); the L3/L4
+  // mechanisms under test are sector-count-independent.
   it('return sector ≠ outbound sector whenever an anchor exists (anti-retrace, L3)', () => {
-    const out = generateLoopCandidates(ORIGIN, ruralSegments(), []);
+    const out = generateLoopCandidates(ORIGIN, ruralSegments(), [], { nSectors: 8 });
     const withReturn = out.filter((c) => c.returnSector !== null);
     expect(withReturn.length).toBeGreaterThan(0);
     for (const c of withReturn) expect(c.returnSector).not.toBe(c.sector);
   });
 
   it('waypoints are angularly ordered around the origin (L4 sweep)', () => {
-    const out = generateLoopCandidates(ORIGIN, ruralSegments(), []);
+    const out = generateLoopCandidates(ORIGIN, ruralSegments(), [], { nSectors: 8 });
     for (const c of out.filter((x) => x.waypoints.length >= 3)) {
       const rot = (x: number) => (x - (c.sector * 360) / 8 + 360) % 360;
       const bearings = c.waypoints.map((w) => rot(bearingDeg(ORIGIN, w)));
@@ -169,7 +172,12 @@ describe('country-road preference + duration resize (BD-21, owner round 3)', () 
       ...s,
       highway: 'secondary',
     }));
-    const out = generateLoopCandidates(ORIGIN, [...tert, ...sec], [], { nCandidates: 8 });
+    // nSectors pinned to 8: the fixture places the clusters in 45°-wedge terms
+    // (mechanism test; the frozen default of 4 is exercised by the M4-T12 sweeps)
+    const out = generateLoopCandidates(ORIGIN, [...tert, ...sec], [], {
+      nCandidates: 8,
+      nSectors: 8,
+    });
     // single-cluster candidates only (pairs sum both weights); the tertiary
     // cluster sits north (sector 0), the secondary one east (sector 1–2)
     const singles = out.filter((c) => !c.id.includes('+'));

@@ -28,7 +28,12 @@ import {
   TAU_OVERLAP_DEFAULT,
 } from '../../../backend/src/planner/diversify';
 import { lookupInRegion } from '../../../backend/src/planner/gazetteer';
-import { assembleLoop, RETRACE_RUN_SOFT_M } from '../../../backend/src/planner/loop';
+import {
+  assembleLoop,
+  RESIDENTIAL_RUN_SOFT_M,
+  RESIDENTIAL_SOFT_SHARE,
+  RETRACE_RUN_SOFT_M,
+} from '../../../backend/src/planner/loop';
 import { pairOverlap } from '../../../backend/src/planner/overlap';
 import { weightsForPreset } from '../../../backend/src/planner/presets';
 import { retrieveAnchorPoints, retrieveCandidates } from '../../../backend/src/planner/retrieve';
@@ -53,6 +58,12 @@ export interface KeptCandidate {
   uturns: number;
   spursWide: number;
   retraceRunM: number;
+  /** Residential-class share outside origin grace; null = trace failed. */
+  residentialShare: number | null;
+  /** Longest contiguous residential run (m) outside grace; null = trace failed. */
+  residentialRunM: number | null;
+  /** Crescent/block spins outside origin grace (round 8). */
+  microloops: number;
   closureM: number;
   stopsIncluded: number;
   score: number;
@@ -80,6 +91,21 @@ export interface PassSpec {
   theta?: number;
   avgSpeedKmh?: number;
   idPrefix?: string;
+}
+
+/** Generation-parameter overrides for M4-T12 calibration sweeps (§21). */
+export interface CalibConfig {
+  alpha?: number;
+  nSectors?: number;
+  kClusters?: number;
+  nCandidates?: number;
+  /** Initial sizing speed override (base is 55, or 42 with avoid.highways). */
+  baseSpeedKmh?: number;
+  /** Valhalla maneuver_penalty seconds (round-7 sweep; engine default 5). */
+  maneuverPenaltyS?: number;
+  /** Middle-waypoint type (round-8 A/B: 'through' circles blocks to reverse
+   *  heading, 'via' u-turns visibly instead). */
+  middleType?: 'through' | 'via';
 }
 
 type Assembly = NonNullable<Awaited<ReturnType<typeof assembleLoop>>>;
@@ -115,6 +141,7 @@ export async function runSearchPass(
   constraints: ParsedConstraints,
   durationS: number,
   spec: PassSpec,
+  calib: CalibConfig = {},
 ): Promise<{ candidates: Array<{ id: string }>; attempts: Array<Assembly | null> }> {
   const origin = constraints.origin;
   if (origin === null || typeof origin === 'string') {
@@ -124,6 +151,7 @@ export async function runSearchPass(
     origin,
     shape: 'loop',
     durationS: Math.round(durationS * spec.tauMult),
+    ...(calib.alpha !== undefined ? { alpha: calib.alpha } : {}),
   });
   const retrieved = await retrieveCandidates(db, scope, {
     stopTypes: constraints.stops.map((s) => s.type),
@@ -134,17 +162,29 @@ export async function runSearchPass(
     anchorSpots: retrieved.spots.length > 0,
     durationS,
     anchorPoints,
-    avgSpeedKmh: spec.avgSpeedKmh ?? baseSpeedOf(constraints),
+    avgSpeedKmh: spec.avgSpeedKmh ?? calib.baseSpeedKmh ?? baseSpeedOf(constraints),
+    ...(calib.nSectors !== undefined ? { nSectors: calib.nSectors } : {}),
+    ...(calib.kClusters !== undefined ? { kClusters: calib.kClusters } : {}),
+    ...(calib.nCandidates !== undefined ? { nCandidates: calib.nCandidates } : {}),
     ...(spec.idPrefix !== undefined ? { idPrefix: spec.idPrefix } : {}),
   });
   const attempts = await Promise.all(
     candidates.map(async (c) => {
       try {
-        return await assembleLoop(valhallaUrl, origin, c, {
-          exclude_highways: constraints.avoid.highways,
-          exclude_tolls: constraints.avoid.tolls,
-          exclude_ferries: constraints.avoid.ferries,
-        });
+        return await assembleLoop(
+          valhallaUrl,
+          origin,
+          c,
+          {
+            exclude_highways: constraints.avoid.highways,
+            exclude_tolls: constraints.avoid.tolls,
+            exclude_ferries: constraints.avoid.ferries,
+            ...(calib.maneuverPenaltyS !== undefined
+              ? { maneuver_penalty: calib.maneuverPenaltyS }
+              : {}),
+          },
+          calib.middleType !== undefined ? { middleType: calib.middleType } : {},
+        );
       } catch {
         return null;
       }
@@ -188,7 +228,7 @@ export function finalizeKept(
   pool: PoolState,
   constraints: ParsedConstraints,
   weightsOverride?: Partial<WeightVector>,
-  validateOpts?: { durationTolerance?: number },
+  validateOpts?: { durationTolerance?: number; tauOverlap?: number },
 ): { kept: KeptCandidate[]; requestedStops: number } {
   const weights = mergeWeights(
     mergeWeights(weightsForPreset(constraints.preset), constraints.weights),
@@ -216,7 +256,13 @@ export function finalizeKept(
       },
       weights,
     );
-    const dirty = uturnCount(a.route) > 0 || a.spursWide > 0 || a.retraceRunM > RETRACE_RUN_SOFT_M;
+    const dirty =
+      uturnCount(a.route) > 0 ||
+      a.spursWide > 0 ||
+      a.retraceRunM > RETRACE_RUN_SOFT_M ||
+      (a.residentialShare ?? 0) > RESIDENTIAL_SOFT_SHARE || // round 7
+      (a.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M || // round 8b
+      a.microloops > 0; // round 8
     const presentKey = breakdown.score - (dirty ? UTURN_PRESENT_PENALTY : 0);
     return { a, curv, breakdown, presentKey };
   });
@@ -228,6 +274,7 @@ export function finalizeKept(
       geometry: s.a.route.geometry,
       payload: s,
     })),
+    validateOpts?.tauOverlap !== undefined ? { tauOverlap: validateOpts.tauOverlap } : {},
   );
 
   const keptOut: KeptCandidate[] = kept.map((k) => {
@@ -252,6 +299,9 @@ export function finalizeKept(
       uturns: uturnCount(s.a.route),
       spursWide: s.a.spursWide,
       retraceRunM: s.a.retraceRunM,
+      residentialShare: s.a.residentialShare,
+      residentialRunM: s.a.residentialRunM,
+      microloops: s.a.microloops,
       closureM: s.a.closureM,
       stopsIncluded: s.a.candidate.spotIds.length,
       score: s.breakdown.score,
@@ -275,18 +325,22 @@ export async function planKeptSet(
   valhallaUrl: string,
   constraints: ParsedConstraints,
   weightsOverride?: Partial<WeightVector>,
+  calib: CalibConfig = {},
 ): Promise<PlanOutcome> {
   const t0 = performance.now();
   const notes: string[] = [];
   const durationS = constraints.duration_target_s ?? 5400;
 
   const pool = newPool();
-  mergePass(pool, await runSearchPass(db, valhallaUrl, constraints, durationS, { tauMult: 1 }));
+  mergePass(
+    pool,
+    await runSearchPass(db, valhallaUrl, constraints, durationS, { tauMult: 1 }, calib),
+  );
 
   // duration-resize retry (mirrors runPlanner / loop_quality): judged on the
   // LATEST batch's median, up to two attempts
   let latest = pool.attempts;
-  let sizingV = baseSpeedOf(constraints);
+  let sizingV = calib.baseSpeedKmh ?? baseSpeedOf(constraints);
   for (let attempt = 1; attempt <= 2; attempt++) {
     const durs = latest
       .filter((a): a is Assembly => a !== null && a.accepted)
@@ -296,11 +350,14 @@ export async function planKeptSet(
     const median = durs[Math.floor(durs.length / 2)]!;
     if (Math.abs(median - durationS) / durationS <= 0.25) break;
     sizingV = resizedSpeed(sizingV, durationS, median);
-    const rz = await runSearchPass(db, valhallaUrl, constraints, durationS, {
-      tauMult: 1,
-      avgSpeedKmh: sizingV,
-      idPrefix: `rz${attempt}-`,
-    });
+    const rz = await runSearchPass(
+      db,
+      valhallaUrl,
+      constraints,
+      durationS,
+      { tauMult: 1, avgSpeedKmh: sizingV, idPrefix: `rz${attempt}-` },
+      calib,
+    );
     mergePass(pool, rz);
     latest = rz.attempts;
     notes.push(`resized×${attempt}`);
@@ -319,7 +376,14 @@ export async function planKeptSet(
   if (distinct < K_PRESENT_DEFAULT) {
     mergePass(
       pool,
-      await runSearchPass(db, valhallaUrl, constraints, durationS, { tauMult: 1.3, theta: 0.4 }),
+      await runSearchPass(
+        db,
+        valhallaUrl,
+        constraints,
+        durationS,
+        { tauMult: 1.3, theta: 0.4 },
+        calib,
+      ),
     );
     notes.push('ladder-assisted');
   }

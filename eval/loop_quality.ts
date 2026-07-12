@@ -29,7 +29,12 @@ import {
   prefilterByDuration,
   TAU_OVERLAP_DEFAULT,
 } from '../backend/src/planner/diversify';
-import { assembleLoop, RETRACE_RUN_SOFT_M } from '../backend/src/planner/loop';
+import {
+  assembleLoop,
+  RESIDENTIAL_RUN_SOFT_M,
+  RESIDENTIAL_SOFT_SHARE,
+  RETRACE_RUN_SOFT_M,
+} from '../backend/src/planner/loop';
 import { pairOverlap } from '../backend/src/planner/overlap';
 import { parseRules } from '../backend/src/planner/parse_rules';
 import { weightsForPreset } from '../backend/src/planner/presets';
@@ -115,6 +120,12 @@ interface BriefReport {
   bestSpurs: number | null;
   /** Longest same-road doubling in the best, metres (AC ≤ soft cap, round 6). */
   bestRetraceM: number | null;
+  /** Residential share of the best, % (AC ≤ soft share, round 7; null = trace failed). */
+  bestResidentialPct: number | null;
+  /** Crescent/block spins in the best (AC: must be 0, round 8). */
+  bestMicroloops: number | null;
+  /** Longest contiguous residential run in the best, m (AC ≤ soft cap, round 8b). */
+  bestResidentialRunM: number | null;
   targetS: number;
   curviness: number | null;
   ms: number;
@@ -279,9 +290,16 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
       },
       weights,
     );
-    // presentation key: any u-turn, wide-window spur (block spins), or notable
-    // there-and-back ranks below every clean route (rounds 2–6)
-    const dirty = uturnCount(a.route) > 0 || a.spursWide > 0 || a.retraceRunM > RETRACE_RUN_SOFT_M;
+    // presentation key: any u-turn, wide-window spur (block spins), notable
+    // there-and-back, or residential exposure ranks below every clean route
+    // (rounds 2–7)
+    const dirty =
+      uturnCount(a.route) > 0 ||
+      a.spursWide > 0 ||
+      a.retraceRunM > RETRACE_RUN_SOFT_M ||
+      (a.residentialShare ?? 0) > RESIDENTIAL_SOFT_SHARE ||
+      (a.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M ||
+      a.microloops > 0;
     const presentKey = breakdown.score - (dirty ? UTURN_PRESENT_PENALTY : 0);
     return { a, curv, breakdown, presentKey };
   });
@@ -339,6 +357,11 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
   const bestUturns = best ? uturnCount(best.a.route) : null;
   const bestSpurs = best ? best.a.spursWide : null;
   const bestRetraceM = best ? best.a.retraceRunM : null;
+  // round 7: null (trace failed) counts as NOT passing — unknown ≠ clean
+  const bestResidentialPct =
+    best && best.a.residentialShare !== null ? best.a.residentialShare * 100 : null;
+  const bestMicroloops = best ? best.a.microloops : null;
+  const bestResidentialRunM = best ? best.a.residentialRunM : null;
   const pass =
     kept.length >= K_PRESENT_DEFAULT &&
     maxPairOverlap <= TAU_OVERLAP_DEFAULT &&
@@ -350,7 +373,12 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
     bestUturns === 0 &&
     bestSpurs === 0 &&
     bestRetraceM !== null &&
-    bestRetraceM <= RETRACE_RUN_SOFT_M;
+    bestRetraceM <= RETRACE_RUN_SOFT_M &&
+    bestResidentialPct !== null &&
+    bestResidentialPct <= RESIDENTIAL_SOFT_SHARE * 100 &&
+    bestMicroloops === 0 &&
+    bestResidentialRunM !== null &&
+    bestResidentialRunM <= RESIDENTIAL_RUN_SOFT_M;
 
   return {
     brief,
@@ -366,6 +394,9 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
     bestUturns,
     bestSpurs,
     bestRetraceM,
+    bestResidentialPct,
+    bestMicroloops,
+    bestResidentialRunM,
     targetS: durationS,
     curviness: best ? best.curv.curviness : null,
     bestGeometry: best ? best.a.route.geometry : null,
@@ -401,6 +432,9 @@ async function main(): Promise<void> {
         bestUturns: null,
         bestSpurs: null,
         bestRetraceM: null,
+        bestResidentialPct: null,
+        bestMicroloops: null,
+        bestResidentialRunM: null,
         targetS: 0,
         curviness: null,
         ms: 0,
@@ -443,6 +477,9 @@ async function main(): Promise<void> {
             uturns: r.bestUturns,
             spurs: r.bestSpurs,
             retrace_m: r.bestRetraceM === null ? null : Math.round(r.bestRetraceM),
+            res_pct: r.bestResidentialPct === null ? null : Math.round(r.bestResidentialPct),
+            res_run_m: r.bestResidentialRunM === null ? null : Math.round(r.bestResidentialRunM),
+            microloops: r.bestMicroloops,
             curviness: r.curviness,
             meanSelfOverlap: r.meanSelfOverlap,
             stroke: r.pass ? '#1a9850' : '#d73027',
@@ -470,6 +507,8 @@ async function main(): Promise<void> {
       pad('durErr%', 9) +
       pad('min', 6) +
       pad('curv', 7) +
+      pad('res%', 6) +
+      pad('µloop', 7) +
       pad('ms', 7) +
       'verdict',
   );
@@ -489,6 +528,8 @@ async function main(): Promise<void> {
         ) +
         pad(r.bestDurationS === null ? '—' : Math.round(r.bestDurationS / 60), 6) +
         pad(r.curviness === null ? '—' : r.curviness.toFixed(2), 7) +
+        pad(r.bestResidentialPct === null ? '—' : Math.round(r.bestResidentialPct), 6) +
+        pad(r.bestMicroloops === null ? '—' : r.bestMicroloops, 7) +
         pad(Math.round(r.ms), 7) +
         (r.pass ? 'PASS' : `FAIL ${r.notes.join('; ')}`),
     );
@@ -508,7 +549,7 @@ async function main(): Promise<void> {
   console.log(`mean wall time per brief: ${Math.round(meanMs)} ms`);
   console.log('\n-- SPK-15 AC --');
   console.log(
-    `≥ K_PRESENT distinct, overlap ≤ τ, low self-overlap, durErr ≤ 25 %, u-turn+spur-free best, retrace ≤ ${RETRACE_RUN_SOFT_M} m, feasible: ` +
+    `≥ K_PRESENT distinct, overlap ≤ τ, low self-overlap, durErr ≤ 25 %, u-turn+spur+µloop-free best, retrace ≤ ${RETRACE_RUN_SOFT_M} m, residential ≤ ${RESIDENTIAL_SOFT_SHARE * 100} %, feasible: ` +
       `${passed === reports.length ? 'PASS (all briefs)' : `${passed}/${reports.length} briefs — inspect FAIL rows`}`,
   );
 }

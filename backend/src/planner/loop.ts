@@ -11,15 +11,18 @@ import type { LatLng, RouteThroughOutput } from '@shared/types';
 
 import { haversineMeters } from '../../../data/curvature/geometry';
 import { routeThrough, type AutoCostingOptions } from '../valhalla/route';
+import { traceRoadClasses } from '../valhalla/trace';
 
 import type { WaypointCandidate } from './candidates';
 import {
   maxRetraceRunM,
+  microloopEvents,
   selfOverlapRatio,
   spurEvents,
   SPUR_WINDOW_WIDE_STEPS,
   ORIGIN_GRACE_RADIUS_M,
 } from './overlap';
+import { maxResidentialRunM, residentialShareOf } from './residential';
 
 /** Loop-closure tolerance ε (m): both routed endpoints within this of the origin. */
 export const EPSILON_CLOSURE_M = 300;
@@ -46,6 +49,26 @@ export const SELF_OVERLAP_HARD_REJECT = 0.3;
  */
 export const RETRACE_RUN_SOFT_M = 1_200;
 
+/**
+ * Residential exposure two-tier (owner round 7: neighbourhood streets "shouldn't
+ * be there at all"). Valhalla auto costing has NO residential knob (verified
+ * against 3.7 source), so exposure is measured per assembled route via
+ * trace_attributes. Same two-tier shape as u-turns/spurs — the proven split:
+ * assembly rejects only the unambiguous junk (a fifth of the drive in
+ * subdivisions), presentation ranks ANY notable exposure below every clean
+ * route, and the AC bar holds the presented best to ≤ the soft share.
+ */
+export const RESIDENTIAL_SOFT_SHARE = 0.05;
+export const RESIDENTIAL_HARD_SHARE = 0.2;
+/**
+ * Longest contiguous residential run (m), presentation/AC soft cap (round 8b,
+ * Bolton): the SHARE cap scales with route length — 4 % of 101 km hid a
+ * 1.3 km subdivision weave. The RUN metric is absolute, like retraceRunM
+ * (round-6 lesson: ratios cannot see contiguity). Presentation/AC only —
+ * no assembly rejection (the 20 % share hard cap handles egregious cases).
+ */
+export const RESIDENTIAL_RUN_SOFT_M = 500;
+
 export interface AssembledLoop {
   candidate: WaypointCandidate;
   route: RouteThroughOutput;
@@ -57,6 +80,14 @@ export interface AssembledLoop {
   spursWide: number;
   /** Longest contiguous same-road doubling in metres (presentation/AC only). */
   retraceRunM: number;
+  /** Residential-class share outside the origin grace; null = trace failed
+   *  (fail-open at assembly, unknown at presentation/AC). */
+  residentialShare: number | null;
+  /** Longest contiguous residential run (m) outside grace; null = trace failed. */
+  residentialRunM: number | null;
+  /** Small closed circuits (crescent/block spins) outside the origin grace
+   *  (round 8) — two-tier: assembly rejects ≥2, presentation demotes ≥1. */
+  microloops: number;
   accepted: boolean;
   rejectReasons: string[];
 }
@@ -67,7 +98,10 @@ export async function assembleLoop(
   origin: LatLng,
   candidate: WaypointCandidate,
   costingOptions?: AutoCostingOptions,
-  { selfOverlapCap = SELF_OVERLAP_HARD_REJECT }: { selfOverlapCap?: number } = {},
+  {
+    selfOverlapCap = SELF_OVERLAP_HARD_REJECT,
+    middleType = 'through',
+  }: { selfOverlapCap?: number; middleType?: 'through' | 'via' } = {},
 ): Promise<AssembledLoop> {
   const waypoints: Array<[number, number]> = [
     [origin.lng, origin.lat],
@@ -83,10 +117,16 @@ export async function assembleLoop(
   // retrieval (BD-21) there are hundreds of rural corridors to spread across.
   // NOT top_speed: probed +25 % duration distortion on unchanged paths.
   // 0.2 (round 4): owner wants the main-road share pushed down further.
-  const biasedCosting = { use_highways: 0.2, ...costingOptions };
+  // use_living_streets 0 (round 7): living streets ARE neighbourhood streets;
+  // Valhalla's default 0.1 already avoids them mostly — pin to 0.
+  const biasedCosting = { use_highways: 0.2, use_living_streets: 0, ...costingOptions };
   const route = await routeThrough(baseUrl, {
     waypoints,
-    middleType: 'through', // search waypoints are pass-throughs, never stops (SPK-15)
+    // search waypoints are pass-throughs, never stops (SPK-15). 'through'
+    // forbids u-turns at the point — Valhalla then CIRCLES A BLOCK to reverse
+    // heading (the round-8 micro-loop root cause); 'via' permits the u-turn,
+    // which the u-turn detectors see and punish honestly (rq8 A/B decides).
+    middleType,
     costingOptions: biasedCosting,
   });
 
@@ -117,6 +157,12 @@ export async function assembleLoop(
   // the presentation layer and NEVER reject here (round-6 lesson above).
   const spurs = spurEvents(route.geometry, origin);
   if (spurs >= 2) rejectReasons.push(`spurs ${spurs}`);
+  // Micro-loops (round 8): crescent/block spins — small closed circuits with
+  // no doubled travel, no u-turn maneuver, negligible residential share; only
+  // a cycle detector sees them. Same two-tier: repeat offenders die here,
+  // singles are last-resort presentation material ranked below every clean route.
+  const microloops = microloopEvents(route.geometry, origin);
+  if (microloops >= 2) rejectReasons.push(`microloops ${microloops}`);
   const spursWide = spurEvents(
     route.geometry,
     origin,
@@ -124,6 +170,28 @@ export async function assembleLoop(
     SPUR_WINDOW_WIDE_STEPS,
   );
   const retraceRunM = maxRetraceRunM(route.geometry, undefined, origin);
+
+  // Residential exposure (round 7) — measured only for otherwise-accepted
+  // candidates (one trace_attributes call each; rejected ones never present).
+  // Trace failure fails OPEN at assembly (share = null): a matching hiccup
+  // must not starve the pool; presentation/AC treat null as unknown-dirty.
+  let residentialShare: number | null = null;
+  let residentialRunM: number | null = null;
+  if (rejectReasons.length === 0) {
+    try {
+      const edges = await traceRoadClasses(baseUrl, route.geometry);
+      residentialShare = residentialShareOf(edges, route.geometry, origin);
+      // round 8b: the absolute run (same edges, no extra call) — the share
+      // scales with route length, a subdivision weave does not
+      residentialRunM = maxResidentialRunM(edges, route.geometry, origin);
+      if (residentialShare > RESIDENTIAL_HARD_SHARE) {
+        rejectReasons.push(`residential ${(residentialShare * 100).toFixed(0)}%`);
+      }
+    } catch {
+      residentialShare = null;
+      residentialRunM = null;
+    }
+  }
 
   return {
     candidate,
@@ -133,6 +201,9 @@ export async function assembleLoop(
     spurs,
     spursWide,
     retraceRunM,
+    residentialShare,
+    residentialRunM,
+    microloops,
     accepted: rejectReasons.length === 0,
     rejectReasons,
   };

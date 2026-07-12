@@ -26,7 +26,12 @@ import { assembleAtoB } from './atob';
 import { generateAtoBCandidates, generateLoopCandidates, resizedSpeed } from './candidates';
 import { measureCurvature } from './curvature';
 import { diversify, prefilterByDuration } from './diversify';
-import { assembleLoop, RETRACE_RUN_SOFT_M } from './loop';
+import {
+  assembleLoop,
+  RESIDENTIAL_RUN_SOFT_M,
+  RESIDENTIAL_SOFT_SHARE,
+  RETRACE_RUN_SOFT_M,
+} from './loop';
 import { weightsForPreset } from './presets';
 import { initialParams, nextRelaxation, type SearchParams } from './relax';
 import { retrieveAnchorPoints, retrieveCandidates } from './retrieve';
@@ -267,6 +272,9 @@ export async function runPlanner(
                   selfOverlap: a.selfOverlap,
                   spursWide: a.spursWide,
                   retraceRunM: a.retraceRunM,
+                  residentialShare: a.residentialShare,
+                  residentialRunM: a.residentialRunM,
+                  microloops: a.microloops,
                   closureM: a.closureM as number | null,
                   assemblyAccepted: a.accepted,
                 };
@@ -284,6 +292,9 @@ export async function runPlanner(
                 selfOverlap: a.selfOverlap,
                 spursWide: 0,
                 retraceRunM: 0,
+                residentialShare: null as number | null, // A→B: measured at M6
+                residentialRunM: null as number | null,
+                microloops: 0,
                 closureM: null as number | null,
                 assemblyAccepted: a.accepted,
               };
@@ -358,7 +369,12 @@ export async function runPlanner(
       // notable there-and-back ranks below every clean route (rounds 2–6) —
       // last-resort material, never preferred content
       const dirty =
-        uturnCount(r.route) > 0 || r.spursWide > 0 || r.retraceRunM > RETRACE_RUN_SOFT_M;
+        uturnCount(r.route) > 0 ||
+        r.spursWide > 0 ||
+        r.retraceRunM > RETRACE_RUN_SOFT_M ||
+        (r.residentialShare ?? 0) > RESIDENTIAL_SOFT_SHARE || // round 7
+        (r.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M || // round 8b
+        r.microloops > 0; // round 8
       const presentKey = breakdown.score - (dirty ? UTURN_PRESENT_PENALTY : 0);
       return { r, curv, breakdown, presentKey };
     });

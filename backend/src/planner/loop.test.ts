@@ -63,6 +63,11 @@ describe('assembleLoop (M3-T07, live engine)', () => {
     expect(loop.accepted).toBe(true);
     expect(loop.route.distance_m).toBeGreaterThan(10_000);
     expect(loop.route.geometry.coordinates.length).toBeGreaterThan(100);
+    // round 7: an accepted loop carries a MEASURED residential share (trace
+    // succeeded against the live engine) within the hard cap
+    expect(loop.residentialShare).not.toBeNull();
+    expect(loop.residentialShare!).toBeGreaterThanOrEqual(0);
+    expect(loop.residentialShare!).toBeLessThanOrEqual(0.2);
   });
 
   it('a TRUE out-and-back (real road out + same road back) maxes the metric', async (ctx) => {

@@ -22,7 +22,12 @@ import { decodePolyline } from './polyline';
 
 // --- request ---
 
-/** Costing options Roadopia actually uses (soft use_* weights + hard exclusions). */
+/**
+ * Costing options Roadopia actually uses (soft use_* weights + hard
+ * exclusions). Keep this interface TIGHT: Valhalla silently ignores unknown
+ * keys AND silently clamps out-of-range values (probed on 3.7.0, round 7) —
+ * a typo here would fail without any signal.
+ */
 export interface AutoCostingOptions {
   exclude_highways?: boolean;
   exclude_tolls?: boolean;
@@ -30,6 +35,11 @@ export interface AutoCostingOptions {
   /** Soft preference 0..1 (Valhalla default 1). */
   use_highways?: number;
   use_tolls?: number;
+  /** 0..1; near 0 avoids living_street edges (Valhalla default 0.1). */
+  use_living_streets?: number;
+  /** Seconds added at transitions between unlike-named roads (default 5) —
+   *  discourages subdivision rat-runs (round 7). */
+  maneuver_penalty?: number;
 }
 
 export interface RouteThroughRequest {
@@ -42,7 +52,7 @@ export interface RouteThroughRequest {
    * default for search waypoints (SPK-15 run 8: 'break' middles made every
    * waypoint an in-and-out spur when it landed on a minor street).
    */
-  middleType?: 'break' | 'through';
+  middleType?: 'break' | 'through' | 'via';
 }
 
 // --- Valhalla response (subset we consume; external input → validated) ---

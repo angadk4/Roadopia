@@ -15,7 +15,11 @@ import type { ParsedConstraints, RouteThroughOutput } from '@shared/types';
 
 import { EPSILON_CLOSURE_M, SELF_OVERLAP_CAP } from './loop';
 
-export const DURATION_TOLERANCE_DEFAULT = 0.1;
+// frozen M4-T12 (was 0.1): p80 of the frozen config's |dur err| across DEV+VAL —
+// §21 "the band where most feasible routes land"; misses beyond it disclose.
+// The 0.1 bar failed routes the planner measurably cannot hit (BD-29: 8/9
+// seeded failures were pure duration misses, unrepairable by any move).
+export const DURATION_TOLERANCE_DEFAULT = 0.2;
 
 export type ConstraintStatus = 'satisfied' | 'violated' | 'relaxed' | 'not_applicable';
 

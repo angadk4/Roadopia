@@ -18,7 +18,9 @@ import { haversineMeters } from '../../../data/curvature/geometry';
 
 import type { CandidateSegment, CandidateSpot } from './retrieve';
 
-export const N_SECTORS_DEFAULT = 8;
+// frozen M4-T12 (was 8): 4 sectors → +0.5 feasible/brief and −6pp med|dur err|
+// on the DEV sweep, VAL-validated (eval/reports/params.md)
+export const N_SECTORS_DEFAULT = 4;
 export const K_CLUSTERS_DEFAULT = 8;
 export const N_CANDIDATES_DEFAULT = 20;
 /** Greedy cluster absorption radius (m) — segments this close join the seed's cluster. */

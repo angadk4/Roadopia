@@ -18,7 +18,7 @@ import type { GetIsochroneInput, GetIsochroneOutput, LatLng } from '@shared/type
 import { getIsochrone } from '../valhalla/isochrone';
 
 /** Outbound share of the budget for loops (§3.3, α ≈ 0.55; M4 calibrates). */
-export const ALPHA_LOOP = 0.55;
+export const ALPHA_LOOP = 0.45; // frozen M4-T12 (was 0.55): DEV sweep, validated on VAL
 /** Per-endpoint share for the A→B corridor union (first form; M4 calibrates). */
 export const ALPHA_ATOB = 0.55;
 /** Floor so tiny budgets still produce a usable region (minutes granularity). */
@@ -40,6 +40,8 @@ export interface ScopeRequest {
   /** Required when shape = a_to_b. */
   destination?: LatLng;
   costing?: string;
+  /** Outbound-budget fraction override (M4-T12 calibration); default ALPHA_LOOP/ALPHA_ATOB. */
+  alpha?: number;
 }
 
 export interface Scope {
@@ -76,7 +78,7 @@ export async function buildScope(
   if (request.shape === 'loop') {
     const tau = Math.min(
       MAX_TAU_S,
-      Math.max(MIN_TAU_S, Math.round(request.durationS * ALPHA_LOOP)),
+      Math.max(MIN_TAU_S, Math.round(request.durationS * (request.alpha ?? ALPHA_LOOP))),
     );
     const iso = await isochroneFn({ origin: request.origin, time_s: tau, costing });
     return { rings: [iso.polygon], tauOutS: tau, shape: 'loop' };

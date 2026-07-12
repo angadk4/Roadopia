@@ -574,3 +574,87 @@ display-only). Ships instead: scenic spots/labels SHOWN + concrete grounded fact
 explanations ("passes 2 viewpoints, ~6 km along water") — §13.3 language rules binding; no
 numeric scenic score exists anywhere (Hard rule C). The protocol's [H] hypothesis is now
 measured fact. Cost $0. Report: eval/reports/scenic.md.
+
+**BD-33 — M4-T12: PLANNER PARAMETERS FROZEN as config `frozen-m4t12-v1` (2026-07-11; owner
+sign-off = RG-M4, pending).** §21 discipline: swept on 10 stratified DEV briefs
+(one-factor-at-a-time, pre-registered winner rules in eval/experiments/calibrate.ts), winner
+validated on 16 VAL briefs, frozen; any later change = new config id + fresh VAL pass.
+**Changes: ALPHA_LOOP 0.55 → 0.45 · N_SECTORS 8 → 4 · DURATION_TOLERANCE 0.10 → 0.20**
+(p80 of the frozen config's |dur err| across DEV+VAL — the §21 "band where most feasible
+routes land"; the old 0.10 bar failed routes the planner measurably cannot hit, per BD-29).
+TAU_OVERLAP stays 0.6 (pool-reuse sweep: no value strictly better). Base speed stays 55/42
+(sweep: no improvement). All other params confirmed at current values; detour_max DEFERRED to
+M6 (A→B not built); full 25-param table with provenance in eval/params-frozen.json.
+**VAL evidence:** med |dur err| 17.0 % → 14.0 %, mean feasible 2.1 → 2.7, feasibility held
+94 %. **40-brief composite: 3/40 → 9/40**; mean duration error 14 %; presented bests clean
+(u-turn/spur-free) throughout; mean wall 664 ms. Honest residuals: the dominant remaining AC
+miss is kept ≥ 4 (alternate-count, a presentation-richness bar — not best-route quality);
+sparse-geography towns (Cobourg/Orillia/Campbellford) still miss duration badly (thin road
+material — resize cannot conjure roads; candidate improvement, not a param). 3 candidate
+mechanism tests re-pinned to nSectors: 8 fixtures (assertions unchanged — they test L3/L4
+sector logic, not the default). Report: eval/reports/params.md + §22 manifest.
+
+**BD-34 — Round 7: residential-exposure gate shipped; config frozen-m4t12-v2 (2026-07-11;
+owner ratification pending — this WAS the owner's named RG-M4 blocker).** Owner: neighbourhood
+streets "shouldn't be there at all in any route". Root cause: retrieval + waypoints already
+exclude residential (BD-21, min_road_class snap filter), but the CONNECTING legs Valhalla
+routes between waypoints carried no class constraint and nothing measured them. Verified
+against Valhalla 3.7 source: **no `use_residential` / per-class auto costing knob exists**
+(and unknown costing keys are SILENTLY ignored — probed), so the fix is exact MEASUREMENT:
+every otherwise-accepted candidate is traced (`/trace_attributes`, per-edge road_class,
+partial-edge trimmed) and its residential share outside the 2.5 km origin grace computed
+(backend/src/valhalla/trace.ts + backend/src/planner/residential.ts, 5 pure tests + live
+test). **Two-tier per the 3×-proven rule:** > 20 % rejects at assembly (unambiguous junk);
+> 5 % ranks below every clean route at presentation AND fails the eval AC (null trace =
+unknown ≠ clean); fail-OPEN at assembly so a trace hiccup cannot starve pools.
+`use_living_streets` pinned 0. **maneuver_penalty swept {5,15,30} under a pre-registered
+rule: kept at engine-default 5** — 30 cut exposure but cost 5.3 % curviness (> the 5 % bar),
+15 gained nothing; the measurement gate alone carries the round. Evidence: presented-candidate
+mean residential share 2.1–2.6 % (DEV/VAL), 11–14 % of candidates demoted; 40-brief run shows
+live `residential×N` assembly rejections and res % on every feature (geojson `res_pct`);
+composite HELD 9/40 despite the added stricter bar. Honest residuals: 5 pool-scarce towns
+(Pelham/Ancaster/Owen Sound/Orillia/Campbellford) present a least-bad 10–17 % route because
+no clean alternative exists — correct best-so-far behaviour, honestly failed by the AC;
+generation-side work, post-MVP. detour-free A→B measurement lands at M6.
+Report: eval/reports/residential.md + params-frozen.json v2.
+
+**BD-35 — Round 8: micro-loop (crescent/block-spin) detector shipped; middle waypoints STAY
+'through' after a losing A/B; config frozen-m4t12-v3 (2026-07-11; owner ratification
+pending).** Owner reported the St. Jacobs PASS route "spinning a crescent". Root cause: a
+small CLOSED CIRCUIT is invisible to every prior detector — no doubled travel (not a
+spur/retrace), no u-turn maneuver ('through' waypoints forbid u-turns, so Valhalla circles a
+block to reverse heading), ~1 % residential share on a long loop. Shipped
+`microloopEvents` (overlap.ts): closed cycles with closure < 30 m, length 150 m–3 km,
+enclosed area > 3 000 m², origin-grace exempt — thresholds validated on the live corpus
+(roundabouts under the floor, switchbacks never close, scenic sub-circuits over the cap);
+6 unit tests. Two-tier per the proven rule: assembly rejects ≥ 2, presentation demotes ≥ 1,
+AC requires 0 on the presented best. Prototype found the class in **18/40 routes incl. 4
+PASSes** — the St. Jacobs offender at (43.4269, −80.5527) among them; after wiring, St.
+Jacobs presents a µloop-free best. **'via' A/B (pre-registered rule): REJECTED** — it does
+swap circles for u-turns (µloop μ .43→.17) but u-turn rejections starve pools (kept 14→6,
+briefs-with-clean 3/8→1/8, med|err| 5.3→15.9 %) → 'through' stays. Honest residuals:
+composite 9/40 → **6/40 under the strictly harder bar**; 16/40 bests still carry one spin
+because their pools hold NO clean candidate — a GENERATION artifact (waypoint tips needing
+heading reversal). Follow-up identified, not built: a deterministic F1-style repair move
+"drop/shift the waypoint nearest a detected micro-loop" — post-RG-M4 unit. Report:
+eval/reports (rq8 console record in BUILD_LOG); params-frozen.json v3.
+
+**BD-36 — Round 8b: contiguous-residential-RUN cap; config frozen-m4t12-v4 (2026-07-11; owner
+ratification pending).** Owner caught the Bolton PASS route weaving a subdivision at
+(43.7818, −79.4477). Diagnosis on the live geometry: ~1.3 km CONTIGUOUS residential drive
+(trace sequence s×10 → r×3 · u(300 m) · r×8 → s) that hid at 4 % share on a 101 km route —
+**the share cap scales with route length; the offence does not** (the round-6 ratio-vs-run
+lesson, now applied to road class). Not a closed circuit (micro-loop silent), not doubled
+travel (spur silent). Shipped `maxResidentialRunM` (residential.ts): longest contiguous
+residential run outside the origin grace, bridging non-residential connectors ≤ 250 m
+(a blip inside a subdivision never "leaves the neighbourhood"); computed from the SAME trace
+edges as the share — zero extra engine calls; 4 unit tests. **RESIDENTIAL_RUN_SOFT_M = 500 m**
+— presentation-dirty + AC only, NO assembly rejection (mirrors retraceRunM; the 20 % share
+hard cap handles egregious cases). Result: Bolton best now measured at RUN 2 081 m → dirty +
+AC-failed; St. Jacobs 499 m (borderline-clean, honest). Corpus: **20/40 presented bests
+exceed the run cap** — the weave is systemic and pools rarely hold a clean alternative;
+composite 6/40 → **4/40 under the again-harder bar**; 12/40 bests fully clean on every
+owner axis (spin + share + run + u-turn + spur). This CONFIRMS the priority of the identified
+generation-side unit (BD-35): deterministic repair moves that re-route around detected
+residential runs / micro-loops — the detectors now exist to drive them. Report: geojson
+`res_run_m` per feature; params-frozen.json v4. Tests 212 green.

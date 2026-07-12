@@ -1,0 +1,36 @@
+{
+  "experiment_id": "rq7-residential",
+  "code_commit": "6c517007dedaa94d0b9fe101137360ee94a1f7a7",
+  "prompt_versions": {},
+  "model": null,
+  "routing_data": {
+    "extract_date": "2026-07-06T18:18:18Z",
+    "filtered_md5": "66f5f92fe2968a8f9603b727dcc1657b",
+    "filtered_ways": 275377,
+    "source_md5": "56dacf51f2b34e935fa557057d2be8f9"
+  },
+  "region": {
+    "id": "south-central-ontario",
+    "poly_md5": "7bbf85b3522270cce12ee44918547c3d"
+  },
+  "scoring_config": {
+    "id": "frozen-m4t12-v2",
+    "weights": {}
+  },
+  "user_weight_config": "none (defaults)",
+  "seed": 42,
+  "dataset": {
+    "split": "dev(10) + val(16)",
+    "version": "reqset-v1"
+  },
+  "timestamp": "2026-07-12T00:08:19.929Z",
+  "environment": {
+    "valhalla": "pinned v3.7.0 (local compose)",
+    "host": "local"
+  },
+  "cost_ledger": {
+    "total_usd": 0,
+    "llm_calls": 0,
+    "notes": "deterministic run — no LLM"
+  }
+}

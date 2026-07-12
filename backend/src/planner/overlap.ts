@@ -273,3 +273,77 @@ export function edgeOverlapRatio(
 export function pairOverlap(a: LineString, b: LineString, cellM: number = OVERLAP_CELL_M): number {
   return Math.max(edgeOverlapRatio(a, b, cellM), edgeOverlapRatio(b, a, cellM));
 }
+
+/**
+ * Micro-loop detection (owner round 8: "go into a random neighbourhood and
+ * spin the crescent"). A crescent/block spin is a SMALL CLOSED CIRCUIT away
+ * from the origin: the path returns to within MICROLOOP_CLOSE_M of itself
+ * after 150–3000 m of NEW pavement enclosing real area. Every other detector
+ * is structurally blind to it — no doubled travel (not a spur/retrace), no
+ * u-turn maneuver (the circle IS the turnaround — Valhalla reverses heading
+ * at a 'through' waypoint without emitting a u-turn), and a few hundred
+ * metres of crescent is ~1 % residential share on a long loop.
+ *
+ * Discriminators (validated on the 40-brief corpus, 2026-07-11):
+ *   - closure < 30 m: switchback stacks never CLOSE (parallel legs 40–100 m
+ *     apart) — they stay invisible here;
+ *   - cycle length ∈ [150 m, 3 km]: normal roundabout passage (~125 m full
+ *     circle) stays under the floor; large scenic sub-circuits and the main
+ *     loop exceed the cap (the main loop's closure is also origin-graced);
+ *   - enclosed area > 3000 m²: a genuine circle, not a sliver of parallel
+ *     carriageways.
+ */
+export const MICROLOOP_MIN_M = 150;
+export const MICROLOOP_MAX_M = 3_000;
+export const MICROLOOP_CLOSE_M = 30;
+export const MICROLOOP_AREA_M2 = 3_000;
+const MICROLOOP_RESAMPLE_M = 20;
+
+/** Count of small closed circuits outside the origin grace radius. */
+export function microloopEvents(
+  geometry: LineString,
+  origin?: { lat: number; lng: number },
+  graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
+): number {
+  const pts = resample(
+    geometry.coordinates.map(([lon, lat]) => [lon, lat] as LonLat),
+    MICROLOOP_RESAMPLE_M,
+  );
+  if (pts.length < 3) return 0;
+  const latM = 111_320;
+  const lngM = 111_320 * Math.cos((43.2 * Math.PI) / 180);
+  const dM = (a: LonLat, b: LonLat): number =>
+    Math.hypot((a[0] - b[0]) * lngM, (a[1] - b[1]) * latM);
+  const area = (cycle: LonLat[]): number => {
+    let s = 0;
+    for (let k = 0; k < cycle.length; k++) {
+      const a = cycle[k]!;
+      const b = cycle[(k + 1) % cycle.length]!;
+      s += a[0] * lngM * (b[1] * latM) - b[0] * lngM * (a[1] * latM);
+    }
+    return Math.abs(s / 2);
+  };
+
+  const minSteps = Math.ceil(MICROLOOP_MIN_M / MICROLOOP_RESAMPLE_M);
+  const maxSteps = Math.ceil(MICROLOOP_MAX_M / MICROLOOP_RESAMPLE_M);
+  let events = 0;
+  let i = 0;
+  while (i < pts.length) {
+    let advanced = false;
+    const jMax = Math.min(pts.length - 1, i + maxSteps);
+    for (let j = i + minSteps; j <= jMax; j++) {
+      if (dM(pts[i]!, pts[j]!) < MICROLOOP_CLOSE_M) {
+        const graced =
+          origin !== undefined && dM(pts[i]!, [origin.lng, origin.lat]) <= graceRadiusM;
+        if (!graced && area(pts.slice(i, j + 1)) > MICROLOOP_AREA_M2) {
+          events++;
+          i = j; // consume the cycle; scan onward from its closure
+          advanced = true;
+        }
+        break; // first closure decides this i (closed or too small — move on)
+      }
+    }
+    if (!advanced) i++;
+  }
+  return events;
+}

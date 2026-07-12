@@ -12,7 +12,10 @@
     "gate-f": "tsx experiments/gate_f.ts",
     "gate-w": "tsx experiments/gate_w.ts",
     "smoke": "tsx smoke.ts",
-    "gate-s": "tsx experiments/gate_s.ts"
+    "gate-s": "tsx experiments/gate_s.ts",
+    "calibrate": "tsx experiments/calibrate.ts",
+    "rq7": "tsx experiments/rq7_residential.ts",
+    "rq8": "tsx experiments/rq8_microloop.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
