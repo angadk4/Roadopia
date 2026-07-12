@@ -15,7 +15,8 @@
     "gate-s": "tsx experiments/gate_s.ts",
     "calibrate": "tsx experiments/calibrate.ts",
     "rq7": "tsx experiments/rq7_residential.ts",
-    "rq8": "tsx experiments/rq8_microloop.ts"
+    "rq8": "tsx experiments/rq8_microloop.ts",
+    "rq11": "tsx experiments/rq11_backroads.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",

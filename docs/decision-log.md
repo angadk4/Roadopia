@@ -701,3 +701,30 @@ routing extract — each regenerates from the fresh clip now, recorded in BUILD_
 **Deploy note ([HUMAN] later): the VPS still serves v4 tiles — rebuild there before any
 external link.** Config unchanged (frozen-m4t12-v5; params are geography-independent);
 extract-manifest.json carries the v5 provenance.
+
+**BD-39 — Round 11: backroads priority — scoring lever DISPROVEN, arterial-INSERT repair
+shipped; config frozen-m4t12-v6 (2026-07-12; owner ratification pending).** Owner: "prioritize
+fun back roads whenever possible… aware of and able to access all the back roads." Baseline
+measured first (trace-based class composition of all 48 bests): mean countryness 0.51 raw /
+0.424 normalized, **zero majority-backroad routes**, worst best = Hamilton at 65 % primary —
+waypoints anchor on country roads (BD-21) but Valhalla's connectors ride arterials (no class
+knob below motorway/trunk exists, round-7 recon). Two levers tried under pre-registered rules:
+**(1) `country` scoring term** (length-weighted BD-26 class factor over the traced route,
+zero extra engine calls) — rq11 pool-reuse sweep DISPROVED re-ranking: candidates within a
+pool differ by ~0.007 (every candidate rides the same arterials; the pool, not the ranking,
+is the blind spot) and w>0 also cost durErr 5.3→11.9 % → **w_country = 0 stands; the term
+ships as MEASUREMENT** (report/geojson `country` per route). **(2) INSERT repair move**
+(round-9 pattern aimed at boredom): longest contiguous ARTERIAL run (motorway/trunk/primary/
+secondary, 250 m bridged, origin-graced; generalized maxClassRunInfo) > 4 km triggers
+inserting a waypoint on the highest-ranked reachable curvy segment (≤20 km from the run mid,
+not shadowing existing waypoints, min-detour slot); kept ONLY if accepted, offences not
+worse, duration ≤ ×1.25, and countryness gains ≥ INSERT_MIN_COUNTRY_GAIN. Debug probe found
+the gain bar mis-calibrated: a single swap tops out ~+0.02…0.04, so 0.05 killed every healthy
+insert (three clean Hamilton inserts discarded) while bad inserts (Woodstock route-doubling)
+died on the OTHER guards → bar set 0.02 from the probe evidence. **Result: corpus mean
+country 0.424 → 0.442, majority-country bests 12 → 13, composite 9/48 and durErr 14 % and
+wall time HELD.** Honest ceiling named: post-hoc repair on 2–4-waypoint candidates swaps one
+connector at a time; the structural lever is GENERATION density (more country clusters per
+candidate — the previously-reverted 3rd-member direction, needing its own careful round).
+Also fixed found-live: a silent regex-edit no-op re-ran a full 48-brief cycle on the old
+constant before Edit-tool verification caught it. Report: eval/reports/backroads.md.

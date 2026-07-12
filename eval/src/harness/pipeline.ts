@@ -63,6 +63,8 @@ export interface KeptCandidate {
   residentialShare: number | null;
   /** Longest contiguous residential run (m) outside grace; null = trace failed. */
   residentialRunM: number | null;
+  /** Route countryness 0..1 (round 11); null = trace failed. */
+  countryScore: number | null;
   /** Crescent/block spins outside origin grace (round 8). */
   microloops: number;
   closureM: number;
@@ -185,7 +187,10 @@ export async function runSearchPass(
               ? { maneuver_penalty: calib.maneuverPenaltyS }
               : {}),
           },
-          calib.middleType !== undefined ? { middleType: calib.middleType } : {},
+          {
+            ...(calib.middleType !== undefined ? { middleType: calib.middleType } : {}),
+            repairSegments: retrieved.segments, // round 11b INSERT material
+          },
         );
       } catch {
         return null;
@@ -255,6 +260,7 @@ export function finalizeKept(
         stopCover:
           requestedStops > 0 ? Math.min(1, a.candidate.spotIds.length / requestedStops) : 1,
         scenicSignal: 0,
+        countryScore: a.countryScore, // round 11
       },
       weights,
     );
@@ -303,6 +309,7 @@ export function finalizeKept(
       retraceRunM: s.a.retraceRunM,
       residentialShare: s.a.residentialShare,
       residentialRunM: s.a.residentialRunM,
+      countryScore: s.a.countryScore,
       microloops: s.a.microloops,
       closureM: s.a.closureM,
       stopsIncluded: s.a.candidate.spotIds.length,

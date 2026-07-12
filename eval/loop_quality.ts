@@ -136,6 +136,8 @@ interface BriefReport {
   bestMicroloops: number | null;
   /** Longest contiguous residential run in the best, m (AC ≤ soft cap, round 8b). */
   bestResidentialRunM: number | null;
+  /** Route countryness of the best, 0..1 (round 11; reported, no AC bar yet). */
+  bestCountryScore: number | null;
   targetS: number;
   curviness: number | null;
   ms: number;
@@ -192,11 +194,17 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
       candidates.map(async (c) => {
         try {
           // round 9: targeted waypoint-drop repair rides on every assembly
-          return await assembleLoopWithRepair(VALHALLA, origin, c, {
-            exclude_highways: constraints.avoid.highways,
-            exclude_tolls: constraints.avoid.tolls,
-            exclude_ferries: constraints.avoid.ferries,
-          });
+          return await assembleLoopWithRepair(
+            VALHALLA,
+            origin,
+            c,
+            {
+              exclude_highways: constraints.avoid.highways,
+              exclude_tolls: constraints.avoid.tolls,
+              exclude_ferries: constraints.avoid.ferries,
+            },
+            { repairSegments: retrieved.segments }, // round 11b INSERT material
+          );
         } catch {
           return null;
         }
@@ -298,6 +306,7 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
         stopCover:
           requestedStops > 0 ? Math.min(1, a.candidate.spotIds.length / requestedStops) : 1,
         scenicSignal: 0,
+        countryScore: a.countryScore, // round 11
       },
       weights,
     );
@@ -375,6 +384,7 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
     best && best.a.residentialShare !== null ? best.a.residentialShare * 100 : null;
   const bestMicroloops = best ? best.a.microloops : null;
   const bestResidentialRunM = best ? best.a.residentialRunM : null;
+  const bestCountryScore = best ? best.a.countryScore : null;
   const pass =
     kept.length >= K_PRESENT_DEFAULT &&
     maxPairOverlap <= TAU_OVERLAP_DEFAULT &&
@@ -410,6 +420,7 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
     bestResidentialPct,
     bestMicroloops,
     bestResidentialRunM,
+    bestCountryScore,
     targetS: durationS,
     curviness: best ? best.curv.curviness : null,
     bestGeometry: best ? best.a.route.geometry : null,
@@ -448,6 +459,7 @@ async function main(): Promise<void> {
         bestResidentialPct: null,
         bestMicroloops: null,
         bestResidentialRunM: null,
+        bestCountryScore: null,
         targetS: 0,
         curviness: null,
         ms: 0,
@@ -492,6 +504,8 @@ async function main(): Promise<void> {
             retrace_m: r.bestRetraceM === null ? null : Math.round(r.bestRetraceM),
             res_pct: r.bestResidentialPct === null ? null : Math.round(r.bestResidentialPct),
             res_run_m: r.bestResidentialRunM === null ? null : Math.round(r.bestResidentialRunM),
+            country:
+              r.bestCountryScore === null ? null : Math.round(r.bestCountryScore * 100) / 100,
             microloops: r.bestMicroloops,
             curviness: r.curviness,
             meanSelfOverlap: r.meanSelfOverlap,
@@ -521,6 +535,7 @@ async function main(): Promise<void> {
       pad('min', 6) +
       pad('curv', 7) +
       pad('res%', 6) +
+      pad('ctry', 6) +
       pad('µloop', 7) +
       pad('ms', 7) +
       'verdict',
@@ -542,6 +557,7 @@ async function main(): Promise<void> {
         pad(r.bestDurationS === null ? '—' : Math.round(r.bestDurationS / 60), 6) +
         pad(r.curviness === null ? '—' : r.curviness.toFixed(2), 7) +
         pad(r.bestResidentialPct === null ? '—' : Math.round(r.bestResidentialPct), 6) +
+        pad(r.bestCountryScore === null ? '—' : r.bestCountryScore.toFixed(2), 6) +
         pad(r.bestMicroloops === null ? '—' : r.bestMicroloops, 7) +
         pad(Math.round(r.ms), 7) +
         (r.pass ? 'PASS' : `FAIL ${r.notes.join('; ')}`),

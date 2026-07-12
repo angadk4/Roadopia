@@ -15,6 +15,7 @@ import type { LatLng, LineString } from '@shared/types';
 
 import type { TraceEdge } from '../valhalla/trace';
 
+import { countryClassFactor } from './candidates';
 import { ORIGIN_GRACE_RADIUS_M } from './overlap';
 
 const R = 6_371_000;
@@ -101,9 +102,16 @@ export interface ResidentialRunInfo {
   mid: [number, number] | null;
 }
 
-export function maxResidentialRunInfo(
+/**
+ * Generalized longest-contiguous-run walker over an arbitrary CLASS SET —
+ * residential runs (round 8b) and arterial runs (round 11b: the boring-
+ * connector detector) share the identical mechanics: origin grace, and
+ * off-set gaps ≤ RESIDENTIAL_RUN_BRIDGE_M bridge the run.
+ */
+export function maxClassRunInfo(
   edges: TraceEdge[],
   geometry: LineString,
+  classes: ReadonlySet<string>,
   origin: LatLng,
   graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
 ): ResidentialRunInfo {
@@ -129,7 +137,7 @@ export function maxResidentialRunInfo(
     const mid = pointAt(coords, cum, (startPos + e.lengthM / 2) * scale);
     pos += e.lengthM;
     const graced = haversineM(mid, originLngLat) <= graceRadiusM;
-    if (!graced && e.roadClass === 'residential') {
+    if (!graced && classes.has(e.roadClass)) {
       run += gap + e.lengthM; // bridge the swallowed gap
       gap = 0;
       if (run > best) {
@@ -150,6 +158,17 @@ export function maxResidentialRunInfo(
   };
 }
 
+const RESIDENTIAL_ONLY: ReadonlySet<string> = new Set(['residential']);
+
+export function maxResidentialRunInfo(
+  edges: TraceEdge[],
+  geometry: LineString,
+  origin: LatLng,
+  graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
+): ResidentialRunInfo {
+  return maxClassRunInfo(edges, geometry, RESIDENTIAL_ONLY, origin, graceRadiusM);
+}
+
 /** Longest contiguous residential run in metres (see maxResidentialRunInfo). */
 export function maxResidentialRunM(
   edges: TraceEdge[],
@@ -158,4 +177,32 @@ export function maxResidentialRunM(
   graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
 ): number {
   return maxResidentialRunInfo(edges, geometry, origin, graceRadiusM).runM;
+}
+
+/**
+ * Route countryness (owner round 11): length-weighted BD-26 class factor over
+ * the traced edges — 1.0 on pure backroads (unclassified/tertiary), sinking
+ * toward 0 on arterial-heavy routes. Uses the SAME factor the ranking key was
+ * validated with (countryClassFactor); trace classes outside its vocabulary
+ * (motorway/trunk/service_other) count as arterial-grade 0.15. Normalized
+ * [0.15, 1] → [0, 1]. NO grace exemption: leaving town on an arterial is real
+ * drive time too — this is a preference signal, not a violation gate.
+ */
+export function countryScoreOf(edges: TraceEdge[]): number | null {
+  let total = 0;
+  let weighted = 0;
+  for (const e of edges) {
+    // trace-only classes outside countryClassFactor's OSM vocabulary (its
+    // default is mid-grade 0.5, meant for unknown *minor* tags) — motorway/
+    // trunk/service are arterial-or-worse here
+    const cls =
+      e.roadClass === 'motorway' || e.roadClass === 'trunk' || e.roadClass === 'service_other'
+        ? 'primary'
+        : e.roadClass;
+    total += e.lengthM;
+    weighted += countryClassFactor(cls) * e.lengthM;
+  }
+  if (total === 0) return null;
+  const meanFactor = weighted / total;
+  return Math.max(0, Math.min(1, (meanFactor - 0.15) / 0.85));
 }

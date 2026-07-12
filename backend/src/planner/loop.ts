@@ -13,7 +13,7 @@ import { haversineMeters } from '../../../data/curvature/geometry';
 import { routeThrough, type AutoCostingOptions } from '../valhalla/route';
 import { traceRoadClasses } from '../valhalla/trace';
 
-import type { WaypointCandidate } from './candidates';
+import { countryClassFactor, type WaypointCandidate } from './candidates';
 import {
   maxRetraceRunM,
   microloopEvents,
@@ -23,7 +23,13 @@ import {
   SPUR_WINDOW_WIDE_STEPS,
   ORIGIN_GRACE_RADIUS_M,
 } from './overlap';
-import { maxResidentialRunInfo, residentialShareOf } from './residential';
+import {
+  countryScoreOf,
+  maxClassRunInfo,
+  maxResidentialRunInfo,
+  residentialShareOf,
+} from './residential';
+import type { CandidateSegment } from './retrieve';
 
 /** Loop-closure tolerance ε (m): both routed endpoints within this of the origin. */
 export const EPSILON_CLOSURE_M = 300;
@@ -70,6 +76,36 @@ export const RESIDENTIAL_HARD_SHARE = 0.2;
  */
 export const RESIDENTIAL_RUN_SOFT_M = 500;
 
+/**
+ * Boring-connector detector (owner round 11: 'prioritize fun back roads
+ * whenever possible'): the longest contiguous ARTERIAL stretch
+ * (motorway/trunk/primary/secondary, 250 m bridging, origin-graced). Beyond
+ * the trigger, the repair pass INSERTS a waypoint on the best nearby curvy
+ * segment to drag the connector onto backroads — kept only if countryness
+ * genuinely improves without duration/cleanliness cost. Scoring re-rank was
+ * tried first and measured USELESS (rq11: pool candidates differ by ~0.007
+ * countryScore — every candidate rode the same arterials; the pool, not the
+ * ranking, was the blind spot).
+ */
+export const ARTERIAL_CLASSES: ReadonlySet<string> = new Set([
+  'motorway',
+  'trunk',
+  'primary',
+  'secondary',
+]);
+export const ARTERIAL_RUN_TRIGGER_M = 4_000;
+/**
+ * INSERT keeps its result on any real (non-noise) countryness gain. The rq11b
+ * probe showed a single segment swap on a long route tops out around
+ * +0.02…+0.04 raw — 0.05 discarded every healthy insert (Hamilton: three
+ * clean +0.02/+0.04 inserts, all killed) while the duration and cleanliness
+ * guards already stop the bad ones (Woodstock: route-doubling inserts died on
+ * accepted/self_overlap, not on this bar).
+ */
+export const INSERT_MIN_COUNTRY_GAIN = 0.02;
+/** …and only if the detour does not blow the duration up. */
+export const INSERT_MAX_DURATION_GROWTH = 1.25;
+
 export interface AssembledLoop {
   candidate: WaypointCandidate;
   route: RouteThroughOutput;
@@ -88,6 +124,13 @@ export interface AssembledLoop {
   residentialRunM: number | null;
   /** Midpoint [lng, lat] of that run — the repair pass aims at it. */
   residentialRunMid: [number, number] | null;
+  /** Route countryness 0..1 (round 11) — length-weighted class factor of the
+   *  traced route; null = trace failed. Scoring term (w_country). */
+  countryScore: number | null;
+  /** Longest contiguous ARTERIAL run (m) outside grace; null = trace failed. */
+  arterialRunM: number | null;
+  /** Midpoint [lng, lat] of that run — the INSERT repair aims at it. */
+  arterialRunMid: [number, number] | null;
   /** Small closed circuits (crescent/block spins) outside the origin grace
    *  (round 8) — two-tier: assembly rejects ≥2, presentation demotes ≥1. */
   microloops: number;
@@ -181,6 +224,9 @@ export async function assembleLoop(
   let residentialShare: number | null = null;
   let residentialRunM: number | null = null;
   let residentialRunMid: [number, number] | null = null;
+  let countryScore: number | null = null;
+  let arterialRunM: number | null = null;
+  let arterialRunMid: [number, number] | null = null;
   if (rejectReasons.length === 0) {
     try {
       const edges = await traceRoadClasses(baseUrl, route.geometry);
@@ -190,6 +236,10 @@ export async function assembleLoop(
       const runInfo = maxResidentialRunInfo(edges, route.geometry, origin);
       residentialRunM = runInfo.runM;
       residentialRunMid = runInfo.mid;
+      countryScore = countryScoreOf(edges); // round 11 — same edges, no extra call
+      const artInfo = maxClassRunInfo(edges, route.geometry, ARTERIAL_CLASSES, origin);
+      arterialRunM = artInfo.runM;
+      arterialRunMid = artInfo.mid;
       if (residentialShare > RESIDENTIAL_HARD_SHARE) {
         rejectReasons.push(`residential ${(residentialShare * 100).toFixed(0)}%`);
       }
@@ -197,6 +247,9 @@ export async function assembleLoop(
       residentialShare = null;
       residentialRunM = null;
       residentialRunMid = null;
+      countryScore = null;
+      arterialRunM = null;
+      arterialRunMid = null;
     }
   }
 
@@ -211,6 +264,9 @@ export async function assembleLoop(
     residentialShare,
     residentialRunM,
     residentialRunMid,
+    countryScore,
+    arterialRunM,
+    arterialRunMid,
     microloops,
     accepted: rejectReasons.length === 0,
     rejectReasons,
@@ -245,56 +301,165 @@ function preferred(a: AssembledLoop, b: AssembledLoop): AssembledLoop {
   return offenceScore(a) < offenceScore(b) ? a : b;
 }
 
+const dM = (aLng: number, aLat: number, bLng: number, bLat: number): number =>
+  Math.hypot((aLng - bLng) * 111_320 * Math.cos((43.2 * Math.PI) / 180), (aLat - bLat) * 111_320);
+
+/** Mid vertex of a candidate segment — the INSERT waypoint (round 11b). */
+function segMidVertex(seg: CandidateSegment): LatLng {
+  const coords = seg.geometry.coordinates;
+  const [lng, lat] = coords[Math.floor(coords.length / 2)]!;
+  return { lat, lng };
+}
+
 /**
- * assembleLoop + up to REPAIR_PASS_CAP targeted waypoint-drop repairs.
- * Spot-anchored candidates are returned unrepaired (which waypoint is the
- * requested stop is not recoverable here — dropping it would silently lose
- * the stop). Returns the cleanest attempt; the original wins ties.
+ * Pick the best repair segment near the arterial run's midpoint: highest
+ * BD-26 rank (curviness·length·classFactor) within reach, not already
+ * shadowed by an existing waypoint.
+ */
+function pickInsertSegment(
+  segments: readonly CandidateSegment[],
+  runMid: readonly [number, number],
+  waypoints: readonly LatLng[],
+): CandidateSegment | null {
+  let best: CandidateSegment | null = null;
+  let bestRank = 0;
+  for (const s of segments) {
+    const v = segMidVertex(s);
+    if (dM(v.lng, v.lat, runMid[0], runMid[1]) > 20_000) continue; // out of reach
+    if (waypoints.some((w) => dM(v.lng, v.lat, w.lng, w.lat) < 1_500)) continue; // shadowed
+    const rank = s.curviness * s.lengthM * countryClassFactor(s.highway);
+    if (rank > bestRank) {
+      bestRank = rank;
+      best = s;
+    }
+  }
+  return best;
+}
+
+/** Insertion slot minimizing added detour across the o→w₁…wₙ→o sequence. */
+function insertSlot(waypoints: readonly LatLng[], origin: LatLng, p: LatLng): number {
+  const seq = [origin, ...waypoints, origin];
+  let bestI = 0;
+  let bestAdd = Infinity;
+  for (let i = 0; i < seq.length - 1; i++) {
+    const a = seq[i]!;
+    const b = seq[i + 1]!;
+    const add =
+      dM(a.lng, a.lat, p.lng, p.lat) +
+      dM(p.lng, p.lat, b.lng, b.lat) -
+      dM(a.lng, a.lat, b.lng, b.lat);
+    if (add < bestAdd) {
+      bestAdd = add;
+      bestI = i; // insert into waypoints at index i (after seq[i])
+    }
+  }
+  return bestI;
+}
+
+/** The INSERT result is kept only on a REAL countryness gain at bounded cost. */
+function insertBetter(after: AssembledLoop, before: AssembledLoop): boolean {
+  return (
+    after.accepted &&
+    offenceScore(after) <= offenceScore(before) &&
+    (after.countryScore ?? 0) >= (before.countryScore ?? 0) + INSERT_MIN_COUNTRY_GAIN &&
+    after.route.duration_s <= before.route.duration_s * INSERT_MAX_DURATION_GROWTH
+  );
+}
+
+/**
+ * assembleLoop + up to REPAIR_PASS_CAP targeted repairs, two moves:
+ *  - DROP (round 9): a micro-loop or over-cap residential run → drop the
+ *    waypoint nearest the offence (spot-anchored candidates skipped — which
+ *    waypoint is the requested stop is not recoverable).
+ *  - INSERT (round 11b): no offence, but the longest ARTERIAL run exceeds the
+ *    trigger → insert a waypoint on the best nearby curvy segment to drag the
+ *    boring connector onto backroads; kept ONLY when countryness gains ≥
+ *    INSERT_MIN_COUNTRY_GAIN without offence/duration cost. Needs
+ *    opts.repairSegments (the retrieval set) — without it, DROP-only.
+ * Returns the preferred attempt; the original wins ties.
  */
 export async function assembleLoopWithRepair(
   baseUrl: string,
   origin: LatLng,
   candidate: WaypointCandidate,
   costingOptions?: AutoCostingOptions,
-  opts: { selfOverlapCap?: number; middleType?: 'through' | 'via' } = {},
+  opts: {
+    selfOverlapCap?: number;
+    middleType?: 'through' | 'via';
+    repairSegments?: readonly CandidateSegment[];
+  } = {},
 ): Promise<AssembledLoop & { repairsApplied: number }> {
   let current = await assembleLoop(baseUrl, origin, candidate, costingOptions, opts);
-  if (candidate.spotIds.length > 0) return { ...current, repairsApplied: 0 };
 
   let best = current;
   let bestRepairs = 0;
   let cand = candidate;
+  const spotAnchored = candidate.spotIds.length > 0;
   for (let pass = 1; pass <= REPAIR_PASS_CAP; pass++) {
-    if (current.accepted && offenceScore(current) === 0) break; // already clean
     const pos = offencePosition(current, origin);
-    if (pos === null) break; // nothing localizable — not this pass's problem
-    if (cand.waypoints.length < 3) break; // dropping below 2 waypoints = out-and-back
-    let nearest = 0;
-    let nearestD = Infinity;
-    cand.waypoints.forEach((w, i) => {
-      const d = Math.hypot(
-        (w.lng - pos[0]) * 111_320 * Math.cos((43.2 * Math.PI) / 180),
-        (w.lat - pos[1]) * 111_320,
-      );
-      if (d < nearestD) {
-        nearestD = d;
-        nearest = i;
+    if (pos !== null && !spotAnchored && cand.waypoints.length >= 3) {
+      // --- DROP (round 9) ---
+      let nearest = 0;
+      let nearestD = Infinity;
+      cand.waypoints.forEach((w, i) => {
+        const d = dM(w.lng, w.lat, pos[0], pos[1]);
+        if (d < nearestD) {
+          nearestD = d;
+          nearest = i;
+        }
+      });
+      cand = {
+        ...cand,
+        id: `${cand.id}-rp${pass}`,
+        waypoints: cand.waypoints.filter((_, i) => i !== nearest),
+      };
+      try {
+        current = await assembleLoop(baseUrl, origin, cand, costingOptions, opts);
+      } catch {
+        break; // repair route failed outright — keep the best so far
       }
-    });
-    cand = {
-      ...cand,
-      id: `${cand.id}-rp${pass}`,
-      waypoints: cand.waypoints.filter((_, i) => i !== nearest),
-    };
-    try {
-      current = await assembleLoop(baseUrl, origin, cand, costingOptions, opts);
-    } catch {
-      break; // repair route failed outright — keep the best so far
+      if (preferred(current, best) === current) {
+        best = current;
+        bestRepairs = pass;
+      }
+      continue;
     }
-    if (preferred(current, best) === current) {
-      best = current;
-      bestRepairs = pass;
+
+    // --- INSERT (round 11b): boring-connector upgrade ---
+    if (
+      current.accepted &&
+      offenceScore(current) === 0 &&
+      (current.arterialRunM ?? 0) > ARTERIAL_RUN_TRIGGER_M &&
+      current.arterialRunMid !== null &&
+      opts.repairSegments !== undefined &&
+      cand.waypoints.length <= 6
+    ) {
+      const seg = pickInsertSegment(opts.repairSegments, current.arterialRunMid, cand.waypoints);
+      if (seg === null) break; // no reachable country material — honest stop
+      const p = segMidVertex(seg);
+      const slot = insertSlot(cand.waypoints, origin, p);
+      const nextCand = {
+        ...cand,
+        id: `${cand.id}-in${pass}`,
+        waypoints: [...cand.waypoints.slice(0, slot), p, ...cand.waypoints.slice(slot)],
+      };
+      let attempt: AssembledLoop;
+      try {
+        attempt = await assembleLoop(baseUrl, origin, nextCand, costingOptions, opts);
+      } catch {
+        break;
+      }
+      if (insertBetter(attempt, current)) {
+        cand = nextCand;
+        current = attempt;
+        best = attempt;
+        bestRepairs = pass;
+        continue; // another arterial run may remain — cap governs
+      }
+      break; // insert did not earn its keep — keep what we had
     }
+
+    break; // nothing left to repair
   }
   return { ...best, repairsApplied: bestRepairs };
 }

@@ -262,11 +262,17 @@ export async function runPlanner(
             try {
               if (isLoop) {
                 // round 9: targeted waypoint-drop repair rides on every assembly
-                const a = await assembleLoopWithRepair(deps.valhallaUrl, origin, candidate, {
-                  exclude_highways: params.avoid.highways,
-                  exclude_tolls: params.avoid.tolls,
-                  exclude_ferries: params.avoid.ferries,
-                });
+                const a = await assembleLoopWithRepair(
+                  deps.valhallaUrl,
+                  origin,
+                  candidate,
+                  {
+                    exclude_highways: params.avoid.highways,
+                    exclude_tolls: params.avoid.tolls,
+                    exclude_ferries: params.avoid.ferries,
+                  },
+                  { repairSegments: retrieved.segments }, // round 11b INSERT material
+                );
                 return {
                   candidate,
                   route: a.route,
@@ -275,6 +281,7 @@ export async function runPlanner(
                   retraceRunM: a.retraceRunM,
                   residentialShare: a.residentialShare,
                   residentialRunM: a.residentialRunM,
+                  countryScore: a.countryScore,
                   microloops: a.microloops,
                   closureM: a.closureM as number | null,
                   assemblyAccepted: a.accepted,
@@ -295,6 +302,7 @@ export async function runPlanner(
                 retraceRunM: 0,
                 residentialShare: null as number | null, // A→B: measured at M6
                 residentialRunM: null as number | null,
+                countryScore: null as number | null,
                 microloops: 0,
                 closureM: null as number | null,
                 assemblyAccepted: a.accepted,
@@ -363,6 +371,7 @@ export async function runPlanner(
           twistinessPref: constraints.twistiness_pref,
           stopCover: requestedStopCount > 0 ? Math.min(1, spotCount / requestedStopCount) : 1,
           scenicSignal: 0, // gated ([GATE-S]); no numeric scenic input yet
+          countryScore: r.countryScore, // round 11
         },
         baseWeights,
       );

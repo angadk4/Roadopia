@@ -27,6 +27,11 @@ export interface ScoreInput {
   stopCover: number;
   /** Scenic signal 0..1 (labels/signals only until [GATE-S]; unused at weight 0). */
   scenicSignal: number;
+  /** Route countryness 0..1 (owner round 11) — length-weighted class factor of
+   *  the FULL traced route (backroads ≈ 1, arterials ≈ 0), from the same
+   *  trace_attributes edges as the residential gate; null = trace failed
+   *  (term contributes 0 — unknown is never rewarded). */
+  countryScore?: number | null;
 }
 
 /** The frozen weight-vector shape (§30). */
@@ -37,6 +42,10 @@ export interface WeightVector {
   scenic: number;
   overlap: number;
   uturn: number;
+  /** Countryness reward (owner round 11): prefers backroad-heavy routes —
+   *  the BD-26-validated class factor, applied to the WHOLE traced route so
+   *  Valhalla's arterial connectors cost rank. Swept at rq11; 0 = off. */
+  country: number;
 }
 
 export const DEFAULT_WEIGHTS: WeightVector = {
@@ -50,6 +59,7 @@ export const DEFAULT_WEIGHTS: WeightVector = {
   // raised 0.15 → 0.25 (the hard caps stay; scoring separates the survivors)
   overlap: 0.25,
   uturn: 0.1,
+  country: 0, // set by the rq11 sweep (round 11); 0 until the winner freezes
 };
 
 /** Duration fit: 1 at the target, linear falloff to 0 at ±100 % error. */
@@ -98,6 +108,7 @@ export interface ScoreBreakdown {
     scenic_signal: number;
     self_overlap: number;
     uturn_penalty: number;
+    country: number;
   };
   weights: WeightVector;
 }
@@ -114,6 +125,7 @@ export function scoreCandidate(
     scenic_signal: Math.max(0, Math.min(1, input.scenicSignal)),
     self_overlap: Math.max(0, Math.min(1, input.selfOverlap)),
     uturn_penalty: uturnPenalty(input.route),
+    country: Math.max(0, Math.min(1, input.countryScore ?? 0)),
   };
   const score =
     weights.dur * terms.dur_fit +
@@ -121,7 +133,8 @@ export function scoreCandidate(
     weights.stop * terms.stop_cover +
     weights.scenic * terms.scenic_signal -
     weights.overlap * terms.self_overlap -
-    weights.uturn * terms.uturn_penalty;
+    weights.uturn * terms.uturn_penalty +
+    weights.country * terms.country;
   return { score, terms, weights };
 }
 
@@ -132,7 +145,7 @@ export function scoreCandidate(
 export function mergeWeights(base: WeightVector, sliders: Weights | null): WeightVector {
   if (!sliders) return base;
   const merged = { ...base };
-  for (const key of ['dur', 'cur', 'stop', 'scenic', 'overlap', 'uturn'] as const) {
+  for (const key of ['dur', 'cur', 'stop', 'scenic', 'overlap', 'uturn', 'country'] as const) {
     const v = sliders[key];
     if (typeof v === 'number' && Number.isFinite(v) && v >= 0) merged[key] = v;
   }
