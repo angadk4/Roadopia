@@ -815,3 +815,55 @@ scope fixed. Next milestone: **M5 — the /plan service** (endpoint + SSE progre
 NO numeric scenic). Open [HUMAN] items carried forward (not M5 dev blockers): production
 spend-cap infra (prepaid credits + workspace limit + kill switch) before public LLM traffic;
 VPS re-tile to region v5 before any external link.
+
+**REOPEN REGISTER (post-M4, owner-requested tracking, 2026-07-12).** A ratified gate is a
+decision on the evidence to date, NOT a permanent lock. These are explicitly flagged for
+revisit so they are never treated as closed-forever:
+
+- **BD-31 — LLM chooses the route** (owner-priority). Parked on *insufficient* evidence (blind
+  pref 2/3 but Wilson CI could not clear at n=3), not a loss. **Everything to re-decide it
+  already exists:** `eval/src/llm/select_llm.ts` (Sonnet fact-sheet selector, emits no
+  geography), the cost-guarded client, and the blind-pairwise A/B harness
+  (`eval/experiments/ranking.ts`). **Trigger:** once the app is real (M6/M7) and the owner
+  hits an "I'd have picked a different route" moment. **Steps:** generate more route pairs →
+  larger blind A/B (owner + 2–4 friends) → adopt R4 if it clears the margin → new config id.
+  Safety unchanged: the LLM only ranks the deterministic planner's already-validated
+  candidates (Hard rule A intact).
+- **BD-30 — advanced weight sliders.** Deferred (unmeasurable on thin pools), not rejected;
+  reopen when pools are richer or the owner wants finer control.
+- **BD-32 — numeric scenic.** Reopen only with a data source that clears ρ ≥ 0.70 (current
+  best 0.538) — e.g., a scenic tag layer that actually exists in-region.
+
+Every planner PARAMETER (BD-33 freeze) is already trivially editable — v1→v8 proves it; a
+change mints a new config id + fresh VAL pass (§21). Nothing here is a one-way door.
+
+**BD-44 — M5 AI-layer build decisions (2026-07-13).** The M5 batch (T01–T07, T09; T08 closed)
+shipped the production AI layer exactly on the ratified boundary (BD-28/29/31): **LLM = language
+in, language out; zero geography; every call cost-guarded.** Decisions made in-build:
+(1) **Prompt registry as single source** — `backend/src/ai/prompts/` holds every production
+prompt as a versioned `PromptTemplate` (id + version + model pin + schema). The [GATE-A] winner
+was ported VERBATIM from eval as `parse` v1; **eval now imports prompt/schema/model FROM the
+registry** (M5-T09), so the CI smoke regression-tests the exact prompt that ships. Side effect,
+deliberate: eval's model pin moved from alias `claude-haiku-4-5` to the production dated
+snapshot `claude-haiku-4-5-20251001` — same model, dated for reproducibility. A prompt edit =
+version bump in ONE place, caught by the live prompt gate (accuracy floor 0.80) if degraded.
+(2) **Production cost guard** (`cost_guard.ts`): $20 soft (warn) / $30 hard (block) / $40
+testing-override, kill switch checked BEFORE transport, per-call worst-case ceiling
+(8k in/1.5k out), UTC-month projected-spend blocking, cache reads billed 0.1×. Ledger is a
+`LedgerSink` seam — in-memory now, the FR-049 `ai_generation_requests` DB sink lands at M6
+(recorded so it isn't forgotten). (3) **Grounded generation pattern** (T04/T05): LLM →
+schema parse → `checkGrounded` against the run's real facts (novel proper noun / number ⇒
+reject) → ONE retry naming the offenders → deterministic template composing the same facts.
+Fallback ≠ failure: kill/cap/hallucination all degrade to honest templates (FR-261).
+(4) **Refinement merge constants** (T06, RF6 rules per §17.1): bare longer/shorter step =
+20 % of current target (min 10 min; base 60 min when none); soft-pref nudge ±0.2 clamped 0..1;
+explicit-lift phrases ("highways are fine") are the ONLY hard-constraint removals; comparison
+numbers computed in `compare.ts` (edge overlap via the frozen §9 grid method). Constants are
+v1 product knobs, not gated science — tune freely with UI evidence at M7. (5) **M5-T08 CLOSED
+"NOT ADOPTED"** per its own DoD: LLM selection/correction not built (BD-29 kept F1+F2+F5;
+BD-31 parked R4 on insufficient evidence — see Reopen Register). No `select.ts`/`repair.ts`
+in production; the eval-side selector remains available for the BD-31 re-test. (6) **CI
+factuality gate added** (T09): the smoke now live-tests explanation + title/summary/tags
+through the production client on pinned facts — template-fallback on a live run means the
+model failed grounding twice ⇒ red. Live evidence 2026-07-13: parse 0.939, both generation
+gates 'llm', spend $0.025 (caps $0.10 + $0.10).

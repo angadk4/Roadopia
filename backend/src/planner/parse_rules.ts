@@ -42,7 +42,8 @@ const INJECTION_PATTERNS: RegExp[] = [
   /\bjailbreak\b/i,
 ];
 
-const STOP_KEYWORDS: Array<{ re: RegExp; type: StopRequest['type'] }> = [
+/** Stop-request keyword map — shared with the refinement merger (M5-T06). */
+export const STOP_KEYWORDS: Array<{ re: RegExp; type: StopRequest['type'] }> = [
   { re: /\b(?:coffee|caf[eé]|espresso)\b/i, type: 'coffee' },
   { re: /\b(?:lunch|dinner|breakfast|food|eat|restaurant)\b/i, type: 'food' },
   { re: /\b(?:fuel|gas|petrol|fill\s*up)\b/i, type: 'fuel' },

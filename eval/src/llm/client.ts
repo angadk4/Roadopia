@@ -28,6 +28,8 @@ import Anthropic from '@anthropic-ai/sdk';
  */
 export const PRICES: Record<string, { inPerMTok: number; outPerMTok: number }> = {
   'claude-haiku-4-5': { inPerMTok: 1, outPerMTok: 5 },
+  // dated pin used by the production prompt registry (M5-T09 single source)
+  'claude-haiku-4-5-20251001': { inPerMTok: 1, outPerMTok: 5 },
   'claude-sonnet-4-6': { inPerMTok: 3, outPerMTok: 15 },
 };
 export const MODEL_ALLOWLIST = Object.keys(PRICES);
