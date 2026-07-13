@@ -1,0 +1,44 @@
+{
+  "experiment_id": "m4-test-final",
+  "code_commit": "20d49176e0638a9e6b2570de5704ac7b99ca6cfb",
+  "prompt_versions": {},
+  "model": null,
+  "routing_data": {
+    "extract_date": "2026-07-12T20:53:42Z",
+    "filtered_md5": "10f0ba9fffb7b66c908fa75040180367",
+    "filtered_ways": 303432,
+    "source_md5": "56dacf51f2b34e935fa557057d2be8f9"
+  },
+  "region": {
+    "id": "south-central-ontario",
+    "poly_md5": "19014f2809f2ab85cfcff346fddba5d3"
+  },
+  "scoring_config": {
+    "id": "frozen-m4t12-v8",
+    "weights": {
+      "dur": 0.3,
+      "cur": 0.35,
+      "stop": 0.1,
+      "scenic": 0,
+      "overlap": 0.25,
+      "uturn": 0.1,
+      "country": 0
+    }
+  },
+  "user_weight_config": "none (defaults)",
+  "seed": 42,
+  "dataset": {
+    "split": "test (LOCKED, single-use)",
+    "version": "reqset-v1"
+  },
+  "timestamp": "2026-07-13T02:57:03.684Z",
+  "environment": {
+    "valhalla": "pinned v3.7.0 (local compose)",
+    "host": "local"
+  },
+  "cost_ledger": {
+    "total_usd": 0,
+    "llm_calls": 0,
+    "notes": "deterministic planner — no LLM"
+  }
+}

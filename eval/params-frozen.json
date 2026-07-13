@@ -1,5 +1,5 @@
 {
-  "config_id": "frozen-m4t12-v6",
+  "config_id": "frozen-m4t12-v8",
   "frozen_at": "2026-07-11",
   "discipline": "§21: tuned on DEV only, validated on VAL; any later change = new config id + fresh VAL pass",
   "params": {
@@ -50,7 +50,10 @@
     "w_country": 0,
     "ARTERIAL_RUN_TRIGGER_M": 4000,
     "INSERT_MIN_COUNTRY_GAIN": 0.02,
-    "INSERT_MAX_DURATION_GROWTH": 1.25
+    "INSERT_MAX_DURATION_GROWTH": 1.25,
+    "tripleClusters": false,
+    "SHIFT_REPAIR": "enabled (preferred over DROP; falls back)",
+    "DURATION_PRESENT_PENALTY": 5
   },
   "provenance": {
     "gates": ["BD-26 C", "BD-28 A", "BD-29 F", "BD-30 W", "BD-31 R", "BD-32 S"],
@@ -62,6 +65,9 @@
     "round8": "micro-loop (crescent/block-spin) detector — small closed circuits invisible to spur/u-turn/residential metrics; 18/40 routes carried one (validated on corpus incl. the owner-reported St. Jacobs case)",
     "round8b": "maxResidentialRunM — Bolton 1.3km subdivision weave hid at 4% share on a 101km route; absolute run cap (ratio-vs-run lesson applied to road class)",
     "round9": "detect-and-repair: drop waypoint nearest a detected micro-loop / over-cap residential run, ≤2 passes, best-of; clean bests 12→17, spin bests 16→8, composite 4→8",
-    "round11": "backroads priority: scoring re-rank DISPROVEN by rq11 sweep (pool variance ~0.007 — w_country stays 0); arterial-run INSERT repair shipped instead (probe-calibrated gain bar 0.02); corpus country 0.424→0.442, zero quality cost"
+    "round11": "backroads priority: scoring re-rank DISPROVEN by rq11 sweep (pool variance ~0.007 — w_country stays 0); arterial-run INSERT repair shipped instead (probe-calibrated gain bar 0.02); corpus country 0.424→0.442, zero quality cost",
+    "round12": "generation density (triples): generated+assembled but never outranked incumbents — adoption REFUSED by pre-registered rule; flag retained OFF",
+    "round13": "SHIFT-preferred repair: relocate offending waypoint to best clean segment near the offence; DROP fallback; works on 2-waypoint candidates",
+    "round14": "timing undershoot diagnosed: NOT a search-material gap (widen A/B = no-op) — on-target candidates exist but carry quality flaws (u-turn/retrace) in road-sparse origins, so the planner correctly presents a clean shorter loop. Shipped duration-demotion (on-target outranks shorter within a quality tier) as correct-ordering insurance; inert on the 48-brief corpus (no town HAS a clean on-target route being outranked); the residual undershoot is fundamental → app disclosure (M5) + generation/region."
   }
 }

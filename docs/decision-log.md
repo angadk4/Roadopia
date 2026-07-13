@@ -728,3 +728,90 @@ connector at a time; the structural lever is GENERATION density (more country cl
 candidate — the previously-reverted 3rd-member direction, needing its own careful round).
 Also fixed found-live: a silent regex-edit no-op re-ran a full 48-brief cycle on the old
 constant before Edit-tool verification caught it. Report: eval/reports/backroads.md.
+
+**BD-40 — Round 12: generation density (cluster triples) — HONEST NEGATIIVE; not adopted
+(2026-07-12; owner-ordered experiment).** Triples implemented behind a flag (3 distinct-sector
+country corridors per candidate, rich budgets ≥90 min, fill-order after singles+pairs;
+makeCandidate generalized to an extra-cluster list). First A/B was VACUOUS — probed: post-
+M4-T12 pools hold 3-4 clusters across ~2 of the 4 sectors, so the 3-sector spread constraint
+never matched; relaxed to any-not-all-one-sector (assembly gates judge shapes). Second A/B:
+triples GENERATE (3-4/pool) and ASSEMBLE (some kept) but NEVER outrank incumbents — DEV
+metrics byte-identical → pre-registered rule refuses adoption; **tripleClusters stays false**
+(machinery retained for post-MVP pool-shape work). Second measured negative for the density
+hypothesis at current pool shapes.
+
+**BD-41 — Round 13: SHIFT-preferred repair shipped; config frozen-m4t12-v7 (2026-07-12;
+owner ratification pending).** RELOCATE replaces DELETE as the first repair move: on a
+micro-loop / over-cap residential run, move the offending waypoint onto the best clean curvy
+segment near the offence (same picker as INSERT, shadow-check excludes the moving waypoint);
+kept only on STRICT offence improvement with the standard guards; DROP remains the fallback;
+works on 2-waypoint candidates (the class DROP could never touch). Applies planner-wide —
+every origin, all repair sites. **48-brief evidence: fully-clean bests 17 → 27/48 · composite
+9 → 11/48 · over-run-cap 16 → 13 · Bolton (the owner's round-8b case) now PASSES outright
+(run 0 m, res 0 %, spins 0, 100 min/90 ask) · country μ 0.442 → 0.449.** Wall 1 730 → 2 261 ms
+(shift trials; within budget). 220 tests green.
+
+**BD-42 — Round 14: timing undershoot diagnosed as FUNDAMENTAL, not a bug; duration-demotion
+shipped as correct-ordering insurance; config frozen-m4t12-v8 (2026-07-12; owner ratification
+pending).** Owner: "this timing issue is dumb and shouldn't be there." Two levers tested under
+pre-registered rules; the diagnosis is the deliverable. **(1) widen-on-undershoot** (rq14 —
+re-scope the retrieval isochrone wider when the resize retry is still short, hypothesis: ran
+out of curvy material within the tight M4-T12 radius): **HONEST NEGATIVE** — DEV med|err|
+14.0 % → 14.0 %, zero movement (flag retained, default off). The probe explained why: the
+material isn't the bottleneck. **(2) Root cause, found by dumping presentKey per candidate:**
+the on-target candidates ALREADY EXIST in the pool but carry quality flaws (u-turn / retrace
+from being forced longer), so at presentation the clean-but-short loop correctly outranks the
+on-target-but-flawed one (a clean −5 duration-penalised route beats a −10 quality-penalised
+one). The planner is CORRECTLY refusing to show a u-turn to hit the clock — exactly the owner
+standard from rounds 2–8. So the undershoot in road-sparse origins (Hamilton/Georgetown/
+Kitchener/Mississauga/Belfountain/Grand Bend) is **fundamental: no clean route hits the
+target time there.** **Shipped anyway: DURATION_PRESENT_PENALTY = 5** — a 2nd lexicographic
+tier BELOW quality (clean+on 0 · clean+off −5 · dirty+on −10 · dirty+off −15) wired at all
+three presentation sites (run.ts, pipeline, loop_quality), so wherever a clean on-target route
+DOES exist it now beats a clean shorter one. Correct ordering, but **inert on the 48-brief
+corpus** (no town currently has that exact case) — 8 undershoots >25 % unchanged, composite
+11/48, fully-clean bests 27, honestly reported. **The real fixes are not more planner tuning:**
+(a) the app discloses the honest time ("≈60 min") — an M5 UI decision; (b) more clean road
+material (generation density / region) — measured hard (triples lost, BD-40). Named-but-not-
+built lever: extend the repair pass to clean retraces/u-turns on on-target candidates (could
+rescue some, but it's another round). Process note (§4): confirmed the fix's effect by dumping
+presentKey values rather than trusting the kept-list order (an incomplete dirty-marker in the
+first probe hid the u-turn/retrace flaws and nearly produced a wrong diagnosis).
+
+**BD-43 — RG-M4: M4 CLOSED on frozen config frozen-m4t12-v8; single-use TEST numbers reported
+honestly (2026-07-12; owner sign-off pending).** M4 exit criteria ALL met: curvature formula
+(C7) + all planner params FROZEN (v8, eval/params-frozen.json); all six gates decided + logged
+(BD-26 C · BD-28 A · BD-29 F · BD-30 W · BD-31 R · BD-32 S) + the quality rounds (BD-33–42);
+eval CI gate live (M4-T14); M5 AI scope fixed (Haiku parse + Sonnet explain; NO LLM
+select/correct; NO numeric scenic). **SINGLE-USE locked-TEST run (§25 Stage 8, config v8,
+20 runnable loop briefs never seen in tuning): PERFECT 2/20 (10 %) · SHIPPABLE 7/20 (35 %) ·
+CLEAN 8/20 (40 %) · median duration error 8 %.** Reported STRAIGHT, not spun: these are LOWER
+than the DEV/48-brief figures (~23 % perfect / ~56 % clean) for two honest reasons — (1) the
+normal tune-vs-held-out gap, and (2) the TEST split drew **13 of 20 origins on Owen Sound (×5)
+/ Port Perry (×4) / Grimsby (×4)** — precisely the road-sparse towns documented as
+fundamentally limited (BD-42: no clean route hits the time; multi-km residential is the only
+material). Timing on TEST is actually GOOD (median 8 % err) — the misses are route-flaws +
+menu-size in sparse geography, not the planner sizing. The honest portfolio story is the
+METHODOLOGY (locked TEST, pre-registered gates, honest negatives at BD-40/42, disclosed
+limits) + "≈40 % clean on a deliberately-hard held-out draw"; NOT a headline pass rate.
+Per §6.4 the TEST split is now SPENT for v8 — not re-run to chase a number; a future config
+gets its own TEST pass. Report: eval/reports/test-final.md + §22 manifest
+eval/runs/m4-test-final/. **M4 CLOSED pending the owner's RG-M4 sign-off + BD-29–43
+ratification.** Next milestone: M5 (the /plan service — endpoint + SSE progress + Haiku
+parser + production cost guard).
+
+**RG-M4 RATIFIED + SIGNED OFF (owner, 2026-07-12).** The owner ratified **BD-29 through BD-43**
+(all six gate decisions C/A/F/W/R/S, the nine quality rounds, the param freeze, and the
+single-use TEST close) and **signed off RG-M4**. Basis recorded by the owner: the decisions
+are the conservative-default-unless-earned posture applied with measured evidence; ratifying
+records "right on the evidence we had," NOT a permanent lock — every param is versioned
+(v1→v8 already) and every gate is re-openable with new evidence (notably BD-31 LLM route
+selection, parked on *insufficient* evidence at n=3, not a defeat: the selector + cost-guard +
+blind-A/B harness already exist, so re-testing it once the app surfaces a real "I'd have
+picked differently" moment is a focused experiment, not a rebuild). **M4 is CLOSED.** Milestone
+gate satisfied: formula + params frozen · gates decided + logged · eval CI gate live · M5 AI
+scope fixed. Next milestone: **M5 — the /plan service** (endpoint + SSE progress + Haiku parse
+(BD-28) + Sonnet explanation (BD-31 default R6) + production cost guard; NO LLM select/correct,
+NO numeric scenic). Open [HUMAN] items carried forward (not M5 dev blockers): production
+spend-cap infra (prepaid credits + workspace limit + kill switch) before public LLM traffic;
+VPS re-tile to region v5 before any external link.

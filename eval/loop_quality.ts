@@ -41,12 +41,13 @@ import { weightsForPreset } from '../backend/src/planner/presets';
 import { retrieveAnchorPoints, retrieveCandidates } from '../backend/src/planner/retrieve';
 import { buildScope } from '../backend/src/planner/scope';
 import {
+  DURATION_PRESENT_PENALTY,
   mergeWeights,
   scoreCandidate,
   uturnCount,
   UTURN_PRESENT_PENALTY,
 } from '../backend/src/planner/score';
-import { validateCandidate } from '../backend/src/planner/validate';
+import { DURATION_TOLERANCE_DEFAULT, validateCandidate } from '../backend/src/planner/validate';
 
 const DB_URL =
   process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
@@ -320,7 +321,15 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
       (a.residentialShare ?? 0) > RESIDENTIAL_SOFT_SHARE ||
       (a.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M ||
       a.microloops > 0;
-    const presentKey = breakdown.score - (dirty ? UTURN_PRESENT_PENALTY : 0);
+    // round 14: on-target outranks shorter within the same quality tier
+    const durOff =
+      constraints.duration_target_s !== null &&
+      Math.abs(a.route.duration_s - constraints.duration_target_s) / constraints.duration_target_s >
+        DURATION_TOLERANCE_DEFAULT;
+    const presentKey =
+      breakdown.score -
+      (dirty ? UTURN_PRESENT_PENALTY : 0) -
+      (durOff ? DURATION_PRESENT_PENALTY : 0);
     return { a, curv, breakdown, presentKey };
   });
 
@@ -489,12 +498,39 @@ async function main(): Promise<void> {
       .map((r) => {
         const routedMin = r.bestDurationS === null ? null : Math.round(r.bestDurationS / 60);
         const km = r.bestDistanceM === null ? null : Math.round(r.bestDistanceM / 100) / 10;
+        // plain-English reason(s) a brief failed — the shown best route often
+        // IS fine; the miss is a menu-size or timing bar it can't show itself
+        const reasons: string[] = [];
+        if (r.feasible === 0) reasons.push('no feasible route');
+        if (r.presented < K_PRESENT_DEFAULT) {
+          reasons.push(`only ${r.presented} of ${K_PRESENT_DEFAULT} alternates`);
+        }
+        if (r.maxPairOverlap > TAU_OVERLAP_DEFAULT) reasons.push('alternates too similar');
+        if (r.durErrPct !== null && r.durErrPct > 25) {
+          reasons.push(
+            `${r.durErrSignedPct! > 0 ? '+' : ''}${Math.round(r.durErrSignedPct!)}% off the asked time`,
+          );
+        }
+        if ((r.bestUturns ?? 0) > 0) reasons.push('has a u-turn');
+        if ((r.bestSpurs ?? 0) > 0) reasons.push('darts in and back somewhere');
+        if ((r.bestRetraceM ?? 0) > RETRACE_RUN_SOFT_M) {
+          reasons.push(`${Math.round((r.bestRetraceM ?? 0) / 100) / 10} km doubles back`);
+        }
+        if ((r.bestResidentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M) {
+          reasons.push(
+            `${Math.round((r.bestResidentialRunM ?? 0) / 100) / 10} km through a neighbourhood`,
+          );
+        } else if ((r.bestResidentialPct ?? 0) > RESIDENTIAL_SOFT_SHARE * 100) {
+          reasons.push(`${r.bestResidentialPct}% neighbourhood streets`);
+        }
+        if ((r.bestMicroloops ?? 0) > 0) reasons.push('circles a block');
         return {
           type: 'Feature',
           properties: {
             name: `${r.brief} — routed ${routedMin ?? '?'} min / ${km ?? '?'} km${r.pass ? '' : ' (FAIL)'}`,
             brief: r.brief,
             pass: r.pass,
+            why_red: r.pass ? null : reasons.join('; '),
             target_min: Math.round(r.targetS / 60),
             routed_min: routedMin,
             distance_km: km,

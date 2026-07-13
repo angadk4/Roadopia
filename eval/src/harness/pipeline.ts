@@ -40,6 +40,7 @@ import { weightsForPreset } from '../../../backend/src/planner/presets';
 import { retrieveAnchorPoints, retrieveCandidates } from '../../../backend/src/planner/retrieve';
 import { buildScope } from '../../../backend/src/planner/scope';
 import {
+  DURATION_PRESENT_PENALTY,
   mergeWeights,
   scoreCandidate,
   uturnCount,
@@ -47,7 +48,11 @@ import {
   type ScoreBreakdown,
   type WeightVector,
 } from '../../../backend/src/planner/score';
-import { validateCandidate, type ValidationVerdict } from '../../../backend/src/planner/validate';
+import {
+  DURATION_TOLERANCE_DEFAULT,
+  validateCandidate,
+  type ValidationVerdict,
+} from '../../../backend/src/planner/validate';
 import type { RequestExample } from '../../src/datasets/schema';
 
 export interface KeptCandidate {
@@ -109,6 +114,12 @@ export interface CalibConfig {
   /** Middle-waypoint type (round-8 A/B: 'through' circles blocks to reverse
    *  heading, 'via' u-turns visibly instead). */
   middleType?: 'through' | 'via';
+  /** Round-12 A/B: cluster triples on rich budgets (generation density). */
+  tripleClusters?: boolean;
+  /** Round-14 A/B: when the resize retry is still UNDERSHOOTING, widen the
+   *  retrieval isochrone (not just the speed) so it fetches farther curvy
+   *  material to build a longer clean loop from. */
+  widenOnUndershoot?: boolean;
 }
 
 type Assembly = NonNullable<Awaited<ReturnType<typeof assembleLoop>>>;
@@ -169,6 +180,7 @@ export async function runSearchPass(
     ...(calib.nSectors !== undefined ? { nSectors: calib.nSectors } : {}),
     ...(calib.kClusters !== undefined ? { kClusters: calib.kClusters } : {}),
     ...(calib.nCandidates !== undefined ? { nCandidates: calib.nCandidates } : {}),
+    ...(calib.tripleClusters !== undefined ? { tripleClusters: calib.tripleClusters } : {}),
     ...(spec.idPrefix !== undefined ? { idPrefix: spec.idPrefix } : {}),
   });
   const attempts = await Promise.all(
@@ -271,7 +283,15 @@ export function finalizeKept(
       (a.residentialShare ?? 0) > RESIDENTIAL_SOFT_SHARE || // round 7
       (a.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M || // round 8b
       a.microloops > 0; // round 8
-    const presentKey = breakdown.score - (dirty ? UTURN_PRESENT_PENALTY : 0);
+    // round 14: an on-target route outranks a shorter twistier one (2nd tier)
+    const durOff =
+      constraints.duration_target_s !== null &&
+      Math.abs(a.route.duration_s - constraints.duration_target_s) / constraints.duration_target_s >
+        DURATION_TOLERANCE_DEFAULT;
+    const presentKey =
+      breakdown.score -
+      (dirty ? UTURN_PRESENT_PENALTY : 0) -
+      (durOff ? DURATION_PRESENT_PENALTY : 0);
     return { a, curv, breakdown, presentKey };
   });
 
@@ -359,17 +379,25 @@ export async function planKeptSet(
     const median = durs[Math.floor(durs.length / 2)]!;
     if (Math.abs(median - durationS) / durationS <= 0.25) break;
     sizingV = resizedSpeed(sizingV, durationS, median);
+    // round 14: an undershoot means we ran out of curvy material within the
+    // (tight, M4-T12) search radius — rescaling speed alone re-picks the same
+    // roads. Widen the retrieval isochrone in proportion to the shortfall so
+    // the regeneration has farther clusters to reach (buildScope clamps the
+    // tau ceiling, so this is safe). Overshoots keep tauMult 1 (already have
+    // enough material; the speed rescale pulls them back in).
+    const undershoot = median < durationS;
+    const widen = calib.widenOnUndershoot && undershoot ? Math.min(1.7, durationS / median) : 1;
     const rz = await runSearchPass(
       db,
       valhallaUrl,
       constraints,
       durationS,
-      { tauMult: 1, avgSpeedKmh: sizingV, idPrefix: `rz${attempt}-` },
+      { tauMult: widen, avgSpeedKmh: sizingV, idPrefix: `rz${attempt}-` },
       calib,
     );
     mergePass(pool, rz);
     latest = rz.attempts;
-    notes.push(`resized×${attempt}`);
+    notes.push(`resized×${attempt}${widen > 1 ? ` widen×${widen.toFixed(2)}` : ''}`);
   }
 
   // ladder assist when distinct kept corridors run thin

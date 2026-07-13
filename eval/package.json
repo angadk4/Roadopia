@@ -16,7 +16,10 @@
     "calibrate": "tsx experiments/calibrate.ts",
     "rq7": "tsx experiments/rq7_residential.ts",
     "rq8": "tsx experiments/rq8_microloop.ts",
-    "rq11": "tsx experiments/rq11_backroads.ts"
+    "rq11": "tsx experiments/rq11_backroads.ts",
+    "rq12": "tsx experiments/rq12_density.ts",
+    "rq14": "tsx experiments/rq14_undershoot.ts",
+    "test-final": "tsx experiments/test_final.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",

@@ -179,6 +179,10 @@ export interface GenerateOptions {
   durationS?: number;
   /** Assumed average speed for sizing (km/h; M4 calibrates). */
   avgSpeedKmh?: number;
+  /** Round 12 (generation density): add cluster TRIPLES on rich budgets so
+   *  three country corridors pin the loop and less connector length is left
+   *  to the router's arterial preference. rq12 A/B decides the default. */
+  tripleClusters?: boolean;
   /**
    * Return-anchor pool: road points of ANY curviness (SPK-15 run 7 — ordinary
    * parallel roads fix band-topology retrace). Falls back to curvy-segment
@@ -413,7 +417,7 @@ export function generateLoopCandidates(
   const makeCandidate = (
     id: string,
     primary: Cluster,
-    extraCluster: Cluster | null,
+    extraClusters: readonly Cluster[],
     returnSector: number,
   ): WaypointCandidate => {
     // TRAVERSAL waypoints: both endpoints of the cluster's best segment — the
@@ -459,7 +463,7 @@ export function generateLoopCandidates(
       // weight + two full spans; richer chaining is an M4 candidate with
       // pool-health guards.
     }
-    if (extraCluster) {
+    for (const extraCluster of extraClusters) {
       const extraBest = [...extraCluster.members].sort((a, b) => {
         return (
           segValue(b.segment) - segValue(a.segment) || a.segment.id.localeCompare(b.segment.id)
@@ -491,7 +495,7 @@ export function generateLoopCandidates(
       returnSector,
       clusterId: primary.id,
       spotIds,
-      clusterWeight: primary.weight + (extraCluster?.weight ?? 0),
+      clusterWeight: primary.weight + extraClusters.reduce((s, c) => s + c.weight, 0),
     };
   };
 
@@ -501,7 +505,7 @@ export function generateLoopCandidates(
     if (candidates.length >= nCandidates) break;
     const returnSector = (cluster.sector + halfTurn) % nSectors;
     candidates.push(
-      makeCandidate(`${pfx}loop-c${cluster.id}-r${returnSector}`, cluster, null, returnSector),
+      makeCandidate(`${pfx}loop-c${cluster.id}-r${returnSector}`, cluster, [], returnSector),
     );
   }
 
@@ -514,7 +518,35 @@ export function generateLoopCandidates(
       const sd = sectorDist(a.sector, b.sector);
       if (sd < 1 || sd > 3) continue;
       const returnSector = (Math.max(a.sector, b.sector) + halfTurn) % nSectors;
-      candidates.push(makeCandidate(`${pfx}loop-c${a.id}+c${b.id}`, a, b, returnSector));
+      candidates.push(makeCandidate(`${pfx}loop-c${a.id}+c${b.id}`, a, [b], returnSector));
+    }
+  }
+
+  // ROUND 2b (round 12, generation density): cluster TRIPLES on rich budgets —
+  // three distinct-sector country corridors pinned around the loop, so less
+  // connector length is left to the router's arterial preference. The duration
+  // machinery built since round 5 (resize retry + prefilter + ±20 % tolerance)
+  // carries the fit that sank the same-cluster third member back then.
+  if (options.tripleClusters === true && (options.durationS ?? 5400) >= 5400) {
+    for (let i = 0; i < roundRobin.length && candidates.length < nCandidates; i++) {
+      for (let j = i + 1; j < roundRobin.length && candidates.length < nCandidates; j++) {
+        for (let k = j + 1; k < roundRobin.length && candidates.length < nCandidates; k++) {
+          const a = roundRobin[i]!;
+          const b = roundRobin[j]!;
+          const c = roundRobin[k]!;
+          const ab = sectorDist(a.sector, b.sector);
+          const bc = sectorDist(b.sector, c.sector);
+          // any trio that is not all-in-one-sector (post-M4-T12 pools hold
+          // 3-4 clusters across ~2 of the 4 sectors — demanding a 3-sector
+          // spread made triples vacuous, probed rq12); assembly's overlap +
+          // closure gates judge the actual shapes
+          if (ab + bc < 1 || ab > 3 || bc > 3) continue;
+          const returnSector = (Math.max(a.sector, b.sector, c.sector) + halfTurn) % nSectors;
+          candidates.push(
+            makeCandidate(`${pfx}loop-c${a.id}+c${b.id}+c${c.id}`, a, [b, c], returnSector),
+          );
+        }
+      }
     }
   }
 
@@ -525,7 +557,7 @@ export function generateLoopCandidates(
       const returnSector = (cluster.sector + offset + nSectors) % nSectors;
       const id = `${pfx}loop-c${cluster.id}-r${returnSector}`;
       if (candidates.some((c) => c.id === id)) continue;
-      candidates.push(makeCandidate(id, cluster, null, returnSector));
+      candidates.push(makeCandidate(id, cluster, [], returnSector));
     }
   }
 

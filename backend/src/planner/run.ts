@@ -37,13 +37,14 @@ import { initialParams, nextRelaxation, type SearchParams } from './relax';
 import { retrieveAnchorPoints, retrieveCandidates } from './retrieve';
 import { buildScope } from './scope';
 import {
+  DURATION_PRESENT_PENALTY,
   mergeWeights,
   scoreCandidate,
   uturnCount,
   UTURN_PRESENT_PENALTY,
   type ScoreBreakdown,
 } from './score';
-import { validateCandidate, type ValidationVerdict } from './validate';
+import { DURATION_TOLERANCE_DEFAULT, validateCandidate, type ValidationVerdict } from './validate';
 
 export const WALL_CLOCK_BUDGET_MS = 25_000;
 export const ITERATION_CAP = 3;
@@ -385,7 +386,17 @@ export async function runPlanner(
         (r.residentialShare ?? 0) > RESIDENTIAL_SOFT_SHARE || // round 7
         (r.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M || // round 8b
         r.microloops > 0; // round 8
-      const presentKey = breakdown.score - (dirty ? UTURN_PRESENT_PENALTY : 0);
+      // round 14: an on-target route outranks a shorter one of the same
+      // quality tier (2nd lexicographic tier, below quality)
+      const durOff =
+        constraints.duration_target_s !== null &&
+        Math.abs(r.route.duration_s - constraints.duration_target_s) /
+          constraints.duration_target_s >
+          DURATION_TOLERANCE_DEFAULT;
+      const presentKey =
+        breakdown.score -
+        (dirty ? UTURN_PRESENT_PENALTY : 0) -
+        (durOff ? DURATION_PRESENT_PENALTY : 0);
       return { r, curv, breakdown, presentKey };
     });
     step(events, 'score_rank', 'completed', `${scored.length} scored`);

@@ -99,6 +99,23 @@ export function uturnPenalty(route: RouteThroughOutput): number {
  */
 export const UTURN_PRESENT_PENALTY = 10;
 
+/**
+ * Presentation-layer duration aversion (owner round 14: "the timing issue is
+ * dumb"). The undershoot bias was a SELECTION fault, not a generation one —
+ * probed pools already CONTAIN a clean on-target candidate, but a shorter,
+ * twistier route outranked it because the curviness gain beat the duration-fit
+ * loss in the scalar score. This adds a SECOND lexicographic tier BELOW the
+ * quality one: a route whose |duration error| exceeds the tolerance ranks
+ * under every in-tolerance route of the same quality tier — but a clean
+ * on-target route still beats nothing that a clean short route would lose to,
+ * and a clean route ALWAYS beats a dirty one (5 < 10). Ordering:
+ *   clean+on-target 0 · clean+off −5 · quality-dirty+on −10 · dirty+off −15.
+ * In road-sparse towns where no on-target route exists, every candidate is
+ * equally duration-penalised, so it falls through to score (best-so-far) —
+ * the honest short loop still surfaces, now correctly labelled off-target.
+ */
+export const DURATION_PRESENT_PENALTY = 5;
+
 export interface ScoreBreakdown {
   score: number;
   terms: {

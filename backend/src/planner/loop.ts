@@ -397,8 +397,7 @@ export async function assembleLoopWithRepair(
   const spotAnchored = candidate.spotIds.length > 0;
   for (let pass = 1; pass <= REPAIR_PASS_CAP; pass++) {
     const pos = offencePosition(current, origin);
-    if (pos !== null && !spotAnchored && cand.waypoints.length >= 3) {
-      // --- DROP (round 9) ---
+    if (pos !== null && !spotAnchored) {
       let nearest = 0;
       let nearestD = Infinity;
       cand.waypoints.forEach((w, i) => {
@@ -408,6 +407,42 @@ export async function assembleLoopWithRepair(
           nearest = i;
         }
       });
+
+      // --- SHIFT first (round 13): RELOCATE the offending waypoint onto the
+      // best clean curvy segment near the offence — preserves the loop's
+      // reach (DROP shrinks it) and works on 2-waypoint candidates (the
+      // Bolton class DROP could never touch). Falls back to DROP below.
+      if (opts.repairSegments !== undefined) {
+        const others = cand.waypoints.filter((_, i) => i !== nearest);
+        const seg = pickInsertSegment(opts.repairSegments, pos, others);
+        if (seg !== null) {
+          const shifted = {
+            ...cand,
+            id: `${cand.id}-sh${pass}`,
+            waypoints: cand.waypoints.map((w, i) => (i === nearest ? segMidVertex(seg) : w)),
+          };
+          try {
+            const attempt = await assembleLoop(baseUrl, origin, shifted, costingOptions, opts);
+            if (
+              preferred(attempt, current) === attempt &&
+              offenceScore(attempt) < offenceScore(current)
+            ) {
+              cand = shifted;
+              current = attempt;
+              if (preferred(current, best) === current) {
+                best = current;
+                bestRepairs = pass;
+              }
+              continue; // shift earned its keep — next pass may repair further
+            }
+          } catch {
+            // shift route failed — fall through to DROP
+          }
+        }
+      }
+
+      // --- DROP (round 9) — the fallback when SHIFT has no target or no win ---
+      if (cand.waypoints.length < 3) break; // dropping below 2 waypoints = out-and-back
       cand = {
         ...cand,
         id: `${cand.id}-rp${pass}`,
