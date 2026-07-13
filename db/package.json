@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "seed": "tsx seed/seed.ts"
+    "seed": "tsx seed/seed.ts",
+    "apply": "tsx scripts/apply.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

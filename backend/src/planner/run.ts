@@ -54,6 +54,13 @@ export interface PlannerDeps {
   valhallaUrl: string;
   /** Injectable clock for tests (defaults to performance.now). */
   now?: () => number;
+  /** Live event sink (M6-T04 SSE): called for each event AS IT HAPPENS, in
+   *  addition to the buffered `result.events` array. */
+  onEvent?: (event: GenerationEvent) => void;
+  /** Cancellation (M6-T04): when aborted, the loop stops at the next budget
+   *  check — no further engine batches or iterations (client disconnect must
+   *  halt the loop + spend). */
+  signal?: AbortSignal;
 }
 
 export interface PlannerResult {
@@ -70,12 +77,12 @@ export interface PlannerResult {
 }
 
 function step(
-  events: GenerationEvent[],
+  emit: (e: GenerationEvent) => void,
   stepName: GenerationEvent extends { step: infer S } ? S : never | string,
   status: 'started' | 'completed',
   detail?: string,
 ): void {
-  events.push({
+  emit({
     type: 'step',
     step: stepName as never,
     status,
@@ -105,9 +112,14 @@ export async function runPlanner(
   deps: PlannerDeps,
 ): Promise<PlannerResult> {
   const events: GenerationEvent[] = [];
+  const emit = (e: GenerationEvent): void => {
+    events.push(e);
+    deps.onEvent?.(e);
+  };
   const now = deps.now ?? (() => performance.now());
   const t0 = now();
-  const outOfBudget = () => now() - t0 > WALL_CLOCK_BUDGET_MS;
+  // abort counts as budget exhaustion: same stop-seams, no further batches
+  const outOfBudget = () => deps.signal?.aborted === true || now() - t0 > WALL_CLOCK_BUDGET_MS;
 
   const result: PlannerResult = {
     status: 'unavailable',
@@ -123,31 +135,31 @@ export async function runPlanner(
   };
 
   // --- disposition (§3.5) ---
-  step(events, 'validate_constraints', 'started');
+  step(emit, 'validate_constraints', 'started');
   const disposition = resolveDisposition(constraints);
-  step(events, 'validate_constraints', 'completed', disposition);
+  step(emit, 'validate_constraints', 'completed', disposition);
   if (disposition === 'refuse_unsafe') {
     result.status = 'refused';
-    events.push({ type: 'done', status: 'unavailable' });
+    emit({ type: 'done', status: 'unavailable' });
     return result;
   }
   if (disposition === 'redirect_out_of_region') {
     result.status = 'redirect';
-    events.push({ type: 'done', status: 'unavailable' });
+    emit({ type: 'done', status: 'unavailable' });
     return result;
   }
   if (disposition === 'clarify') {
     result.status = 'clarify';
     result.clarificationQuestion = constraints.clarification.question;
-    events.push({ type: 'done', status: 'unavailable' });
+    emit({ type: 'done', status: 'unavailable' });
     return result;
   }
 
   const origin = originLatLng(constraints);
   if (!origin) {
     // unresolved place-name origins need geocoding (M6); honest unavailable for now
-    events.push({ type: 'error', message: 'origin not resolvable to coordinates yet' });
-    events.push({ type: 'done', status: 'unavailable' });
+    emit({ type: 'error', message: 'origin not resolvable to coordinates yet' });
+    emit({ type: 'done', status: 'unavailable' });
     return result;
   }
   const destination = destinationLatLng(constraints);
@@ -176,30 +188,25 @@ export async function runPlanner(
     result.iterations = iteration;
 
     // scope
-    step(events, 'scope', 'started');
-    events.push({ type: 'tool_call', tool: 'get_isochrone' });
+    step(emit, 'scope', 'started');
+    emit({ type: 'tool_call', tool: 'get_isochrone' });
     const scope = await buildScope(deps.valhallaUrl, {
       origin,
       shape: constraints.shape,
       durationS: Math.round(durationS * params.tauMultiplier),
       ...(destination ? { destination } : {}),
     });
-    events.push({
+    emit({
       type: 'tool_result',
       tool: 'get_isochrone',
       ok: true,
       count: scope.rings.length,
     });
-    step(
-      events,
-      'scope',
-      'completed',
-      `τ_out ${scope.tauOutS}s ×${params.tauMultiplier.toFixed(2)}`,
-    );
+    step(emit, 'scope', 'completed', `τ_out ${scope.tauOutS}s ×${params.tauMultiplier.toFixed(2)}`);
 
     // retrieve
-    step(events, 'retrieve', 'started');
-    events.push({ type: 'tool_call', tool: 'find_curvy_roads' });
+    step(emit, 'retrieve', 'started');
+    emit({ type: 'tool_call', tool: 'find_curvy_roads' });
     const stopTypes = (
       params.dropNiceToHaveStops
         ? constraints.stops.filter((s) => s.importance === 'required')
@@ -209,14 +216,14 @@ export async function runPlanner(
       stopTypes,
       thetaCurvy: params.thetaCurvy,
     });
-    events.push({
+    emit({
       type: 'tool_result',
       tool: 'find_curvy_roads',
       ok: true,
       count: retrieved.segments.length,
     });
     if (stopTypes.length > 0) {
-      events.push({
+      emit({
         type: 'tool_result',
         tool: 'find_spots',
         ok: true,
@@ -224,7 +231,7 @@ export async function runPlanner(
       });
     }
     step(
-      events,
+      emit,
       'retrieve',
       'completed',
       `${retrieved.segments.length} segments, ${retrieved.spots.length} spots` +
@@ -238,7 +245,7 @@ export async function runPlanner(
     }
 
     // generate
-    step(events, 'generate_candidates', 'started');
+    step(emit, 'generate_candidates', 'started');
     const anchorPoints = isLoop ? await retrieveAnchorPoints(deps.db, scope) : [];
     // no-highway loops average backroad speeds — size clusters accordingly
     const sizingSpeed = params.avoid.highways ? 42 : 55;
@@ -252,10 +259,10 @@ export async function runPlanner(
       : generateAtoBCandidates(origin, destination!, retrieved.segments, retrieved.spots, {
           anchorSpots: retrieved.spots.length > 0,
         });
-    step(events, 'generate_candidates', 'completed', `${candidates.length} waypoint sets`);
+    step(emit, 'generate_candidates', 'completed', `${candidates.length} waypoint sets`);
 
     // route all candidates in PARALLEL (§27; failures drop, never crash the run)
-    step(events, 'route_candidates', 'started');
+    step(emit, 'route_candidates', 'started');
     const routeAll = async (cands: typeof candidates) =>
       (
         await Promise.all(
@@ -347,14 +354,14 @@ export async function runPlanner(
       }
     }
     step(
-      events,
+      emit,
       'route_candidates',
       'completed',
       `${routed.length} routable candidates${resizeNote}`,
     );
 
     // score (curvature measured on FINAL geometry) + diversify + validate
-    step(events, 'score_rank', 'started');
+    step(emit, 'score_rank', 'started');
     const durationFiltered = prefilterByDuration(
       routed,
       constraints.duration_target_s,
@@ -399,9 +406,9 @@ export async function runPlanner(
         (durOff ? DURATION_PRESENT_PENALTY : 0);
       return { r, curv, breakdown, presentKey };
     });
-    step(events, 'score_rank', 'completed', `${scored.length} scored`);
+    step(emit, 'score_rank', 'completed', `${scored.length} scored`);
 
-    step(events, 'diversify', 'started');
+    step(emit, 'diversify', 'started');
     const diversified = diversify(
       scored.map((s) => ({
         id: s.r.candidate.id,
@@ -410,9 +417,9 @@ export async function runPlanner(
         payload: s,
       })),
     );
-    step(events, 'diversify', 'completed', `${diversified.kept.length} distinct kept`);
+    step(emit, 'diversify', 'completed', `${diversified.kept.length} distinct kept`);
 
-    step(events, 'validate_route', 'started');
+    step(emit, 'validate_route', 'started');
     let feasibleThisRound = 0;
     for (const kept of diversified.kept) {
       const s = (kept as { payload: (typeof scored)[number] }).payload;
@@ -449,44 +456,44 @@ export async function runPlanner(
         };
       }
     }
-    step(events, 'validate_route', 'completed', `${feasibleThisRound} feasible`);
+    step(emit, 'validate_route', 'completed', `${feasibleThisRound} feasible`);
 
     if (best) break; // stopping condition: a feasible candidate exists (§3.6)
 
     // no feasible candidate — climb the ladder
-    step(events, 'self_correct', 'started');
+    step(emit, 'self_correct', 'started');
     const outcome = nextRelaxation(params);
     if (outcome.kind === 'redirect') {
-      step(events, 'self_correct', 'completed', 'ladder exhausted — redirect');
+      step(emit, 'self_correct', 'completed', 'ladder exhausted — redirect');
       result.status = 'redirect';
       result.disclosures = outcome.disclosures;
-      events.push({ type: 'done', status: 'unavailable' });
+      emit({ type: 'done', status: 'unavailable' });
       return result;
     }
     params = outcome.params;
-    step(events, 'self_correct', 'completed', params.disclosures[params.disclosures.length - 1]);
+    step(emit, 'self_correct', 'completed', params.disclosures[params.disclosures.length - 1]);
   }
 
   if (!best) {
     result.status = outOfBudget() ? 'unavailable' : 'redirect';
     result.disclosures = params.disclosures;
-    events.push({ type: 'done', status: 'unavailable' });
+    emit({ type: 'done', status: 'unavailable' });
     return result;
   }
 
   // --- enrich (elevation; honest null when unavailable) ---
-  step(events, 'enrich', 'started');
-  events.push({ type: 'tool_call', tool: 'get_elevation_profile' });
+  step(emit, 'enrich', 'started');
+  emit({ type: 'tool_call', tool: 'get_elevation_profile' });
   let climb: { climb_m: number } | null = null;
   try {
     const profile = await getElevationProfile(deps.valhallaUrl, best.routed.route.geometry);
     climb = profile ? { climb_m: profile.climb_m } : null;
-    events.push({ type: 'tool_result', tool: 'get_elevation_profile', ok: profile !== null });
+    emit({ type: 'tool_result', tool: 'get_elevation_profile', ok: profile !== null });
   } catch {
-    events.push({ type: 'tool_result', tool: 'get_elevation_profile', ok: false });
+    emit({ type: 'tool_result', tool: 'get_elevation_profile', ok: false });
   }
   step(
-    events,
+    emit,
     'enrich',
     'completed',
     climb ? `climb ${Math.round(climb.climb_m)} m` : 'no elevation',
@@ -501,7 +508,7 @@ export async function runPlanner(
   result.validation = best.validation;
   result.disclosures = params.disclosures;
   result.elevation = climb;
-  events.push({
+  emit({
     type: 'done',
     status:
       result.status === 'ok'

@@ -867,3 +867,73 @@ factuality gate added** (T09): the smoke now live-tests explanation + title/summ
 through the production client on pinned facts — template-fallback on a live run means the
 model failed grounding twice ⇒ red. Live evidence 2026-07-13: parse 0.939, both generation
 gates 'llm', spend $0.025 (caps $0.10 + $0.10).
+
+**SPK-13 PASSED (2026-07-13, M6-T02).** Least-privilege planner read path built and leak-tested.
+Migration 0005: `planner_find_curvy_roads` + `planner_find_spots` — SECURITY DEFINER, fixed
+search_path, EXECUTE revoked from PUBLIC, granted to anon/authenticated/service_role;
+`planner_find_spots` is scoped `WHERE source = 'osm'` IN THE SQL (spots carry no visibility
+column yet — user rows are simply never selectable through this path, whatever M8 policies
+say). Backend module `backend/src/db/planner_reads.ts` now owns every planner spatial read;
+`retrieve.ts` delegates. **Measure (as the real `anon` role via `set role anon`, the exact
+PostgREST mechanism): direct reads on routes/spots = 0 rows; INVOKER RPC = 0 rows; definer
+fns return public/OSM rows and ZERO private rows; positive control confirms the corpus still
+flows. 5/5 (`pnpm -C db test rls_planner`). Zero private leakage = PASS.**
+**Perf lesson (BD-45.2, kept here for the security record):** SECURITY DEFINER prevents SQL
+inlining; the first `language sql` version re-parsed the isochrone polygon PER ROW under a
+generic plan — canonical planner run 1.9 s → 48 s. Fixed by `language plpgsql` folding the
+geometry ONCE into a variable (measured back to 1.9 s, status ok). The planner e2e caught it;
+a 5-vertex bench rectangle had NOT (real Ω polygons have hundreds of vertices) — perf checks
+on spatial RPCs must use realistic geometry.
+
+**SPK-14 PASSED (2026-07-13, M6-T05).** Anonymous rate limiting on /plan: in-house
+sliding-window limiter (`backend/src/lib/rate_limit.ts`, zero new dependency), per-IP
+6/min + 30/hour AND per-session 3/min (x-session-id), both enforced, 429 + Retry-After in
+the consistent error shape. **Measure: abusive burst → 6/min pass, 7th blocked 429; demo
+cadence (12 plans at ~90 s spacing) → 0 blocked; per-session binds tighter than per-IP
+(4th same-session call 429 while a fresh session on the same IP passes). 5/5
+(`pnpm -C backend test plan-guards`). Both halves of the §21 measure = PASS.** Numbers are
+§91 "measured" tunables (ctor-injectable), not frozen; in-memory store is single-instance —
+a shared store is needed only if the backend ever replicates (§64), recorded limitation.
+
+**SPK-19 PASSED (2026-07-13, local-hardware caveat).** End-to-end /plan latency + cost
+envelope over the REAL production path (live local Valhalla + Supabase + LIVE Haiku parse +
+LIVE Sonnet explanation), n=12 briefs across the region (Hamilton/Guelph/Barrie/London/
+K-W/Elora/St. Jacobs/Orangeville/Stratford/Port Dover/Caledon/Cobourg), sequential =
+single-user interactive promise. **Measured: latency p50 9.1 s / p90 14.0 s / max 36.8 s;
+cost p50 0.75¢ / max 1.16¢; 12/12 returned real routes; 12/12 parser=llm; total spend
+$0.103. Bars (p50 < 15 s, p90 < 25 s, cost 1–3¢): PASS.** Caveats recorded: (a) dev-laptop
+Valhalla, not the CX23 VPS — SPK-04 showed the VPS is faster, but re-measure at M12 deploy
+before calling the production envelope final; (b) one max-tail run (36.8 s) exceeded the
+25 s wall-clock and returned best-so-far honestly — the budget mechanism, not a violation;
+(c) FR-264 session tool-cache (SHOULD) not built — the envelope passes without it; revisit
+only if VPS numbers regress.
+
+**BD-45 — M6 backend-vertical-slice build decisions (2026-07-13).** M6-T01…T06 complete;
+/plan streams a real, capped, cancellable, gracefully-degrading generation over HTTP.
+(1) **Zero new dependencies.** Supabase JWT verification is hand-built on `node:crypto`
+(ES256/RS256 via the project JWKS with kid-rotation refetch, raw r||s `ieee-p1363`
+signatures; optional HS256 legacy secret), the rate limiter is in-house, SSE is raw
+`reply.raw` writes. Three §5 Dependency Requests avoided; consistent with §43's
+"hand-built, transparent" posture. jose/supabase-js remain candidates for M8 if account
+flows outgrow this. (2) **Definer-fn inlining lesson** — see SPK-13 entry. (3) **Kill
+switch + cap semantics on /plan (FR-260..262):** kill switch → 503 `planner_disabled`
+(planner never invoked, zero spend); month spend ≥ $30 → 503 `spend_cap_reached`; both
+messages state what still works (§18). Logged-in reduced-quota rung lands with accounts
+(M8). (4) **FR-049 ledger:** `ai_generation_requests` (migration 0006, §47.1 fields +
+owner-only RLS + the deferred routes FK) written per generation — including failures —
+with cost = the request's ledger delta; `DbMonthLedger` primes the month base from the
+table at boot so cap accounting survives restarts (per-call rows stay in-memory: the guard
+needs sums; per-generation cost is the persistent record, FR-263). (5) **Cancellation:**
+disconnect watched on the SOCKET (IncomingMessage 'close' fires at body-consumed — a real
+bug the cancel test caught); abort feeds `PlannerDeps.signal`, checked at every budget
+seam, and explanation spend is skipped after abort. Verified: loop observes abort, zero
+explain calls after cancel. (6) **Client-supplied origin clears the §3.5 no-origin clarify
+case** (missing/clarification reconciled in the /plan merge; shape-contradiction clarify
+survives). Found by the degrade test. (7) **Clarify travels as an `error` event +
+`done:unavailable`** — the M0-T06 GenerationEvent union has no clarify member; adding one
+at M7 is additive if the UI wants a distinct state. (8) **runPlanner grew `onEvent` +
+`signal` seams** (buffered events array unchanged — additive). (9) **Trace discipline
+test-enforced:** every SSE frame in every test is parsed through GenerationEventSchema —
+an off-schema payload (or any raw-reasoning field) fails CI (Hard rule I). (10) Region
+bounds now parse the real `.poly` (ray-cast, any polygon) — rule K coords validation on
+/route, /match and /plan inputs. Suite: 286 tests green repo-wide.

@@ -8,12 +8,19 @@
  *            (currently 'food') are returned as `unavailableStopTypes` so the
  *            pipeline can disclose the gap honestly instead of faking coverage.
  *
- * Takes a pg Client so the planner runs on the server's least-privilege read path
- * (SPK-13 definer variants swap in pre-release without changing this module).
+ * Since M6-T02 every read goes through the SECURITY DEFINER planner path
+ * (db/planner_reads.ts, migration 0005 — SPK-13 PASSED): scoped to public/OSM
+ * data by construction, regardless of the connection's DB role.
  */
 
 import type { LineString, StopType } from '@shared/types';
 import type { Client } from 'pg';
+
+import {
+  plannerFindAnchorPoints,
+  plannerFindCurvyRoads,
+  plannerFindSpots,
+} from '../db/planner_reads';
 
 import { ringToGeoJsonPolygon, type Scope } from './scope';
 
@@ -80,25 +87,6 @@ export interface RetrievedCandidates {
   unavailableStopTypes: StopType[];
 }
 
-interface SegmentRow {
-  id: string;
-  osm_way_id: string;
-  name: string;
-  highway: string;
-  length_m: number;
-  curviness: number;
-  geometry: string; // GeoJSON text from st_asgeojson
-}
-
-interface SpotRow {
-  id: string;
-  name: string;
-  type: string;
-  lat: number;
-  lng: number;
-  source: string;
-}
-
 /**
  * Return-anchor material (SPK-15 run 7): centroids of ALL segments in Ω at ANY
  * curviness (θ = 0) — ordinary roads included, so loop returns can ride parallel
@@ -117,14 +105,12 @@ export async function retrieveAnchorPoints(
     // mid-vertex variant was tried (round 5) and REGRESSED: forcing interior
     // points creates in-and-back retraces when the through-path passes the
     // tips. Class exclusion lives INSIDE the RPC (BD-21), pre-limit.
-    const rows = await db.query<{ lat: number; lng: number }>(
-      `select st_y(st_pointn(geom, 1))::float8 as lat, st_x(st_pointn(geom, 1))::float8 as lng
-       from find_curvy_roads(p_west := 0, p_south := 0, p_east := 0, p_north := 0,
-                             p_polygon := $1::jsonb, p_min_curviness := 0, p_limit := $2,
-                             p_exclude_highway := $3)`,
-      [polygon, limit, EXCLUDED_HIGHWAY_CLASSES],
-    );
-    for (const r of rows.rows) points.push({ lat: Number(r.lat), lng: Number(r.lng) });
+    const rows = await plannerFindAnchorPoints(db, {
+      polygonGeoJson: polygon,
+      limit,
+      excludeHighway: EXCLUDED_HIGHWAY_CLASSES,
+    });
+    points.push(...rows);
   }
   return points;
 }
@@ -155,16 +141,13 @@ export async function retrieveCandidates(
   for (const ring of scope.rings) {
     const polygon = JSON.stringify(ringToGeoJsonPolygon(ring));
 
-    const seg = await db.query<SegmentRow>(
-      `select id::text, osm_way_id, name, highway, length_m,
-              circum_curvature_per_km as curviness,
-              st_asgeojson(geom) as geometry
-       from find_curvy_roads(p_west := 0, p_south := 0, p_east := 0, p_north := 0,
-                             p_polygon := $1::jsonb, p_min_curviness := $2, p_limit := $3,
-                             p_exclude_highway := $4)`,
-      [polygon, theta, segmentLimit, EXCLUDED_HIGHWAY_CLASSES],
-    );
-    for (const row of seg.rows) {
+    const seg = await plannerFindCurvyRoads(db, {
+      polygonGeoJson: polygon,
+      minCurviness: theta,
+      limit: segmentLimit,
+      excludeHighway: EXCLUDED_HIGHWAY_CLASSES,
+    });
+    for (const row of seg) {
       segments.set(row.id, {
         id: row.id,
         osmWayId: row.osm_way_id,
@@ -180,13 +163,14 @@ export async function retrieveCandidates(
       // origin point for nearest-ordering: the ring centroid (Ω is origin-centred)
       const cLat = ring.reduce((s, p) => s + p.lat, 0) / ring.length;
       const cLng = ring.reduce((s, p) => s + p.lng, 0) / ring.length;
-      const sp = await db.query<SpotRow>(
-        `select id::text, name, type, lat, lng, source
-         from find_spots(p_lat := $1, p_lng := $2, p_polygon := $3::jsonb,
-                         p_types := $4, p_limit := $5)`,
-        [cLat, cLng, polygon, spotTypes, spotLimit],
-      );
-      for (const row of sp.rows) {
+      const sp = await plannerFindSpots(db, {
+        lat: cLat,
+        lng: cLng,
+        polygonGeoJson: polygon,
+        types: spotTypes,
+        limit: spotLimit,
+      });
+      for (const row of sp) {
         spots.set(row.id, { ...row, lat: Number(row.lat), lng: Number(row.lng) });
       }
     }
