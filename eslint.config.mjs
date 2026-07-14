@@ -44,5 +44,23 @@ export default tseslint.config(
       'import/first': 'error',
     },
   },
+  {
+    // CommonJS tooling configs that Expo/React Native require as .js (metro,
+    // babel) — SPK-01/M7 RN toolchain files. They legitimately use module/
+    // require/__dirname; treat them as CJS with Node globals.
+    files: ['**/metro.config.js', '**/babel.config.js', '**/*.config.js'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        module: 'writable',
+        require: 'readonly',
+        __dirname: 'readonly',
+        process: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
   prettier,
 );

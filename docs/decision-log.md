@@ -937,3 +937,28 @@ test-enforced:** every SSE frame in every test is parsed through GenerationEvent
 an off-schema payload (or any raw-reasoning field) fails CI (Hard rule I). (10) Region
 bounds now parse the real `.poly` (ray-cast, any polygon) — rule K coords validation on
 /route, /match and /plan inputs. Suite: 286 tests green repo-wide.
+
+**BD-46 — SPK-01 scaffold + mobile-stack version corrections (2026-07-13).** The Expo dev-build
+spike's scaffold is built and locally verified (typecheck/lint/format/286 tests green;
+expo-doctor 19/19; `expo config` resolves on Node 24). The device build is the remaining
+[HUMAN] half (EAS cloud → iPhone; Android deferred until a device is on hand — the gate needs
+both). Building the scaffold surfaced three dependency-FACT errors in Dependency Verification
+§5/§122/§683 (reality contradicts the doc — a §4 report; NOT a design change, same library +
+architecture, so proceeding with the corrected facts):
+(1) **`@rnmapbox/maps` 11.20.1 does not exist.** npm's latest is **10.3.2** (no v11 at all).
+The doc's "v10 deprecated → use v11" is inverted. **Corrected pin: 10.3.2**, which supports the
+frozen stack (peer `react-native >=0.79`, `expo >=47`) and ships a Fabric `codegenConfig` →
+**New-Architecture-capable**, so SPK-01's core assertion is still reachable. Recommend editing
+§5/§122 to `@rnmapbox/maps 10.3.2 (native Mapbox Maps SDK v11)`.
+(2) **The Mapbox download token IS required** (§683's "no longer required" is wrong): the native
+SDK build fetches from Mapbox's private registry with the `sk.` DOWNLOADS:READ token. Wired as
+`RNMapboxMapsDownloadToken` from the `MAPBOX_DOWNLOAD_TOKEN` EAS secret — build-time only, never
+`EXPO_PUBLIC_`, never in the JS bundle (Hard rule H). The owner already holds this token (S0).
+(3) **New Arch is implicit in SDK 55** — `newArchEnabled` was removed from `ExpoConfig` (its
+absence IS the guarantee; the typecheck error confirmed it). And the MapLibre fallback's real
+name is `@maplibre/maplibre-react-native` (the doc's `maplibre-react-native` 404s).
+Also resolved in-build: React 19.2.0 / RN 0.83.6 / Expo 55.0.27 installed clean; a CJS eslint
+block was added for metro/babel configs (the RN lint work BD-4 deferred to SPK-01); the pnpm
+linker stays ISOLATED for now (root layout untouched, 286 tests safe) with `node-linker=hoisted`
+documented as the EAS fallback if the cloud build hits symlink resolution. These corrections are
+owner-ratifiable; none blocks the device build.
