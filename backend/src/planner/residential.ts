@@ -196,7 +196,10 @@ export function countryScoreOf(edges: TraceEdge[]): number | null {
     // default is mid-grade 0.5, meant for unknown *minor* tags) — motorway/
     // trunk/service are arterial-or-worse here
     const cls =
-      e.roadClass === 'motorway' || e.roadClass === 'trunk' || e.roadClass === 'service_other'
+      e.roadClass === 'motorway' ||
+      e.roadClass === 'trunk' ||
+      e.roadClass === 'service_other' ||
+      e.roadClass.endsWith('_link') // vocabulary-drift armor (FB-5): ramps = arterial
         ? 'primary'
         : e.roadClass;
     total += e.lengthM;

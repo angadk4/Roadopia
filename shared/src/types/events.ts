@@ -55,6 +55,17 @@ const RouteEventSchema = z.object({
   route: RouteSchema,
 });
 
+/**
+ * A feasible runner-up option (M7-T09/FB-4, additive per BD-45(7)): the
+ * diversify-kept candidates the presenter used to discard. Emitted after the
+ * best `route` frame, best-first; no elevation/LLM enrichment (cost stays on
+ * the recommended option).
+ */
+const AlternateEventSchema = z.object({
+  type: z.literal('alternate'),
+  route: RouteSchema,
+});
+
 const ExplanationEventSchema = z.object({
   type: z.literal('explanation'),
   explanation: ExplanationSchema,
@@ -87,6 +98,7 @@ export const GenerationEventSchema = z.discriminatedUnion('type', [
   ToolCallEventSchema,
   ToolResultEventSchema,
   RouteEventSchema,
+  AlternateEventSchema,
   ExplanationEventSchema,
   ErrorEventSchema,
   ConstraintsEventSchema,

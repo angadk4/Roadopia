@@ -104,9 +104,11 @@ describe('fetchMapRoutes', () => {
 });
 
 describe('fetchMapSpots', () => {
-  it('queries planner_find_spots around the centre with the egress budget', async () => {
+  it('queries map_spots (region-wide jsonb aggregate) with the safety-valve limit', async () => {
+    let url = '';
     let body: Record<string, unknown> = {};
-    const fetchImpl: FetchLike = (_u, init) => {
+    const fetchImpl: FetchLike = (u, init) => {
+      url = u;
       body = JSON.parse(init?.body ?? '{}') as Record<string, unknown>;
       return Promise.resolve(
         jsonRes(200, [
@@ -114,13 +116,11 @@ describe('fetchMapSpots', () => {
         ]),
       );
     };
-    const rows = await fetchMapSpots(
-      { url: 'http://sb', anonKey: 'k' },
-      { lat: 43.65, lng: -79.9 },
-      fetchImpl,
-    );
-    expect(body['p_lat']).toBe(43.65);
+    const rows = await fetchMapSpots({ url: 'http://sb', anonKey: 'k' }, fetchImpl);
+    expect(url).toBe('http://sb/rest/v1/rpc/map_spots');
+    // must exceed the region's 5,040 spots — a smaller value truncates the map
     expect(body['p_limit']).toBe(SPOTS_LIMIT);
+    expect(SPOTS_LIMIT).toBeGreaterThan(5040);
     expect(rows[0]!.type).toBe('coffee');
   });
 });

@@ -4,8 +4,16 @@
 real Android device** — land → plan → streamed generation → result → constraints →
 explanation → refine → reasoning view. No crash; §18 states behave. (Spec §69; SC-1.)
 
-**Status: OPEN — owner-run.** iOS first (device registered, SPK-01 passed); the Android
-render check (SPK-01's open half) rides this same checklist when a device exists.
+**Status: iOS FUNCTIONAL PASS (owner, 2026-07-16) — quality re-check owed after round 15;
+Android column OPEN.** The owner ran the full flow on the iPhone: every row FUNCTIONED
+(map, plan, stream, result, refine) and surfaced six quality findings — all fixed the same
+day (BD-56: region-wide spot pins via map_spots; class-aware curviness ends ramp-as-twisty,
+config v9 + eval report; "more backroads"/"more twisty" now steer the frozen presets;
+honest banner when a refine can't improve; Recommended/Option-2/3 alternates switcher;
+attribution strip layout). **Owner re-check:** reload the dev client (JS-only changes —
+no rebuild needed) and re-run rows 1–8 with an eye on: pins across the whole region,
+twisty asks landing on real curves (not ramps), the backroads refine visibly changing the
+route, the option switcher, and the attribution strip staying clear of the sheet.
 
 ---
 

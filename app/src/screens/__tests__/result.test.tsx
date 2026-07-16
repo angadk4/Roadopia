@@ -174,6 +174,97 @@ describe('ResultScreen', () => {
     expect(text).toContain('+7.8 km'); // 60.0→67.8
   });
 
+  it('alternates render a switcher; picking one swaps the route + hides best-only sections (FB-4)', () => {
+    let tree!: ReactTestRenderer;
+    const alt = { ...ROUTE, distance_m: 82500, duration_s: 5580, climb_m: null };
+    act(() => {
+      tree = create(
+        <ResultScreen
+          navigation={{ goBack: () => {}, navigate: () => {} }}
+          route={{
+            params: { route: ROUTE, alternates: [alt], explanation: EXPLANATION, done: 'ok' },
+          }}
+        />,
+      );
+    });
+    let text = textOf(tree);
+    expect(text).toContain('Recommended');
+    expect(text).toContain('Option 2');
+    expect(text).toContain('67.8 km'); // best shown by default
+    expect(text).toContain('sustained curves along the escarpment'); // explanation on best
+
+    // switch to Option 2
+    const chip = tree.root.findAll(
+      (n) =>
+        typeof n.props['onPress'] === 'function' &&
+        JSON.stringify(n.props['accessibilityState'] ?? {}).includes('false') &&
+        n.props['accessibilityRole'] === 'button',
+    )[0]!;
+    act(() => {
+      (chip.props['onPress'] as () => void)();
+    });
+    text = textOf(tree);
+    expect(text).toContain('82.5 km'); // the alternate's stats
+    expect(text).not.toContain('sustained curves along the escarpment'); // explanation is best-only
+    expect(text).toContain('runner-up from the same generation'); // honest note
+  });
+
+  it('without alternates: no switcher appears', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <ResultScreen
+          navigation={{ goBack: () => {}, navigate: () => {} }}
+          route={{ params: { route: ROUTE, explanation: null, done: 'ok' } }}
+        />,
+      );
+    });
+    expect(textOf(tree)).not.toContain('Recommended');
+  });
+
+  it('an unchanged refined result gets the honest quality-first banner (FB-3)', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <ResultScreen
+          navigation={{ goBack: () => {}, navigate: () => {} }}
+          route={{
+            params: {
+              route: ROUTE,
+              explanation: null,
+              done: 'ok',
+              previous: {
+                distance_m: ROUTE.distance_m,
+                duration_s: ROUTE.duration_s,
+                curviness: ROUTE.curviness,
+                climb_m: ROUTE.climb_m,
+              },
+            },
+          }}
+        />,
+      );
+    });
+    const text = textOf(tree);
+    expect(text).toContain("couldn't improve on the previous drive");
+    // and a MOVED result never shows it
+    act(() => {
+      tree = create(
+        <ResultScreen
+          navigation={{ goBack: () => {}, navigate: () => {} }}
+          route={{
+            params: {
+              route: ROUTE,
+              explanation: null,
+              done: 'ok',
+              previous: { distance_m: 60000, duration_s: 3600, curviness: 1.1, climb_m: 250 },
+            },
+          }}
+        />,
+      );
+    });
+    expect(textOf(tree)).not.toContain("couldn't improve on the previous drive");
+  });
+
   it('without constraints (older payloads): no refine affordance appears', () => {
     let tree!: ReactTestRenderer;
     act(() => {

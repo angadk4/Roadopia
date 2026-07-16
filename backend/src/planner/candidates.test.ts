@@ -166,6 +166,15 @@ describe('country-road preference + duration resize (BD-21, owner round 3)', () 
     expect(countryClassFactor('residential')).toBeLessThanOrEqual(0.15);
   });
 
+  it('ramps/links and motorway/trunk rank arterial-grade, never mid-grade (FB-5 hardening)', () => {
+    expect(countryClassFactor('motorway_link')).toBe(0.15);
+    expect(countryClassFactor('trunk_link')).toBe(0.15);
+    expect(countryClassFactor('primary_link')).toBe(0.15);
+    expect(countryClassFactor('motorway')).toBe(0.15);
+    expect(countryClassFactor('trunk')).toBe(0.15);
+    expect(countryClassFactor('road')).toBe(0.5); // unknown MINOR tags keep the default
+  });
+
   it('an identical cluster weighs less as secondary than as tertiary (class-scaled weight)', () => {
     const tert = [segment(at(0, 10), 3), segment(at(1, 10), 3)];
     const sec = [segment(at(90, 10), 3), segment(at(91, 10), 3)].map((s) => ({

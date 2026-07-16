@@ -54,6 +54,14 @@ function signed(value: number, unit: string, digits = 0): string {
   return `${sign}${Math.abs(value).toFixed(digits)}${unit}`;
 }
 
+/** True when a refined result didn't move on ANY visible dimension — the
+ *  honest-disclosure trigger (M7-T09: "make it longer keeps the route same"
+ *  said nothing; now the UI says so — quality-over-clock is a feature, silence
+ *  about it is not). */
+export function refineUnchanged(previous: RouteSummary, next: RouteSummary): boolean {
+  return compareSummaries(previous, next).every((r) => r.delta === 'no change');
+}
+
 /** Real, computed deltas between the previous and the refined route (FR-254). */
 export function compareSummaries(previous: RouteSummary, next: RouteSummary): CompareRow[] {
   const rows: CompareRow[] = [

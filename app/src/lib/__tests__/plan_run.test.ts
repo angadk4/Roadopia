@@ -37,6 +37,16 @@ describe('runReducer — timeline assembly', () => {
     expect(s.timeline).toEqual([{ kind: 'tool', tool: 'find_curvy_roads', ok: true, count: 212 }]);
   });
 
+  it('alternate frames accumulate best-first (FB-4)', () => {
+    const r1 = { distance_m: 1 } as never;
+    const r2 = { distance_m: 2 } as never;
+    const s = feed([
+      { type: 'alternate', route: r1 },
+      { type: 'alternate', route: r2 },
+    ]);
+    expect(s.alternates).toEqual([r1, r2]);
+  });
+
   it('route / explanation / error / done land in their slots', () => {
     const s = feed([
       { type: 'error', message: 'Where should the drive start?' },

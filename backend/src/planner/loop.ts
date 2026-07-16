@@ -11,7 +11,7 @@ import type { LatLng, RouteThroughOutput } from '@shared/types';
 
 import { haversineMeters } from '../../../data/curvature/geometry';
 import { routeThrough, type AutoCostingOptions } from '../valhalla/route';
-import { traceRoadClasses } from '../valhalla/trace';
+import { traceRoadClasses, type TraceResult } from '../valhalla/trace';
 
 import { countryClassFactor, type WaypointCandidate } from './candidates';
 import {
@@ -134,6 +134,9 @@ export interface AssembledLoop {
   /** Small closed circuits (crescent/block spins) outside the origin grace
    *  (round 8) — two-tier: assembly rejects ≥2, presentation demotes ≥1. */
   microloops: number;
+  /** Raw trace result for scoring's class-aware curvature (round 15/FB-5);
+   *  null = trace failed or not attempted (fail-open, tag-blind fallback). */
+  trace: TraceResult | null;
   accepted: boolean;
   rejectReasons: string[];
 }
@@ -227,9 +230,11 @@ export async function assembleLoop(
   let countryScore: number | null = null;
   let arterialRunM: number | null = null;
   let arterialRunMid: [number, number] | null = null;
+  let trace: TraceResult | null = null;
   if (rejectReasons.length === 0) {
     try {
-      const edges = await traceRoadClasses(baseUrl, route.geometry);
+      trace = await traceRoadClasses(baseUrl, route.geometry);
+      const edges = trace.edges;
       residentialShare = residentialShareOf(edges, route.geometry, origin);
       // round 8b: the absolute run (same edges, no extra call) — the share
       // scales with route length, a subdivision weave does not
@@ -250,6 +255,7 @@ export async function assembleLoop(
       countryScore = null;
       arterialRunM = null;
       arterialRunMid = null;
+      trace = null;
     }
   }
 
@@ -268,6 +274,7 @@ export async function assembleLoop(
     arterialRunM,
     arterialRunMid,
     microloops,
+    trace,
     accepted: rejectReasons.length === 0,
     rejectReasons,
   };

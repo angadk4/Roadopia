@@ -122,5 +122,6 @@ export function okPlannerResult(events: GenerationEvent[] = []): PlannerResult {
     events,
     elevation: { climb_m: 410 },
     iterations: 1,
+    alternates: [],
   };
 }

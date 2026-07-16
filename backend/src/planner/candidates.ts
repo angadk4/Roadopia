@@ -69,6 +69,7 @@ interface Cluster {
  * (retrieval excludes them); the low factors are defense-in-depth. M4 calibrates.
  */
 export function countryClassFactor(highway: string): number {
+  if (highway.endsWith('_link')) return 0.15; // ramps are arterial-grade, never country (FB-5)
   switch (highway) {
     case 'unclassified':
       return 1.0;
@@ -77,13 +78,15 @@ export function countryClassFactor(highway: string): number {
     case 'secondary':
       return 0.5; // round 4: arterials pushed down further ("even more country")
     case 'primary':
+    case 'motorway':
+    case 'trunk':
       return 0.15;
     case 'residential':
     case 'service':
     case 'living_street':
       return 0.15;
     default:
-      return 0.5;
+      return 0.5; // unknown MINOR tags only (corpus strips links/arterials)
   }
 }
 

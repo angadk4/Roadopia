@@ -50,6 +50,8 @@ export interface PlanRunState {
   phase: RunPhase;
   timeline: TimelineEntry[];
   route: Route | null;
+  /** Feasible runner-up options (FB-4) — best-first, no elevation/LLM enrich. */
+  alternates: Route[];
   explanation: Explanation | null;
   /** The effective running `c` (constraints event) — held client-side for
    *  conversational refinement (Spec §34). */
@@ -68,6 +70,7 @@ export const INITIAL_RUN: PlanRunState = {
   phase: 'streaming',
   timeline: [],
   route: null,
+  alternates: [],
   explanation: null,
   constraints: null,
   errorMessage: null,
@@ -131,6 +134,8 @@ function applyEvent(state: PlanRunState, event: GenerationEvent): PlanRunState {
     }
     case 'route':
       return { ...state, route: event.route };
+    case 'alternate':
+      return { ...state, alternates: [...state.alternates, event.route] };
     case 'constraints':
       return { ...state, constraints: event.constraints };
     case 'explanation':

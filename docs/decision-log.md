@@ -1181,3 +1181,43 @@ session-test tautology removed; stale rls_planner header corrected; data-schema 
 renamed to what it proves. 4 findings refuted with evidence (PlanStack remount concern,
 find_spots vacuity, SSE-transport-untested, map tap contracts). Post-fix: 401 tests green
 repo-wide; live E2E (full + cancel + refine) re-verified against the patched backend.
+
+**BD-56 — M7-T09 device-feedback round (round 15): all six owner findings mechanised and
+fixed (2026-07-16).** The iPhone hero-flow run WORKED end-to-end (M7-T09 iOS functional
+pass) and surfaced six quality problems; each was traced to its mechanism before fixing:
+(1) **Spot pins only near the lakeshore** — the data was region-wide (5,040 OSM spots); the
+app asked planner_find_spots for the nearest 1,500 to a centre landing on the Oakville
+shore (1,500th-nearest = 22.8 km), AND every row-returning path is capped by PostgREST
+max-rows (1,000/response). Fixed with **migration 0008 map_spots()** — ONE jsonb aggregate
+(cap-proof), id-ordered (spatially unbiased), SECURITY INVOKER (0007 RLS binds; OSM-only
+re-tested). Live: 5,040 rows, London→Kawarthas extent, 653 KB; spots now load in parallel
+with routes. Viewport-scoped loading recorded as the M8 egress follow-up.
+(2) **"Highway ramps count as twisty" — CONFIRMED DEFECT, fixed with eval evidence**: the
+route-level curviness was tag-blind while the corpus always excluded junction geometry
+(§12.1). `measureCurvatureClassAware` now drops ramp/turn-channel/roundabout/motorway/trunk
+edges using the trace the residential gate already fetches (ZERO extra Valhalla calls) and
+measures kept runs in isolation; tag-blind fallback on trace failure/A→B. Config
+**frozen-m4t12-v8 → v9** (formula C7/θ/weights untouched — only the measured domain
+narrowed); **48-brief VAL: AC passes 10/48 → 10/48, zero flips; curv mean 1.069→1.036;
+3 bests changed incl. Collingwood 2h-twisty honest-curv 0.45→0.87 (fake-ramp winner
+dethroned)** — eval/reports/curvature-class-aware.md; OWNER RATIFICATION REQUESTED.
+Plus `_link` vocabulary armor in countryScoreOf/countryClassFactor (inert, tested).
+(3) **"More backroads changes nothing"** — the phrase wasn't recognized; now
+backroads/country-roads/rural → the FROZEN backroads preset (explicit ask, may override) and
+twisty phrases ALSO steer the twisty preset when no chip was chosen (BD-30 vectors only —
+no new science, no sliders). LIVE: "more twisty more backroads" → refine-merge, preset
+backroads, twistiness 2.01→2.74. (4) **"Make it longer keeps the route the same"** — traced
+to selection (clean-short beats dirty-long lexicographically = BD-42 quality-over-clock;
+never-empty fallbacks); per owner decision the rule STAYS and the app now DISCLOSES: an
+unchanged refined result shows the honest quality-first banner. Reopening "longer" science
+was declined this round (recorded as an M4-reopen candidate). (5) **"Same prompt → same
+route"** — deterministic by design; the discarded diversify-kept pool now ships as
+**alternates** (additive `alternate` SSE frames after `route`; ≤3, presentKey order, no
+enrich/LLM spend — climb null, explanation stays best-only) with a Recommended/Option-2/3
+switcher on Result. LIVE: London 2h loop → 3 alternates (thin funnel pools may yield 0 —
+honest). (6) **Attribution collision** — SDK logo/ⓘ positioned deliberately (bottom-left),
+our OSM credit in a legible pill bottom-right, detail sheet clears the strip (FR-014 never
+covered). Also recorded: u-turn single-offence pass-through (whole-pool-dirty condition)
+stays a known structural M4-reopen candidate. Totals this round: 420 tests green
+(app 110 · backend 214 · db 30 · shared 23 · eval 26 · data 17); live E2E full/cancel/
+refine/alternates green.

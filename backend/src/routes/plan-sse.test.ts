@@ -81,6 +81,47 @@ describe('POST /plan SSE (M6-T04)', () => {
     }
   });
 
+  it('alternate frames follow the route frame, wire-schema-valid (FB-4)', async () => {
+    const base = okPlannerResult();
+    const { deps } = baseDeps({
+      planFn: async () => ({
+        ...base,
+        alternates: [
+          {
+            route: ROUTE_FIXTURE,
+            curviness: 1.1,
+            validation: base.validation!,
+            presentKey: 0.5,
+          },
+          {
+            route: ROUTE_FIXTURE,
+            curviness: 0.9,
+            validation: base.validation!,
+            presentKey: 0.4,
+          },
+        ],
+      }),
+    });
+    const app = buildServer({ plan: deps as never });
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, {
+        brief: '90 minute twisty loop',
+        origin: { lat: 43.2557, lng: -79.8711 },
+      });
+      const types = run.events.map((e) => e.type);
+      const routeIdx = types.indexOf('route');
+      expect(types.filter((t) => t === 'alternate')).toHaveLength(2);
+      expect(types.indexOf('alternate')).toBeGreaterThan(routeIdx);
+      const alt = run.events.find((e) => e.type === 'alternate');
+      // schema-validated by postPlan already; pin the honesty details:
+      expect(alt?.type === 'alternate' && alt.route.climb_m).toBeNull(); // enrich is best-only
+      expect(alt?.type === 'alternate' && alt.route.curviness).toBe(1.1);
+    } finally {
+      await close();
+    }
+  });
+
   it('trace frames carry NO reasoning-like field at any depth (M7-T06 / Hard rule I / RG-5)', async () => {
     const { deps } = baseDeps({
       planFn: async (_c: unknown, d: PlannerDeps) => {

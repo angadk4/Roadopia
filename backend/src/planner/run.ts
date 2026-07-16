@@ -21,10 +21,11 @@ import { resolveDisposition } from '@shared/types';
 import type { Client } from 'pg';
 
 import { getElevationProfile } from '../valhalla/elevation';
+import type { TraceResult } from '../valhalla/trace';
 
 import { assembleAtoB } from './atob';
 import { generateAtoBCandidates, generateLoopCandidates, resizedSpeed } from './candidates';
-import { measureCurvature } from './curvature';
+import { measureCurvatureClassAware } from './curvature';
 import { diversify, prefilterByDuration } from './diversify';
 import {
   assembleLoopWithRepair,
@@ -74,6 +75,17 @@ export interface PlannerResult {
   events: GenerationEvent[];
   elevation: { climb_m: number } | null;
   iterations: number;
+  /** Feasible, distinct runner-up candidates (M7-T09/FB-4 "another option") —
+   *  the diversify-kept pool the presenter used to discard. Deterministic
+   *  order (presentKey desc); no enrich/LLM spend on these. */
+  alternates: PlannerAlternate[];
+}
+
+export interface PlannerAlternate {
+  route: RouteThroughOutput;
+  curviness: number;
+  validation: ValidationVerdict;
+  presentKey: number;
 }
 
 function step(
@@ -132,6 +144,7 @@ export async function runPlanner(
     events,
     elevation: null,
     iterations: 0,
+    alternates: [],
   };
 
   // --- disposition (§3.5) ---
@@ -292,6 +305,7 @@ export async function runPlanner(
                   countryScore: a.countryScore,
                   microloops: a.microloops,
                   closureM: a.closureM as number | null,
+                  trace: a.trace,
                   assemblyAccepted: a.accepted,
                 };
               }
@@ -313,6 +327,7 @@ export async function runPlanner(
                 countryScore: null as number | null,
                 microloops: 0,
                 closureM: null as number | null,
+                trace: null as TraceResult | null, // A→B: tag-blind fallback (FB-5)
                 assemblyAccepted: a.accepted,
               };
             } catch {
@@ -368,7 +383,7 @@ export async function runPlanner(
       (r) => r.route.duration_s,
     );
     const scored = durationFiltered.map((r) => {
-      const curv = measureCurvature(r.route.geometry);
+      const curv = measureCurvatureClassAware(r.route.geometry, r.trace); // round 15/FB-5
       const spotCount = r.candidate.spotIds.length;
       const breakdown = scoreCandidate(
         {
@@ -421,6 +436,7 @@ export async function runPlanner(
 
     step(emit, 'validate_route', 'started');
     let feasibleThisRound = 0;
+    const feasibles: PlannerAlternate[] = []; // this iteration's runner-up pool (FB-4)
     for (const kept of diversified.kept) {
       const s = (kept as { payload: (typeof scored)[number] }).payload;
       const verdict = validateCandidate(
@@ -441,6 +457,12 @@ export async function runPlanner(
       );
       if (!verdict.feasible) continue;
       feasibleThisRound++;
+      feasibles.push({
+        route: s.r.route,
+        curviness: s.curv.curviness,
+        validation: verdict,
+        presentKey: s.presentKey,
+      });
       if (!best || s.presentKey > bestPresentKey) {
         bestPresentKey = s.presentKey;
         best = {
@@ -458,7 +480,16 @@ export async function runPlanner(
     }
     step(emit, 'validate_route', 'completed', `${feasibleThisRound} feasible`);
 
-    if (best) break; // stopping condition: a feasible candidate exists (§3.6)
+    if (best) {
+      // runner-up options: the same diversify-kept feasible pool, minus the
+      // best (identity — same objects), deterministic presentKey order
+      const chosen = best.routed.route;
+      result.alternates = feasibles
+        .filter((f) => f.route !== chosen)
+        .sort((a, b) => b.presentKey - a.presentKey)
+        .slice(0, 3);
+      break; // stopping condition: a feasible candidate exists (§3.6)
+    }
 
     // no feasible candidate — climb the ladder
     step(emit, 'self_correct', 'started');

@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { TraceEdge } from '../valhalla/trace';
 
-import { maxResidentialRunInfo, maxResidentialRunM, residentialShareOf } from './residential';
+import {
+  countryScoreOf,
+  maxResidentialRunInfo,
+  maxResidentialRunM,
+  residentialShareOf,
+} from './residential';
 
 /**
  * Round 7 — residential exposure math. Geometry: a straight west→east line at
@@ -108,5 +113,17 @@ describe('maxResidentialRunM (owner round 8b: Bolton subdivision weave)', () => 
 
   it('returns 0 on empty inputs', () => {
     expect(maxResidentialRunM([], LINE, ORIGIN)).toBe(0);
+  });
+});
+
+describe('countryScoreOf — _link vocabulary armor (FB-5 hardening)', () => {
+  it('treats any *_link edge as arterial (0.15), never mid-grade', () => {
+    // all-link route → pure arterial score
+    const linkOnly = countryScoreOf([edge('primary_link', 1000)]);
+    const primaryOnly = countryScoreOf([edge('primary', 1000)]);
+    expect(linkOnly).toBe(primaryOnly); // remapped to primary's 0.15
+    // and clearly below a mid-grade unknown tag
+    const unknownMinor = countryScoreOf([edge('road', 1000)]);
+    expect(linkOnly!).toBeLessThan(unknownMinor!);
   });
 });

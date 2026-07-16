@@ -124,6 +124,23 @@ describe('0007 public read floor (M7-T02)', () => {
     expect(rows.some((r) => r.id === userSpotId)).toBe(false);
   });
 
+  it('map_spots serves the WHOLE region to anon as one jsonb aggregate — OSM only (FB-1)', async (ctx) => {
+    if (!db) return ctx.skip();
+    const rows = await asAnon<{ map_spots: unknown }>(`select map_spots(p_limit := 6000)`);
+    const spots = rows[0]!.map_spots as Array<{
+      id: string;
+      lat: number;
+      lng: number;
+      source: string;
+    }>;
+    expect(spots.length).toBeGreaterThan(4000); // all 5,040 OSM spots, not a 1,000-cap disc
+    const lngs = spots.map((s) => s.lng);
+    expect(Math.min(...lngs)).toBeLessThan(-81); // London side
+    expect(Math.max(...lngs)).toBeGreaterThan(-78); // Kawarthas side
+    expect(spots.every((s) => s.source === 'osm')).toBe(true); // RLS binds (invoker)
+    expect(spots.some((s) => s.id === userSpotId)).toBe(false); // zero private leakage
+  });
+
   it('anon still cannot write routes (no insert policy)', async (ctx) => {
     if (!db) return ctx.skip();
     await expect(

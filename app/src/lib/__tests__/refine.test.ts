@@ -2,7 +2,7 @@ import { validateParsedConstraints } from '@shared/types';
 import { describe, expect, it } from 'vitest';
 
 import { INITIAL_RUN, runReducer } from '../plan_run';
-import { buildRefineRequest, compareSummaries, summarizeRoute } from '../refine';
+import { buildRefineRequest, compareSummaries, refineUnchanged, summarizeRoute } from '../refine';
 
 const CONSTRAINTS = validateParsedConstraints({
   origin: { lat: 43.26, lng: -79.87 },
@@ -70,6 +70,20 @@ describe('constraints event → held running c', () => {
       event: { type: 'constraints', constraints: CONSTRAINTS },
     });
     expect(s.constraints).toEqual(CONSTRAINTS);
+  });
+});
+
+describe('refineUnchanged (honesty trigger)', () => {
+  const prev = { distance_m: 68000, duration_s: 4500, curviness: 1.4, climb_m: 300 };
+
+  it('true when nothing visibly moved (incl. sub-display-precision wiggle)', () => {
+    expect(refineUnchanged(prev, { ...prev })).toBe(true);
+    expect(refineUnchanged(prev, { ...prev, distance_m: 68010, curviness: 1.42 })).toBe(true);
+  });
+
+  it('false when any visible dimension moved', () => {
+    expect(refineUnchanged(prev, { ...prev, duration_s: 5580 })).toBe(false);
+    expect(refineUnchanged(prev, { ...prev, curviness: 1.7 })).toBe(false);
   });
 });
 

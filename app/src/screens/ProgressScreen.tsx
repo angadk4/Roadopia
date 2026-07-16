@@ -106,6 +106,7 @@ export default function ProgressScreen(props: ProgressScreenProps): ReactElement
     if (state.phase === 'succeeded' && state.route) {
       props.navigation.replace('Result', {
         route: state.route,
+        alternates: state.alternates,
         explanation: state.explanation,
         done: state.done,
         timeline: state.timeline,

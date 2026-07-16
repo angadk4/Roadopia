@@ -144,20 +144,22 @@ export const SpotRowSchema = z.object({
 });
 export type SpotRow = z.infer<typeof SpotRowSchema>;
 
-/** Spot budget per load — clusters render identically past this density (§44). */
-export const SPOTS_LIMIT = 1500;
+/**
+ * Spot budget per load — a safety valve ABOVE the region's OSM spot count
+ * (5,040 as of region v5), never a truncator. M7-T09 finding: every
+ * row-returning read is capped by PostgREST max-rows (1,000/response) AND
+ * planner_find_spots is nearest-first, so pins truncated to a 22.8 km disc
+ * around the Oakville shore. map_spots (migration 0008) returns ONE jsonb
+ * aggregate — cap-proof, spatially unbiased. ~0.65 MB once per launch;
+ * viewport-scoped loading is the M8 egress follow-up (§44).
+ */
+export const SPOTS_LIMIT = 6000;
 
 export async function fetchMapSpots(
   cfg: SupabaseConfig,
-  center: LatLng,
   fetchImpl?: FetchLike,
 ): Promise<SpotRow[]> {
-  const raw = await rpc(
-    cfg,
-    'planner_find_spots',
-    { p_lat: center.lat, p_lng: center.lng, p_radius_m: 250_000, p_limit: SPOTS_LIMIT },
-    fetchImpl,
-  );
+  const raw = await rpc(cfg, 'map_spots', { p_limit: SPOTS_LIMIT }, fetchImpl);
   const parsed = z.array(SpotRowSchema).safeParse(raw);
   if (!parsed.success) throw new DataError('Spot data did not match the expected shape.');
   return parsed.data;

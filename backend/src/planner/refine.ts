@@ -38,6 +38,11 @@ export interface ConstraintDelta {
   setAvoid: Partial<ParsedConstraints['avoid']>;
   twistinessDelta?: number;
   scenicDelta?: number;
+  /** Preset the follow-up asks for (FROZEN BD-30 vectors — the real scoring
+   *  lever a soft-pref nudge alone lacks). 'explicit' presets ('more
+   *  backroads') always apply; 'if_unset' ('more twisty') never clobbers a
+   *  chip the user chose. */
+  setPreset?: { preset: ParsedConstraints['preset']; mode: 'explicit' | 'if_unset' };
   /** Nothing matched at all (honest "I couldn't apply that" path). */
   recognized: boolean;
 }
@@ -126,9 +131,19 @@ export function parseFollowUp(text: string): ConstraintDelta {
   // soft-preference nudges
   if (/\b(?:more\s+twisty|twistier|more\s+curves)\b/i.test(text)) {
     delta.twistinessDelta = REFINE_PREF_STEP;
+    // pref alone only re-ranks the pool weakly (M7-T09 finding) — also steer
+    // the FROZEN twisty preset vector, but never clobber an explicit chip
+    delta.setPreset = { preset: 'twisty', mode: 'if_unset' };
     delta.recognized = true;
   } else if (/\b(?:less\s+twisty|straighter|fewer\s+curves|more\s+relaxed)\b/i.test(text)) {
     delta.twistinessDelta = -REFINE_PREF_STEP;
+    delta.recognized = true;
+  }
+
+  // "more backroads" / "country roads" / "rural" — an explicit ask for the
+  // FROZEN backroads preset (M7-T09: this phrase was silently dropped before)
+  if (/\bback\s*roads?\b|\bcountry\s+roads?\b|\brural\b/i.test(text)) {
+    delta.setPreset = { preset: 'backroads', mode: 'explicit' };
     delta.recognized = true;
   }
   if (/\bmore\s+scenic\b/i.test(text)) {
@@ -193,6 +208,14 @@ export function mergeConstraints(c: ParsedConstraints, delta: ConstraintDelta): 
     if (merged.avoid[key] !== val) {
       merged.avoid[key] = val;
       changes.push(val ? `avoid ${key}` : `avoid ${key} lifted`);
+    }
+  }
+
+  if (delta.setPreset !== undefined) {
+    const apply = delta.setPreset.mode === 'explicit' || merged.preset === null;
+    if (apply && merged.preset !== delta.setPreset.preset) {
+      merged.preset = delta.setPreset.preset;
+      changes.push(`preset → ${String(delta.setPreset.preset)}`);
     }
   }
 

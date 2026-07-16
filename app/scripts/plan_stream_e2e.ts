@@ -20,6 +20,7 @@ async function fullRun(): Promise<void> {
   const seen: string[] = [];
   let routeKm = 0;
   let routeMin = 0;
+  let alternates = 0;
   let explanation = '';
   const t0 = Date.now();
   const result = await streamPlan(
@@ -41,6 +42,8 @@ async function fullRun(): Promise<void> {
           routeKm = e.route.distance_m / 1000;
           routeMin = e.route.duration_s / 60;
           seen.push('ROUTE');
+        } else if (e.type === 'alternate') {
+          alternates += 1;
         } else if (e.type === 'explanation') {
           explanation = e.explanation.text.slice(0, 110);
           seen.push('EXPLANATION');
@@ -52,7 +55,13 @@ async function fullRun(): Promise<void> {
   console.log('events:', seen.length, '| wall:', ((Date.now() - t0) / 1000).toFixed(1) + 's');
   console.log('first 6:', seen.slice(0, 6).join(' | '));
   console.log('last 4 :', seen.slice(-4).join(' | '));
-  console.log('route  :', routeKm.toFixed(1) + ' km', '~' + Math.round(routeMin) + ' min');
+  console.log(
+    'route  :',
+    routeKm.toFixed(1) + ' km',
+    '~' + Math.round(routeMin) + ' min',
+    '| alternates:',
+    alternates,
+  );
   console.log('explain:', explanation);
   console.log('result :', JSON.stringify(result));
 }
@@ -88,6 +97,7 @@ async function cancelRun(): Promise<void> {
 async function refineRun(): Promise<void> {
   let constraints: unknown = null;
   let firstDuration = 0;
+  let firstCurv = 0;
   await streamPlan(
     { brief: '60 minute twisty loop', origin: { lat: 43.2557, lng: -79.8711 } },
     {
@@ -96,15 +106,20 @@ async function refineRun(): Promise<void> {
       fetchImpl,
       onEvent: (e) => {
         if (e.type === 'constraints') constraints = e.constraints;
-        if (e.type === 'route') firstDuration = e.route.duration_s;
+        if (e.type === 'route') {
+          firstDuration = e.route.duration_s;
+          firstCurv = e.route.curviness;
+        }
       },
     },
   );
   if (!constraints) throw new Error('no constraints event arrived');
   let secondDuration = 0;
+  let secondCurv = 0;
+  let preset = '';
   let parseDetail = '';
   const result = await streamPlan(
-    { brief: 'make it longer', constraints, followUp: 'make it longer' },
+    { brief: 'more twisty more backroads', constraints, followUp: 'more twisty more backroads' },
     {
       baseUrl: BASE,
       sessionId: 'e2e-refine',
@@ -112,16 +127,25 @@ async function refineRun(): Promise<void> {
       onEvent: (e) => {
         if (e.type === 'step' && e.step === 'parse' && e.status === 'completed')
           parseDetail = e.detail ?? '';
-        if (e.type === 'route') secondDuration = e.route.duration_s;
+        if (e.type === 'constraints')
+          preset = String((e.constraints as { preset?: string | null }).preset ?? 'null');
+        if (e.type === 'route') {
+          secondDuration = e.route.duration_s;
+          secondCurv = e.route.curviness;
+        }
       },
     },
   );
-  console.log('--- REFINE RUN ---');
-  console.log('parse:', parseDetail, '| done:', result.done);
+  console.log('--- REFINE RUN (more twisty more backroads) ---');
+  console.log('parse:', parseDetail, '| done:', result.done, '| merged preset:', preset);
   console.log(
     'duration:',
     Math.round(firstDuration / 60) + ' min →',
     Math.round(secondDuration / 60) + ' min',
+    '| twistiness:',
+    firstCurv.toFixed(2),
+    '→',
+    secondCurv.toFixed(2),
   );
 }
 

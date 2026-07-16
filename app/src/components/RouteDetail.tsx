@@ -92,6 +92,8 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
           style={styles.map}
           styleURL={themeName === 'dark' ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light}
           scaleBarEnabled={false}
+          logoPosition={{ bottom: 4, left: 6 }}
+          attributionPosition={{ bottom: 4, left: 92 }}
         >
           {bounds && (
             <Camera
@@ -123,9 +125,14 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
             />
           </ShapeSource>
         </MapView>
-        <Text style={[styles.attr, { color: colors.textMuted }]}>
-          © OpenStreetMap contributors · © Mapbox
-        </Text>
+        <View
+          pointerEvents="none"
+          style={[styles.attrPill, { backgroundColor: colors.surfaceRaised + 'CC' }]}
+        >
+          <Text style={[styles.attr, { color: colors.textMuted }]}>
+            © OpenStreetMap contributors · © Mapbox
+          </Text>
+        </View>
       </View>
 
       {/* honest status banner (§18 copy) */}
@@ -244,7 +251,15 @@ const styles = StyleSheet.create({
   root: { gap: spacing.lg },
   mapWrap: { height: 260, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1 },
   map: { flex: 1 },
-  attr: { position: 'absolute', left: spacing.sm, bottom: spacing.xs, fontSize: 9 },
+  attrPill: {
+    position: 'absolute',
+    right: spacing.xs,
+    bottom: spacing.xs,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  attr: { fontSize: 9 },
   banner: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md },
   bannerText: { ...font.body },
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },

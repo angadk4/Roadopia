@@ -29,7 +29,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import '../lib/mapbox'; // side-effect: pk. token set before MapView mounts
 import {
-  boundsCenter,
   fetchMapRoutes,
   fetchMapSpots,
   routesBounds,
@@ -73,7 +72,7 @@ const SPOT_COLORS: [string, string, ...string[]] = [
 export interface MapHomeProps {
   /** Injectable loaders for tests; default to the live Supabase reads. */
   loadRoutes?: (cfg: SupabaseConfig) => Promise<MapRouteRow[]>;
-  loadSpots?: (cfg: SupabaseConfig, center: { lat: number; lng: number }) => Promise<SpotRow[]>;
+  loadSpots?: (cfg: SupabaseConfig) => Promise<SpotRow[]>;
 }
 
 export default function MapHome(props: MapHomeProps): ReactElement {
@@ -89,17 +88,13 @@ export default function MapHome(props: MapHomeProps): ReactElement {
     const cfg = getSupabaseConfig();
     setRoutes({ phase: 'loading' });
     loadRoutes(cfg)
-      .then((rows) => {
-        setRoutes({ phase: 'loaded', rows });
-        const b = routesBounds(rows);
-        if (b) {
-          // Spot pins are enrichment — their failure never blocks the map (§18).
-          loadSpots(cfg, boundsCenter(b))
-            .then(setSpots)
-            .catch(() => {});
-        }
-      })
+      .then((rows) => setRoutes({ phase: 'loaded', rows }))
       .catch(() => setRoutes({ phase: 'error' }));
+    // Spot pins load in parallel (region-wide via map_spots — FB-1); their
+    // failure is enrichment-only and never blocks the map (§18).
+    loadSpots(cfg)
+      .then(setSpots)
+      .catch(() => {});
   }, [loadRoutes, loadSpots]);
 
   useEffect(() => {
@@ -156,6 +151,8 @@ export default function MapHome(props: MapHomeProps): ReactElement {
         style={styles.map}
         styleURL={themeName === 'dark' ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light}
         scaleBarEnabled={false}
+        logoPosition={{ bottom: 6, left: 8 }}
+        attributionPosition={{ bottom: 6, left: 100 }}
       >
         {bounds && (
           <Camera
@@ -248,11 +245,15 @@ export default function MapHome(props: MapHomeProps): ReactElement {
         )}
       </MapView>
 
-      {/* attribution — always visible (FR-014; Mapbox logo rendered by the SDK) */}
+      {/* attribution — always visible (FR-014). One deliberate bottom strip:
+          SDK logo + ⓘ live bottom-left (positioned above); our OSM credit sits
+          bottom-right in a legible pill. The detail sheet clears the strip. */}
       <View pointerEvents="none" style={styles.attrWrap}>
-        <Text style={[styles.attr, { color: colors.textMuted }]}>
-          © OpenStreetMap contributors · © Mapbox
-        </Text>
+        <View style={[styles.attrPill, { backgroundColor: colors.surfaceRaised + 'CC' }]}>
+          <Text style={[styles.attr, { color: colors.textMuted }]}>
+            © OpenStreetMap contributors · © Mapbox
+          </Text>
+        </View>
       </View>
 
       {routes.phase === 'loading' && (
@@ -322,7 +323,12 @@ export default function MapHome(props: MapHomeProps): ReactElement {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   map: { flex: 1 },
-  attrWrap: { position: 'absolute', left: spacing.sm, bottom: spacing.sm },
+  attrWrap: { position: 'absolute', right: spacing.sm, bottom: spacing.sm },
+  attrPill: {
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
   attr: { ...font.caption, fontSize: 10 },
   banner: {
     position: 'absolute',
@@ -346,7 +352,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: spacing.md,
     right: spacing.md,
-    bottom: spacing.xl,
+    bottom: 40, // clears the attribution strip (FR-014: never covered)
     borderWidth: 1,
     borderRadius: radius.lg,
     padding: spacing.lg,

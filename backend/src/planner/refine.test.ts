@@ -83,6 +83,34 @@ describe('refine merge (M5-T06, RF6 rules)', () => {
     expect(merged.avoid.unpaved).toBe(true); // other hard avoids persist
   });
 
+  it('"more backroads" sets the FROZEN backroads preset - explicit ask overrides (M7-T09/FB-3)', () => {
+    const { merged, changes, recognized } = refineConstraints(BASE, 'more backroads please');
+    expect(recognized).toBe(true);
+    expect(merged.preset).toBe('backroads');
+    expect(changes).toContain('preset → backroads');
+    expect(hardSet(merged)).toEqual(hardSet(BASE)); // hard constraints untouched
+    // explicit ask overrides an existing preset
+    const withPreset = { ...structuredClone(BASE), preset: 'chill' as const };
+    expect(refineConstraints(withPreset, 'country roads').merged.preset).toBe('backroads');
+  });
+
+  it('"more twisty" steers the twisty preset ONLY when no chip was chosen', () => {
+    const { merged } = refineConstraints(BASE, 'more twisty');
+    expect(merged.preset).toBe('twisty'); // BASE has preset null
+    expect(merged.twistiness_pref).toBeCloseTo(0.9); // nudge still applies
+    const withChip = { ...structuredClone(BASE), preset: 'chill' as const };
+    const kept = refineConstraints(withChip, 'more twisty');
+    expect(kept.merged.preset).toBe('chill'); // never clobbers the user's chip
+    expect(kept.merged.twistiness_pref).toBeCloseTo(0.9);
+  });
+
+  it('"more twisty more backroads": backroads (explicit) wins the preset; pref nudge kept', () => {
+    const { merged, changes } = refineConstraints(BASE, 'more twisty more backroads');
+    expect(merged.preset).toBe('backroads');
+    expect(merged.twistiness_pref).toBeCloseTo(0.9);
+    expect(changes).toContain('preset → backroads');
+  });
+
   it('unrecognized follow-up → recognized:false, constraints unchanged (no guess)', () => {
     const out = refineConstraints(BASE, 'hmm what about vibes');
     expect(out.recognized).toBe(false);

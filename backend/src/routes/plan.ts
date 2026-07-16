@@ -165,6 +165,40 @@ function routePayload(
   };
 }
 
+/** Runner-up payload (FB-4): same wire shape as the best route, but no
+ *  elevation (enrich runs best-only) — climb_m is honestly null. */
+function alternatePayload(
+  constraints: ParsedConstraints,
+  alt: PlannerResult['alternates'][number],
+  generationRequestId: string | null,
+): Route {
+  return {
+    geometry: alt.route.geometry,
+    geometry_simplified: null,
+    bbox: null,
+    is_loop: constraints.shape === 'loop',
+    waypoints: [],
+    distance_m: alt.route.distance_m,
+    duration_s: alt.route.duration_s,
+    curviness: alt.curviness,
+    elevation_profile: null,
+    climb_m: null,
+    highway_flag: alt.route.has_highway,
+    toll_flag: alt.route.has_toll,
+    ferry_flag: alt.route.has_ferry,
+    unpaved_flag: alt.route.has_unpaved,
+    character_tags: constraints.character,
+    intensity: constraints.intensity ?? 'moderate',
+    free_tags: [],
+    visibility: 'private',
+    owner_id: null,
+    origin_type: 'ai',
+    forked_from: null,
+    generation_request_id: generationRequestId,
+    satisfied_constraints: alt.validation.results,
+  };
+}
+
 const FRIENDLY: Record<string, string> = {
   refused:
     'Roadopia plans enjoyable drives, not fast ones — try describing the kind of roads you want instead.',
@@ -491,6 +525,12 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
         });
 
         sse({ type: 'route', route: routePayload(constraints, result, generationRequestId) });
+        for (const alt of result.alternates) {
+          sse({
+            type: 'alternate',
+            route: alternatePayload(constraints, alt, generationRequestId),
+          });
+        }
         if (explanationText) sse({ type: 'explanation', explanation: explanationText });
         sse({
           type: 'done',

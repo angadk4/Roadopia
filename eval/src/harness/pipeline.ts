@@ -20,7 +20,7 @@ import type { LineString, ParsedConstraints } from '@shared/types';
 import type { Client } from 'pg';
 
 import { generateLoopCandidates, resizedSpeed } from '../../../backend/src/planner/candidates';
-import { measureCurvature } from '../../../backend/src/planner/curvature';
+import { measureCurvatureClassAware } from '../../../backend/src/planner/curvature';
 import {
   diversify,
   K_PRESENT_DEFAULT,
@@ -261,7 +261,7 @@ export function finalizeKept(
     (a) => a.route.duration_s,
   );
   const scored = durationFiltered.map((a) => {
-    const curv = measureCurvature(a.route.geometry);
+    const curv = measureCurvatureClassAware(a.route.geometry, a.trace); // parity with run.ts (FB-5)
     const breakdown = scoreCandidate(
       {
         route: a.route,
