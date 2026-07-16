@@ -31,11 +31,17 @@ const config: ExpoConfig = {
   // NB: no `newArchEnabled` — SDK 55 is New-Arch-ONLY, so the flag was removed
   // from ExpoConfig (its absence IS the guarantee; confirmed by SPK-01).
   ios: {
-    bundleIdentifier: 'com.roadopia.app',
+    // Unique to this Apple account (com.roadopia.app was already taken); matches
+    // what EAS registered during `eas init` (SPK-01).
+    bundleIdentifier: 'com.angadk4.roadopia',
     supportsTablet: false,
+    infoPlist: {
+      // No custom/non-exempt crypto → skip the export-compliance prompt on builds.
+      ITSAppUsesNonExemptEncryption: false,
+    },
   },
   android: {
-    package: 'com.roadopia.app',
+    package: 'com.angadk4.roadopia',
   },
   plugins: [
     [
@@ -63,6 +69,10 @@ const config: ExpoConfig = {
     // Client-safe public token only (Hard rule H; Master Spec §57/§683). Set as
     // an EAS env var / secret named EXPO_PUBLIC_MAPBOX_TOKEN for cloud builds.
     mapboxPublicToken: process.env['EXPO_PUBLIC_MAPBOX_TOKEN'] ?? '',
+    // EAS project link (from `eas init`, M6/SPK-01).
+    eas: {
+      projectId: '55cb079a-892f-4233-a813-24623af95338',
+    },
   },
 };
 

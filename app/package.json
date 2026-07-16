@@ -13,10 +13,10 @@
   },
   "dependencies": {
     "@rnmapbox/maps": "10.3.2",
-    "expo": "~55.0.0",
-    "expo-constants": "~55.0.16",
-    "expo-dev-client": "~55.0.36",
-    "expo-location": "~55.1.11",
+    "expo": "~55.0.28",
+    "expo-constants": "~55.0.17",
+    "expo-dev-client": "~55.0.37",
+    "expo-location": "~55.1.12",
     "expo-status-bar": "~55.0.6",
     "react": "19.2.0",
     "react-native": "0.83.6"
