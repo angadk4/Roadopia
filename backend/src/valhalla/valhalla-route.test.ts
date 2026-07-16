@@ -4,7 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { decodePolyline } from './polyline';
-import { mapRouteResponse, scanConstraintViolations, ValhallaRouteError } from './route';
+import {
+  mapRouteResponse,
+  routeThrough,
+  scanConstraintViolations,
+  ValhallaRouteError,
+} from './route';
 
 /**
  * M2-T04 unit tests — run against RECORDED Valhalla 3.7.0 responses (no network):
@@ -15,6 +20,30 @@ import { mapRouteResponse, scanConstraintViolations, ValhallaRouteError } from '
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(new URL(`./__fixtures__/${name}.json`, import.meta.url), 'utf8'));
+}
+
+/** Minimal precision-6 polyline encoder for synthetic [lng,lat] test shapes. */
+function encodeTest(coords: Array<[number, number]>): string {
+  let out = '';
+  let prevLat = 0;
+  let prevLng = 0;
+  const enc = (v: number): string => {
+    let n = v < 0 ? ~(v << 1) : v << 1;
+    let str = '';
+    while (n >= 0x20) {
+      str += String.fromCharCode((0x20 | (n & 0x1f)) + 63);
+      n >>= 5;
+    }
+    return str + String.fromCharCode(n + 63);
+  };
+  for (const [lng, lat] of coords) {
+    const ilat = Math.round(lat * 1e6);
+    const ilng = Math.round(lng * 1e6);
+    out += enc(ilat - prevLat) + enc(ilng - prevLng);
+    prevLat = ilat;
+    prevLng = ilng;
+  }
+  return out;
 }
 
 const DEFAULT = fixture('route-hamilton-stcatharines-default');
@@ -82,7 +111,12 @@ describe('mapRouteResponse (recorded fixtures)', () => {
 });
 
 describe('scanConstraintViolations (result-scan caveat, BD-16)', () => {
-  const highwayResult = { has_highway: true, has_toll: false, has_ferry: false };
+  const highwayResult = {
+    has_highway: true,
+    has_toll: false,
+    has_ferry: false,
+    has_unpaved: false,
+  };
 
   it('flags a violated hard exclusion', () => {
     expect(scanConstraintViolations({ exclude_highways: true }, highwayResult)).toEqual([
@@ -91,7 +125,7 @@ describe('scanConstraintViolations (result-scan caveat, BD-16)', () => {
   });
 
   it('is empty when the result complies or nothing was requested', () => {
-    const clean = { has_highway: false, has_toll: false, has_ferry: false };
+    const clean = { has_highway: false, has_toll: false, has_ferry: false, has_unpaved: false };
     expect(scanConstraintViolations({ exclude_highways: true }, clean)).toEqual([]);
     expect(scanConstraintViolations(undefined, highwayResult)).toEqual([]);
   });
@@ -102,5 +136,97 @@ describe('ValhallaRouteError', () => {
     expect(new ValhallaRouteError(442, 400, 'no route').noRoute).toBe(true);
     expect(new ValhallaRouteError(171, 400, 'no edges').noRoute).toBe(true);
     expect(new ValhallaRouteError(154, 400, 'exceeds limit').noRoute).toBe(false);
+  });
+});
+describe('R16-2 — legs, break_through, unpaved', () => {
+  it('mapRouteResponse preserves per-leg summaries in drive order', () => {
+    const body = {
+      trip: {
+        legs: [
+          {
+            shape: encodeTest([
+              [0, 0],
+              [0.01, 0],
+            ]),
+            summary: { time: 619, length: 10.2 },
+          },
+          {
+            shape: encodeTest([
+              [0.01, 0],
+              [0.02, 0],
+            ]),
+            summary: { time: 603, length: 9.8 },
+          },
+        ],
+        summary: { time: 1222, length: 20.0 },
+      },
+    };
+    const out = mapRouteResponse(body);
+    expect(out.legs).toEqual([
+      { duration_s: 619, distance_m: 10200 },
+      { duration_s: 603, distance_m: 9800 },
+    ]);
+  });
+
+  it('stopIndices route as break_through; other middles keep middleType', async () => {
+    let sent: { locations: Array<{ type: string }> } | null = null;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: unknown, init: { body: string }) => {
+      sent = JSON.parse(init.body) as typeof sent;
+      return {
+        ok: true,
+        json: async () => ({
+          trip: {
+            legs: [
+              {
+                shape: encodeTest([
+                  [0, 0],
+                  [0.01, 0],
+                ]),
+                summary: { time: 1, length: 1 },
+              },
+            ],
+            summary: { time: 1, length: 1 },
+          },
+        }),
+      };
+    }) as never;
+    try {
+      await routeThrough('http://x', {
+        waypoints: [
+          [0, 0],
+          [0.005, 0],
+          [0.01, 0],
+          [0.015, 0],
+          [0.02, 0],
+        ],
+        middleType: 'through',
+        stopIndices: [2],
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(sent!.locations.map((l) => l.type)).toEqual([
+      'break',
+      'through',
+      'break_through',
+      'through',
+      'break',
+    ]);
+  });
+
+  it('scanConstraintViolations flags unpaved when excluded but present', () => {
+    expect(
+      scanConstraintViolations(
+        { exclude_unpaved: true },
+        { has_highway: false, has_toll: false, has_ferry: false, has_unpaved: true },
+      ),
+    ).toEqual(['unpaved']);
+    expect(
+      scanConstraintViolations(
+        {},
+        { has_highway: false, has_toll: false, has_ferry: false, has_unpaved: true },
+      ),
+    ).toEqual([]);
   });
 });

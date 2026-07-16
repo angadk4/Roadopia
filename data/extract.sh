@@ -30,7 +30,7 @@ SOURCE_URL="https://download.geofabrik.de/north-america/canada/ontario-latest.os
 SOURCE_FILE="ontario-latest.osm.pbf"
 OSMIUM_IMAGE="debian:bookworm-slim"
 ROAD_FILTER="w/highway=primary,secondary,tertiary,unclassified,residential,primary_link,secondary_link,tertiary_link"
-POI_FILTER="n/amenity=cafe,fuel,restaurant n/tourism=viewpoint n/natural=peak"
+POI_FILTER="n/amenity=cafe,fuel,restaurant,fast_food n/tourism=viewpoint n/natural=peak"
 
 # --- Region from env (M2-T01) ---
 REGION_ID="${REGION_ID:-south-central-ontario}"

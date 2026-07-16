@@ -14,6 +14,7 @@ import {
   type Contradiction,
   type Origin,
   type ParsedConstraints,
+  type StopFraction,
   type StopRequest,
   type Weights,
 } from '@shared/types';
@@ -129,6 +130,16 @@ const NUMBER_WORDS: Record<string, number> = {
   ten: 10,
 };
 
+/** Stop-timing phrases (R16-3): "early on" 0.25 · "halfway" 0.5 · "toward the
+ *  end" 0.75. Brief-scoped (single-stop briefs dominate; per-stop positional
+ *  scoping is the LLM parser's job for nuanced multi-stop sentences). */
+function matchStopFraction(brief: string): StopFraction | null {
+  if (/\b(?:early on|early in|near the start|at the start)\b/i.test(brief)) return 0.25;
+  if (/\b(?:half\s?way|mid-?way|in the middle|about half)\b/i.test(brief)) return 0.5;
+  if (/\b(?:toward(?:s)? the end|near the end|at the end|late in)\b/i.test(brief)) return 0.75;
+  return null;
+}
+
 function matchStops(brief: string): StopRequest[] {
   const stops: StopRequest[] = [];
   for (const { re, type } of STOP_KEYWORDS) {
@@ -140,7 +151,12 @@ function matchStops(brief: string): StopRequest[] {
     const raw = before?.[1]?.toLowerCase();
     const count = raw ? (COUNT_WORDS[raw] ?? (Number(raw) || 1)) : 1;
     const required = /\b(?:must|need|required|definitely|make sure)\b/i.test(brief);
-    stops.push({ type, count, importance: required ? 'required' : 'nice_to_have' });
+    stops.push({
+      type,
+      count,
+      importance: required ? 'required' : 'nice_to_have',
+      at_fraction: matchStopFraction(brief),
+    });
   }
   return stops;
 }
@@ -256,6 +272,15 @@ export function parseRules(brief: string, sliderWeights?: Weights): ParsedConstr
   if (/\b(?:relax(?:ed|ing)?|chill|easy|cruisy|leisurely|calm)\b/i.test(brief)) intensity = 'chill';
   else if (/\b(?:spirited|engaging|lively)\b/i.test(brief)) intensity = 'spirited';
 
+  // --- preset slot (R16-4): a minimal-turns ask steers the FROZEN 'simple'
+  // vector (chill's exact numbers relabeled — presets.ts). Chill-family words
+  // above set intensity only; this is the scoring lever. ---
+  let preset: ParsedConstraints['preset'] = null;
+  if (/\b(?:simple|easy|mostly\s+straight|minimal\s+turns?)\b/i.test(brief)) {
+    preset = 'simple';
+    fields['preset'] = 0.7;
+  }
+
   // "twisty but relaxing" — soft tension resolved by moderating the target (§3.5.5)
   if (twistiness !== null && intensity === 'chill') {
     twistiness = Math.min(twistiness, 0.5);
@@ -310,7 +335,7 @@ export function parseRules(brief: string, sliderWeights?: Weights): ParsedConstr
     scenic_pref: scenic,
     twistiness_pref: twistiness,
     intensity,
-    preset: null,
+    preset,
     weights: sliderWeights ?? null,
     location_constraints: locationConstraints,
     ambiguous_terms: ambiguous,

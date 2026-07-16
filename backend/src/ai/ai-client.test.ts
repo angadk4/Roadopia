@@ -45,10 +45,10 @@ describe('AiClient (M5-T01, mocked transport)', () => {
     const res = await client.call(PARSE_PROMPT, 'Brief: a loop from Guelph');
     expect(JSON.parse(res.text)).toEqual({ shape: 'loop' });
     expect(res.promptId).toBe('parse');
-    expect(res.promptVersion).toBe(1);
+    expect(res.promptVersion).toBe(PARSE_PROMPT.version); // tracks the prompt, not a pin
     const entry = ledger.entries()[0]!;
     expect(entry.promptId).toBe('parse');
-    expect(entry.promptVersion).toBe(1);
+    expect(entry.promptVersion).toBe(PARSE_PROMPT.version);
     expect(entry.model).toBe(PARSE_PROMPT.model);
     expect(entry.costUsd).toBeCloseTo(computeCostUsd(PARSE_PROMPT.model, 1000, 200), 10);
     expect(entry.ok).toBe(true);

@@ -53,7 +53,7 @@ describe('seed (M2-T09)', () => {
     expect(Number(bbox.rows[0]!.n)).toBe(0);
   });
 
-  it('seeds OSM spots of every required type (coffee / fuel / viewpoint)', async (ctx) => {
+  it('seeds OSM spots of every required type (coffee / fuel / viewpoint / food)', async (ctx) => {
     if (!db) return ctx.skip();
     const r = await db.query<{ type: string; n: string }>(
       `select type, count(*)::text as n from spots
@@ -63,6 +63,7 @@ describe('seed (M2-T09)', () => {
     expect(byType['coffee'] ?? 0).toBeGreaterThan(0);
     expect(byType['fuel'] ?? 0).toBeGreaterThan(0);
     expect(byType['viewpoint'] ?? 0).toBeGreaterThan(0);
+    expect(byType['food'] ?? 0).toBeGreaterThan(0); // R16-1: restaurants + fast food
   });
 
   it('seeded data is visible through the M2-T08 RPCs', async (ctx) => {

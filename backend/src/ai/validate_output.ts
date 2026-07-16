@@ -32,7 +32,7 @@ const GENERIC_WORDS = new Set(
     'the a an this that it your you drive route loop road roads street avenue boulevard ' +
     'line lane trail highway hwy county regional concession sideroad side rd st ave blvd ' +
     'north south east west ontario canada km min minutes hours starts ends passes head ' +
-    'turn left right stop stops coffee fuel viewpoint rest gravel paved twisty curvy ' +
+    'turn left right stop stops coffee food restaurant fuel gas viewpoint rest gravel paved twisty curvy ' +
     'scenic rural backroad backroads country countryside escarpment valley river lake ' +
     'creek falls point bay beach mount along toward through around begins takes'
   ).split(/\s+/),

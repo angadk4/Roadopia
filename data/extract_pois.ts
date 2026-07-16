@@ -1,10 +1,11 @@
 /**
  * M2-T09 — extract car-spot POIs from the canonical filtered extract.
  *
- * Reads data/pois.geojsonl (osmium point export of region-filtered.osm.pbf) and
- * writes data/pois.json rows for the seeder: OSM cafés → 'coffee', fuel → 'fuel',
- * viewpoints → 'viewpoint' (the Backlog seed set; restaurants/peaks are left for a
- * later curation pass). Unnamed POIs get a readable generic name.
+ * Reads data/pois.geojsonl (osmium point export of region-filtered.osm.pbf —
+ * committed script: data/pois_export.sh) and writes data/pois.json rows for the
+ * seeder: OSM cafés → 'coffee', fuel → 'fuel', viewpoints → 'viewpoint',
+ * restaurants + fast food → 'food' (R16-1 — the Plan screen's food stops).
+ * Peaks are left for a later curation pass. Unnamed POIs get a generic name.
  *
  * Run: pnpm -C data pois:extract       (after the osmium point export)
  */
@@ -20,7 +21,7 @@ const INPUT = join(HERE, 'pois.geojsonl');
 const OUTPUT = join(HERE, 'pois.json');
 
 interface PoiRow {
-  type: 'coffee' | 'fuel' | 'viewpoint';
+  type: 'coffee' | 'fuel' | 'viewpoint' | 'food';
   name: string;
   lon: number;
   lat: number;
@@ -30,12 +31,15 @@ const GENERIC: Record<PoiRow['type'], string> = {
   coffee: 'Café',
   fuel: 'Fuel station',
   viewpoint: 'Viewpoint',
+  food: 'Restaurant',
 };
 
 function classify(props: Record<string, string>): PoiRow['type'] | null {
   if (props['amenity'] === 'cafe') return 'coffee';
   if (props['amenity'] === 'fuel') return 'fuel';
   if (props['tourism'] === 'viewpoint') return 'viewpoint';
+  // cafe stays 'coffee' — food = sit-down + fast food (R16-1)
+  if (props['amenity'] === 'restaurant' || props['amenity'] === 'fast_food') return 'food';
   return null;
 }
 

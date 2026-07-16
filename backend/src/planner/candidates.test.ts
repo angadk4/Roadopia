@@ -1,4 +1,4 @@
-import type { LatLng } from '@shared/types';
+import type { LatLng, StopRequest } from '@shared/types';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -92,7 +92,24 @@ const SPOTS: CandidateSpot[] = [
     lng: at(90, 9).lng,
     source: 'osm',
   },
+  {
+    id: 'p3',
+    name: 'Concession Gas Bar',
+    type: 'fuel',
+    lat: at(90, 12).lat,
+    lng: at(90, 12).lng,
+    source: 'osm',
+  },
 ];
+
+/** StopRequest shorthand (R16-3 test matrix). */
+function req(
+  type: StopRequest['type'],
+  at_fraction: StopRequest['at_fraction'] = null,
+  importance: StopRequest['importance'] = 'nice_to_have',
+): StopRequest {
+  return { type, count: 1, importance, at_fraction };
+}
 
 describe('generateLoopCandidates (M3-T06)', () => {
   it('produces ≥ N_CANDIDATES across ≥ 3 sectors on the rural fixture (AC)', () => {
@@ -108,9 +125,10 @@ describe('generateLoopCandidates (M3-T06)', () => {
     expect(clusters.size).toBeGreaterThanOrEqual(3);
   });
 
-  it('is deterministic (identical output across runs)', () => {
-    const a = generateLoopCandidates(ORIGIN, ruralSegments(), SPOTS, { anchorSpots: true });
-    const b = generateLoopCandidates(ORIGIN, ruralSegments(), SPOTS, { anchorSpots: true });
+  it('is deterministic (identical output across runs, stops + fractions included)', () => {
+    const requests = [req('coffee', 0.5), req('fuel')];
+    const a = generateLoopCandidates(ORIGIN, ruralSegments(), SPOTS, { stopRequests: requests });
+    const b = generateLoopCandidates(ORIGIN, ruralSegments(), SPOTS, { stopRequests: requests });
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
@@ -136,18 +154,60 @@ describe('generateLoopCandidates (M3-T06)', () => {
   });
 
   it('anchors a real requested spot when asked (G5) and none otherwise', () => {
-    const withSpots = generateLoopCandidates(ORIGIN, ruralSegments(), SPOTS, { anchorSpots: true });
-    expect(withSpots.some((c) => c.spotIds.length > 0)).toBe(true);
-    const anchored = withSpots.find((c) => c.spotIds.length > 0)!;
-    const spot = SPOTS.find((s) => s.id === anchored.spotIds[0])!;
-    expect(
-      anchored.waypoints.some(
-        (w) => Math.abs(w.lat - spot.lat) < 1e-9 && Math.abs(w.lng - spot.lng) < 1e-9,
-      ),
-    ).toBe(true);
+    const withStops = generateLoopCandidates(ORIGIN, ruralSegments(), SPOTS, {
+      stopRequests: [req('coffee')],
+    });
+    expect(withStops.some((c) => c.stops.length > 0)).toBe(true);
+    const anchored = withStops.find((c) => c.stops.length > 0)!;
+    const stop = anchored.stops[0]!;
+    const spot = SPOTS.find((s) => s.id === stop.spotId)!;
+    // waypointIndex points AT the stop's own waypoint (index maintenance)
+    const wp = anchored.waypoints[stop.waypointIndex]!;
+    expect(Math.abs(wp.lat - spot.lat)).toBeLessThan(1e-9);
+    expect(Math.abs(wp.lng - spot.lng)).toBeLessThan(1e-9);
 
-    const without = generateLoopCandidates(ORIGIN, ruralSegments(), SPOTS, { anchorSpots: false });
-    expect(without.every((c) => c.spotIds.length === 0)).toBe(true);
+    const without = generateLoopCandidates(ORIGIN, ruralSegments(), SPOTS, {});
+    expect(without.every((c) => c.stops.length === 0)).toBe(true);
+  });
+
+  it('per-type anchoring: coffee + fuel each get a spot of THEIR type, no spot reused (R16-3)', () => {
+    const out = generateLoopCandidates(ORIGIN, ruralSegments(), SPOTS, {
+      stopRequests: [req('coffee'), req('fuel')],
+    });
+    const full = out.find((c) => c.stops.length === 2)!;
+    expect(full).toBeDefined();
+    const byType = new Map(full.stops.map((s) => [s.requestedType, s]));
+    expect(byType.get('coffee')!.spotType).toBe('coffee');
+    expect(byType.get('fuel')!.spotType).toBe('fuel');
+    expect(byType.get('fuel')!.spotId).toBe('p3'); // only fuel spot in the fixture
+    const ids = full.stops.map((s) => s.spotId);
+    expect(new Set(ids).size).toBe(ids.length); // used-set: no double-booking
+  });
+
+  it('a request with no spot of its type yields no stop (coverage discloses, never fabricates)', () => {
+    const out = generateLoopCandidates(ORIGIN, ruralSegments(), SPOTS, {
+      stopRequests: [req('viewpoint')], // fixture has none
+    });
+    expect(out.every((c) => c.stops.length === 0)).toBe(true);
+  });
+
+  it('fraction stops keep a valid waypointIndex after insertion (R16-3)', () => {
+    const out = generateLoopCandidates(ORIGIN, ruralSegments(), SPOTS, {
+      stopRequests: [req('coffee', 0.5), req('fuel')],
+    });
+    for (const c of out) {
+      for (const s of c.stops) {
+        const wp = c.waypoints[s.waypointIndex];
+        expect(wp).toBeDefined();
+        const spot = SPOTS.find((x) => x.id === s.spotId)!;
+        expect(Math.abs(wp!.lat - spot.lat)).toBeLessThan(1e-9);
+        expect(Math.abs(wp!.lng - spot.lng)).toBeLessThan(1e-9);
+      }
+    }
+    // and the fraction unit records its ask
+    const withFraction = out.flatMap((c) => c.stops).filter((s) => s.atFraction === 0.5);
+    expect(withFraction.length).toBeGreaterThan(0);
+    expect(withFraction.every((s) => s.requestedType === 'coffee')).toBe(true);
   });
 
   it('sectorOf partitions bearings evenly', () => {
@@ -254,7 +314,9 @@ describe('generateAtoBCandidates (M3-T06)', () => {
 
   it('progress-orders waypoints along o→d and skips absurd-detour clusters', () => {
     const segs = ruralSegments();
-    const out = generateAtoBCandidates(ORIGIN, DEST, segs, SPOTS, { anchorSpots: true });
+    const out = generateAtoBCandidates(ORIGIN, DEST, segs, SPOTS, {
+      stopRequests: [req('coffee')],
+    });
     expect(out.length).toBeGreaterThan(0);
     // the W cluster (bearing 275°, behind the origin) blows the 2.2× corridor cap
     // for a 40 km eastward trip only when far enough — assert every kept cluster
@@ -278,8 +340,45 @@ describe('generateAtoBCandidates (M3-T06)', () => {
   });
 
   it('is deterministic', () => {
-    const a = generateAtoBCandidates(ORIGIN, DEST, ruralSegments(), SPOTS, { anchorSpots: true });
-    const b = generateAtoBCandidates(ORIGIN, DEST, ruralSegments(), SPOTS, { anchorSpots: true });
+    const requests = [req('coffee', 0.25), req('fuel')];
+    const a = generateAtoBCandidates(ORIGIN, DEST, ruralSegments(), SPOTS, {
+      stopRequests: requests,
+    });
+    const b = generateAtoBCandidates(ORIGIN, DEST, ruralSegments(), SPOTS, {
+      stopRequests: requests,
+    });
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it('fraction stop picks the spot whose corridor progress best matches f (R16-3)', () => {
+    // p2 (East Espresso, 9 km along the 40 km eastward corridor) sits near
+    // progress 0.22; p1 (Ridge Café, due north) near 0.12 — an "early on"
+    // (f=0.25) coffee must choose p2
+    const out = generateAtoBCandidates(ORIGIN, DEST, ruralSegments(), SPOTS, {
+      stopRequests: [req('coffee', 0.25)],
+    });
+    expect(out.length).toBeGreaterThan(0);
+    for (const c of out) {
+      expect(c.stops).toHaveLength(1);
+      expect(c.stops[0]!.spotId).toBe('p2');
+      expect(c.stops[0]!.atFraction).toBe(0.25);
+      // index maintenance through the progress sort
+      const wp = c.waypoints[c.stops[0]!.waypointIndex]!;
+      const spot = SPOTS.find((s) => s.id === 'p2')!;
+      expect(Math.abs(wp.lat - spot.lat)).toBeLessThan(1e-9);
+      expect(Math.abs(wp.lng - spot.lng)).toBeLessThan(1e-9);
+    }
+  });
+
+  it('per-type A→B anchoring: coffee + fuel both included, distinct spots', () => {
+    const out = generateAtoBCandidates(ORIGIN, DEST, ruralSegments(), SPOTS, {
+      stopRequests: [req('coffee'), req('fuel')],
+    });
+    const full = out.find((c) => c.stops.length === 2)!;
+    expect(full).toBeDefined();
+    const types = new Set(full.stops.map((s) => s.requestedType));
+    expect(types.has('coffee')).toBe(true);
+    expect(types.has('fuel')).toBe(true);
+    expect(new Set(full.stops.map((s) => s.spotId)).size).toBe(2);
   });
 });

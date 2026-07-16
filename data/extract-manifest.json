@@ -8,15 +8,15 @@
     "bytes": 965700559,
     "freshly_downloaded": "no"
   },
-  "extract_date": "2026-07-12T20:53:42Z",
+  "extract_date": "2026-07-16T19:34:14Z",
   "osmium": { "image": "debian:bookworm-slim", "version": "osmium version 1.15.0" },
   "filter": {
     "roads": "w/highway=primary,secondary,tertiary,unclassified,residential,primary_link,secondary_link,tertiary_link",
-    "pois": "n/amenity=cafe,fuel,restaurant n/tourism=viewpoint n/natural=peak"
+    "pois": "n/amenity=cafe,fuel,restaurant,fast_food n/tourism=viewpoint n/natural=peak"
   },
   "outputs": {
     "clipped":  { "file": "region-clipped.osm.pbf",  "md5": "3e23c2a3ce07b021f805f33f25bf167e",  "bytes": 286104344 },
-    "filtered": { "file": "region-filtered.osm.pbf", "md5": "10f0ba9fffb7b66c908fa75040180367", "bytes": 26741844,
-                  "nodes": 1605218, "ways": 303432 }
+    "filtered": { "file": "region-filtered.osm.pbf", "md5": "a57e9484a35a856605e9b5a615504e1d", "bytes": 27099078,
+                  "nodes": 1613124, "ways": 303432 }
   }
 }

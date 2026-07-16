@@ -51,10 +51,11 @@ export const EXCLUDED_HIGHWAY_CLASSES: string[] = [
   'tertiary_link',
 ];
 
-/** §3.4 stop-type → DB spot-type mapping; null = no DB coverage yet (disclose). */
-const STOP_TO_SPOT_TYPE: Record<StopType, string | null> = {
+/** §3.4 stop-type → DB spot-type mapping; null = no DB coverage yet (disclose).
+ *  Exported for the candidate generators' per-type anchoring (R16-3). */
+export const STOP_TO_SPOT_TYPE: Record<StopType, string | null> = {
   coffee: 'coffee',
-  food: null, // no seeded/DB spot type yet — disclosed via unavailableStopTypes
+  food: 'food', // restaurants + fast food seeded at R16-1
   fuel: 'fuel',
   viewpoint: 'viewpoint',
   rest: 'rest',

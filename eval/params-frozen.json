@@ -1,7 +1,7 @@
 {
-  "config_id": "frozen-m4t12-v9",
+  "config_id": "frozen-m4t12-v10",
   "frozen_at": "2026-07-16",
-  "discipline": "§21: tuned on DEV only, validated on VAL; any later change = new config id + fresh VAL pass",
+  "discipline": "\u00a721: tuned on DEV only, validated on VAL; any later change = new config id + fresh VAL pass",
   "params": {
     "ALPHA_LOOP": 0.45,
     "MAX_TAU_S": 6900,
@@ -34,8 +34,8 @@
     "preset_weights": "PRESET_WEIGHTS frozen as-is (BD-30)",
     "iteration_cap": 3,
     "wall_clock_budget_ms": 25000,
-    "detour_max": "DEFERRED — A→B ships at M6; calibrate then (new config id)",
-    "slider_ranges": "N/A — W1 presets-only (BD-30)",
+    "detour_max": "DEFERRED \u2014 A\u2192B ships at M6; calibrate then (new config id)",
+    "slider_ranges": "N/A \u2014 W1 presets-only (BD-30)",
     "use_living_streets": 0,
     "maneuver_penalty_s": 5,
     "RESIDENTIAL_SOFT_SHARE": 0.05,
@@ -55,7 +55,15 @@
     "SHIFT_REPAIR": "enabled (preferred over DROP; falls back)",
     "DURATION_PRESENT_PENALTY": 5,
     "CURVATURE_CLASS_AWARE": true,
-    "curvature_exclusions": "trace use ramp|turn_channel, edge.roundabout, road_class motorway|trunk; tag-blind fallback on trace failure/A-to-B"
+    "curvature_exclusions": "trace use ramp|turn_channel, edge.roundabout, road_class motorway|trunk; tag-blind fallback on trace failure/A-to-B",
+    "STOP_TIMING_TOLERANCE": 0.2,
+    "UNPAVED_MIN_M": 50,
+    "MAX_STOP_ROWS": 6,
+    "stop_anchoring": "R16-3 typed per-unit: per-type nearest (anytime units join the L4 angular sweep; fraction units inserted post-sort at slot floor(f*(n+1)) aimed at bracketing vertices; A->B argmin |progress-f| -> detour -> id; used-set dedup; TSP skipped when any fraction stop)",
+    "stop_waypoint_type": "break_through (splits legs -> measured arrivals; probed: through middles do NOT split legs)",
+    "stop_cover": "per-type: mean over requested types of min(1, included/requested) \u2014 replaces the scalar count ratio (a covered coffee can no longer hide a missing fuel)",
+    "exclude_unpaved": "wired at both costing sites when avoid.unpaved (probed BEST-EFFORT: no observable change on a gravel-belt corridor); truth = trace edge.unpaved result-scan > UNPAVED_MIN_M (BD-16)",
+    "preset_simple": "owner-facing relabel of chill's exact frozen vector (no new science); 'chill' stays a parse alias"
   },
   "provenance": {
     "gates": ["BD-26 C", "BD-28 A", "BD-29 F", "BD-30 W", "BD-31 R", "BD-32 S"],
@@ -63,14 +71,15 @@
     "duration_winner": "alpha=0.45",
     "pool_winner": "sectors=4",
     "val_regression_fallback": false,
-    "round7": "residential measurement gate (trace_attributes) — sweep kept engine-default maneuver_penalty (30 cost 5.3% curviness; 15 no exposure gain); eval/reports/residential.md",
-    "round8": "micro-loop (crescent/block-spin) detector — small closed circuits invisible to spur/u-turn/residential metrics; 18/40 routes carried one (validated on corpus incl. the owner-reported St. Jacobs case)",
-    "round8b": "maxResidentialRunM — Bolton 1.3km subdivision weave hid at 4% share on a 101km route; absolute run cap (ratio-vs-run lesson applied to road class)",
-    "round9": "detect-and-repair: drop waypoint nearest a detected micro-loop / over-cap residential run, ≤2 passes, best-of; clean bests 12→17, spin bests 16→8, composite 4→8",
-    "round11": "backroads priority: scoring re-rank DISPROVEN by rq11 sweep (pool variance ~0.007 — w_country stays 0); arterial-run INSERT repair shipped instead (probe-calibrated gain bar 0.02); corpus country 0.424→0.442, zero quality cost",
-    "round12": "generation density (triples): generated+assembled but never outranked incumbents — adoption REFUSED by pre-registered rule; flag retained OFF",
+    "round7": "residential measurement gate (trace_attributes) \u2014 sweep kept engine-default maneuver_penalty (30 cost 5.3% curviness; 15 no exposure gain); eval/reports/residential.md",
+    "round8": "micro-loop (crescent/block-spin) detector \u2014 small closed circuits invisible to spur/u-turn/residential metrics; 18/40 routes carried one (validated on corpus incl. the owner-reported St. Jacobs case)",
+    "round8b": "maxResidentialRunM \u2014 Bolton 1.3km subdivision weave hid at 4% share on a 101km route; absolute run cap (ratio-vs-run lesson applied to road class)",
+    "round9": "detect-and-repair: drop waypoint nearest a detected micro-loop / over-cap residential run, \u22642 passes, best-of; clean bests 12\u219217, spin bests 16\u21928, composite 4\u21928",
+    "round11": "backroads priority: scoring re-rank DISPROVEN by rq11 sweep (pool variance ~0.007 \u2014 w_country stays 0); arterial-run INSERT repair shipped instead (probe-calibrated gain bar 0.02); corpus country 0.424\u21920.442, zero quality cost",
+    "round12": "generation density (triples): generated+assembled but never outranked incumbents \u2014 adoption REFUSED by pre-registered rule; flag retained OFF",
     "round13": "SHIFT-preferred repair: relocate offending waypoint to best clean segment near the offence; DROP fallback; works on 2-waypoint candidates",
-    "round15": "class-aware route curviness (M7-T09 owner finding: highway ramps counted as twisty): the route-level measurement now drops ramp/turn-channel/roundabout/motorway/trunk edges (trace_attributes, zero extra calls) and measures kept runs in isolation — the Protocol §12.1 maneuver-aware exclusion the corpus always had. Formula C7 + THETA + weights untouched; only the measured geometry domain narrowed. 48-brief VAL: AC passes 10/48 -> 10/48 (zero regression, zero verdict flips); curv mean 1.069->1.036; 3 bests changed, incl. Collingwood 2h-twisty best honest-curv 0.45->0.87 (fake-ramp winner dethroned). eval/reports/curvature-class-aware.md",
-    "round14": "timing undershoot diagnosed: NOT a search-material gap (widen A/B = no-op) — on-target candidates exist but carry quality flaws (u-turn/retrace) in road-sparse origins, so the planner correctly presents a clean shorter loop. Shipped duration-demotion (on-target outranks shorter within a quality tier) as correct-ordering insurance; inert on the 48-brief corpus (no town HAS a clean on-target route being outranked); the residual undershoot is fundamental → app disclosure (M5) + generation/region."
+    "round15": "class-aware route curviness (M7-T09 owner finding: highway ramps counted as twisty): the route-level measurement now drops ramp/turn-channel/roundabout/motorway/trunk edges (trace_attributes, zero extra calls) and measures kept runs in isolation \u2014 the Protocol \u00a712.1 maneuver-aware exclusion the corpus always had. Formula C7 + THETA + weights untouched; only the measured geometry domain narrowed. 48-brief VAL: AC passes 10/48 -> 10/48 (zero regression, zero verdict flips); curv mean 1.069->1.036; 3 bests changed, incl. Collingwood 2h-twisty best honest-curv 0.45->0.87 (fake-ramp winner dethroned). eval/reports/curvature-class-aware.md",
+    "round14": "timing undershoot diagnosed: NOT a search-material gap (widen A/B = no-op) \u2014 on-target candidates exist but carry quality flaws (u-turn/retrace) in road-sparse origins, so the planner correctly presents a clean shorter loop. Shipped duration-demotion (on-target outranks shorter within a quality tier) as correct-ordering insurance; inert on the 48-brief corpus (no town HAS a clean on-target route being outranked); the residual undershoot is fundamental \u2192 app disclosure (M5) + generation/region.",
+    "round16": "typed multi-stop + fraction timing + honest surfaces (R16, owner plan-screen restructure): food corpus seeded (16,326 rows; corpus 21,366); WaypointCandidate.stops replaces spotIds; per-type Tier-2 gates stop_<type> + Tier-3 stop_timing_<type> (tol 0.2 of duration, actual % disclosed); arrivals = sum legs[0..j-1] iff legs align else honest null. 48-brief VAL vs v9: ALL 48 best geometries + routed_min + distance_km + verdicts BYTE-IDENTICAL (AC 10/48 -> 10/48) \u2014 the stop machinery changed nothing the corpus measures while adding measured arrivals. Live: Guelph structured coffee-midway+gas-late -> Tim Hortons 78 min + Pioneer 118 min, all 4 stop verdicts satisfied. eval/reports/stops-and-surfaces.md"
   }
 }

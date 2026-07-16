@@ -13,7 +13,7 @@
  * without ever touching a raw error.
  */
 
-import type { LatLng, Preset, RouteThroughOutput } from '@shared/types';
+import type { CharacterTag, LatLng, Preset, RouteThroughOutput, StopRequest } from '@shared/types';
 
 /** Backend dev port (backend/src/start.ts default). */
 export const BACKEND_PORT = 8080;
@@ -40,6 +40,13 @@ export interface PlanRequest {
    *  neither. */
   constraints?: unknown;
   followUp?: string;
+  /** R16-5 structured overrides (the Plan screen's sections; the server
+   *  re-validates and merges: stops per-TYPE replace, avoid per-key only for
+   *  the keys sent, character unioned). */
+  stops?: StopRequest[];
+  avoid?: { highways?: boolean; tolls?: boolean; ferries?: boolean; unpaved?: boolean };
+  character?: CharacterTag[];
+  twistiness_pref?: number;
 }
 
 /** POST /route request body (manual building — backend/src/routes/route.ts). */

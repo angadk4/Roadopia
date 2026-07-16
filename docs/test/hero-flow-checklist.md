@@ -4,16 +4,27 @@
 real Android device** — land → plan → streamed generation → result → constraints →
 explanation → refine → reasoning view. No crash; §18 states behave. (Spec §69; SC-1.)
 
-**Status: iOS FUNCTIONAL PASS (owner, 2026-07-16) — quality re-check owed after round 15;
-Android column OPEN.** The owner ran the full flow on the iPhone: every row FUNCTIONED
-(map, plan, stream, result, refine) and surfaced six quality findings — all fixed the same
-day (BD-56: region-wide spot pins via map_spots; class-aware curviness ends ramp-as-twisty,
-config v9 + eval report; "more backroads"/"more twisty" now steer the frozen presets;
-honest banner when a refine can't improve; Recommended/Option-2/3 alternates switcher;
-attribution strip layout). **Owner re-check:** reload the dev client (JS-only changes —
-no rebuild needed) and re-run rows 1–8 with an eye on: pins across the whole region,
-twisty asks landing on real curves (not ramps), the backroads refine visibly changing the
-route, the option switcher, and the attribution strip staying clear of the sheet.
+**Status: iOS FUNCTIONAL PASS (owner, 2026-07-16) — quality re-check owed after rounds
+15 + 16; Android column OPEN.** The owner ran the full flow on the iPhone: every row
+FUNCTIONED (map, plan, stream, result, refine) and surfaced six quality findings — all
+fixed the same day (BD-56: region-wide spot pins via map_spots; class-aware curviness ends
+ramp-as-twisty, config v9 + eval report; "more backroads"/"more twisty" now steer the
+frozen presets; honest banner when a refine can't improve; Recommended/Option-2/3
+alternates switcher; attribution strip layout). Round 16 (BD-57) then restructured the
+Plan screen (config v10). **Owner re-check:** reload the dev client (JS-only changes — no
+rebuild needed; RESTART the backend dev process first — planner changes) and re-run rows
+1–8 with an eye on:
+- **round-15 items:** pins across the whole region, twisty asks landing on real curves
+  (not ramps), the backroads refine visibly changing the route, the option switcher, the
+  attribution strip staying clear of the sheet;
+- **round-16 items (new Plan screen):** the sections render (Drive style Twisty·Simple /
+  Scenery "Prefer views" / On the route toggles + "＋ Add a stop"); add **coffee Midway +
+  gas Late** on a 2-hour loop → Result shows a **Stops panel with real place names and
+  "≈N min in" times** + colored stop dots on the map, and the constraints panel shows
+  `stop coffee` / `stop timing coffee` verdicts; **food stops** work ("add a lunch stop"
+  refine too); **Paved roads only** produces no unpaved tag (or an honest `avoid unpaved`
+  violation row when the area forces gravel); food pins ('F', new color) appear on the
+  map home.
 
 ---
 

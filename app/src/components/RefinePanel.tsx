@@ -23,8 +23,8 @@ export default function RefinePanel(props: RefinePanelProps): ReactElement {
     <View style={[styles.panel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.title, { color: colors.text }]}>Tweak this drive</Text>
       <Text style={[styles.hint, { color: colors.textMuted }]}>
-        Try “make it longer”, “more twisty”, “avoid highways” or “add a coffee stop”. Your hard
-        constraints carry over.
+        Try “make it longer”, “more twisty”, “avoid highways”, “add a coffee stop” or “add a lunch
+        stop”. Your hard constraints carry over.
       </Text>
       <View style={styles.row}>
         <TextInput

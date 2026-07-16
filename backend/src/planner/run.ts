@@ -16,15 +16,26 @@
  * validated results only (Hard rule I).
  */
 
-import type { GenerationEvent, LatLng, ParsedConstraints, RouteThroughOutput } from '@shared/types';
+import type {
+  GenerationEvent,
+  LatLng,
+  ParsedConstraints,
+  RouteThroughOutput,
+  StopFraction,
+  StopType,
+} from '@shared/types';
 import { resolveDisposition } from '@shared/types';
 import type { Client } from 'pg';
 
 import { getElevationProfile } from '../valhalla/elevation';
-import type { TraceResult } from '../valhalla/trace';
 
 import { assembleAtoB } from './atob';
-import { generateAtoBCandidates, generateLoopCandidates, resizedSpeed } from './candidates';
+import {
+  generateAtoBCandidates,
+  generateLoopCandidates,
+  resizedSpeed,
+  type WaypointCandidate,
+} from './candidates';
 import { measureCurvatureClassAware } from './curvature';
 import { diversify, prefilterByDuration } from './diversify';
 import {
@@ -45,6 +56,7 @@ import {
   UTURN_PRESENT_PENALTY,
   type ScoreBreakdown,
 } from './score';
+import { resolveStopArrivals, stopCoverageOf, stopCoverScore, type ResolvedStop } from './stops';
 import { DURATION_TOLERANCE_DEFAULT, validateCandidate, type ValidationVerdict } from './validate';
 
 export const WALL_CLOCK_BUDGET_MS = 25_000;
@@ -79,6 +91,22 @@ export interface PlannerResult {
    *  the diversify-kept pool the presenter used to discard. Deterministic
    *  order (presentKey desc); no enrich/LLM spend on these. */
   alternates: PlannerAlternate[];
+  /** Chosen route's stops (R16-3): grounded spots + MEASURED arrivals. */
+  stops: PlannerStop[];
+  /** Chosen candidate's via points (stop markers index into these). */
+  waypoints: LatLng[];
+}
+
+/** Wire-shaped stop (matches shared RouteStopSchema field-for-field). */
+export interface PlannerStop {
+  name: string;
+  /** DB spot type ('coffee' | 'food' | 'fuel' | …). */
+  type: string;
+  requested_type: StopType;
+  arrival_s: number | null;
+  at_fraction: StopFraction | null;
+  location: LatLng;
+  waypoint_index: number;
 }
 
 export interface PlannerAlternate {
@@ -86,6 +114,8 @@ export interface PlannerAlternate {
   curviness: number;
   validation: ValidationVerdict;
   presentKey: number;
+  stops: PlannerStop[];
+  waypoints: LatLng[];
 }
 
 function step(
@@ -145,6 +175,8 @@ export async function runPlanner(
     elevation: null,
     iterations: 0,
     alternates: [],
+    stops: [],
+    waypoints: [],
   };
 
   // --- disposition (§3.5) ---
@@ -180,19 +212,31 @@ export async function runPlanner(
   const durationS = constraints.duration_target_s ?? 5400;
 
   const baseWeights = mergeWeights(weightsForPreset(constraints.preset), constraints.weights);
-  const requestedStopCount = constraints.stops.reduce((s, x) => s + x.count, 0);
+
+  /** ResolvedStop[] → wire-shaped stops (location = the stop's waypoint). */
+  const toPlannerStops = (resolved: ResolvedStop[], candidate: WaypointCandidate): PlannerStop[] =>
+    resolved.map((s) => ({
+      name: s.name,
+      type: s.spotType,
+      requested_type: s.requestedType,
+      arrival_s: s.arrivalS,
+      at_fraction: s.atFraction,
+      location: candidate.waypoints[s.waypointIndex]!,
+      waypoint_index: s.waypointIndex,
+    }));
 
   let params: SearchParams = initialParams(constraints);
   let best: {
     routed: {
       route: RouteThroughOutput;
       selfOverlap: number;
-      candidateSpotCount: number;
       closureM: number | null;
     };
     score: ScoreBreakdown;
     curviness: number;
     validation: ValidationVerdict;
+    stops: PlannerStop[];
+    waypoints: LatLng[];
   } | null = null;
   let bestPresentKey = -Infinity;
 
@@ -217,14 +261,17 @@ export async function runPlanner(
     });
     step(emit, 'scope', 'completed', `τ_out ${scope.tauOutS}s ×${params.tauMultiplier.toFixed(2)}`);
 
+    // effective stop requests this iteration (rung 3 drops nice-to-haves) —
+    // ONE definition feeds retrieve, generate, scoring, and validation so the
+    // ladder's stop relaxation is consistent everywhere (R16-3)
+    const effectiveStops = params.dropNiceToHaveStops
+      ? constraints.stops.filter((s) => s.importance === 'required')
+      : constraints.stops;
+
     // retrieve
     step(emit, 'retrieve', 'started');
     emit({ type: 'tool_call', tool: 'find_curvy_roads' });
-    const stopTypes = (
-      params.dropNiceToHaveStops
-        ? constraints.stops.filter((s) => s.importance === 'required')
-        : constraints.stops
-    ).map((s) => s.type);
+    const stopTypes = effectiveStops.map((s) => s.type);
     const retrieved = await retrieveCandidates(deps.db, scope, {
       stopTypes,
       thetaCurvy: params.thetaCurvy,
@@ -264,13 +311,13 @@ export async function runPlanner(
     const sizingSpeed = params.avoid.highways ? 42 : 55;
     const candidates = isLoop
       ? generateLoopCandidates(origin, retrieved.segments, retrieved.spots, {
-          anchorSpots: retrieved.spots.length > 0,
+          stopRequests: effectiveStops, // typed per-unit anchoring (R16-3)
           durationS, // duration-sized cluster choice (SPK-15)
           anchorPoints, // any-curviness return anchors (SPK-15 run 7)
           avgSpeedKmh: sizingSpeed,
         })
       : generateAtoBCandidates(origin, destination!, retrieved.segments, retrieved.spots, {
-          anchorSpots: retrieved.spots.length > 0,
+          stopRequests: effectiveStops,
         });
     step(emit, 'generate_candidates', 'completed', `${candidates.length} waypoint sets`);
 
@@ -291,6 +338,7 @@ export async function runPlanner(
                     exclude_highways: params.avoid.highways,
                     exclude_tolls: params.avoid.tolls,
                     exclude_ferries: params.avoid.ferries,
+                    exclude_unpaved: params.avoid.unpaved, // best-effort; trace scan = truth (R16-2)
                   },
                   { repairSegments: retrieved.segments }, // round 11b INSERT material
                 );
@@ -314,10 +362,12 @@ export async function runPlanner(
                   exclude_highways: params.avoid.highways,
                   exclude_tolls: params.avoid.tolls,
                   exclude_ferries: params.avoid.ferries,
+                  exclude_unpaved: params.avoid.unpaved, // best-effort; trace scan = truth (R16-2)
                 },
+                scanUnpaved: params.avoid.unpaved, // measure only when it matters
               });
               return {
-                candidate,
+                candidate: a.candidate, // TSP may have reordered waypoints + stop indices
                 route: a.route,
                 selfOverlap: a.selfOverlap,
                 spursWide: 0,
@@ -327,7 +377,7 @@ export async function runPlanner(
                 countryScore: null as number | null,
                 microloops: 0,
                 closureM: null as number | null,
-                trace: null as TraceResult | null, // A→B: tag-blind fallback (FB-5)
+                trace: a.trace, // R16-2: present when scanUnpaved ran; else tag-blind
                 assemblyAccepted: a.accepted,
               };
             } catch {
@@ -355,7 +405,7 @@ export async function runPlanner(
         if (Math.abs(median - target) / target <= 0.25) break;
         sizingV = resizedSpeed(sizingV, target, median);
         const resized = generateLoopCandidates(origin, retrieved.segments, retrieved.spots, {
-          anchorSpots: retrieved.spots.length > 0,
+          stopRequests: effectiveStops,
           durationS,
           anchorPoints,
           avgSpeedKmh: sizingV,
@@ -384,7 +434,8 @@ export async function runPlanner(
     );
     const scored = durationFiltered.map((r) => {
       const curv = measureCurvatureClassAware(r.route.geometry, r.trace); // round 15/FB-5
-      const spotCount = r.candidate.spotIds.length;
+      // per-type coverage (R16-3): coffee-covered/fuel-missing scores 0.5, not 1
+      const coverage = stopCoverageOf(effectiveStops, r.candidate.stops);
       const breakdown = scoreCandidate(
         {
           route: r.route,
@@ -392,7 +443,7 @@ export async function runPlanner(
           durationTargetS: constraints.duration_target_s,
           curviness: curv.curviness,
           twistinessPref: constraints.twistiness_pref,
-          stopCover: requestedStopCount > 0 ? Math.min(1, spotCount / requestedStopCount) : 1,
+          stopCover: stopCoverScore(coverage),
           scenicSignal: 0, // gated ([GATE-S]); no numeric scenic input yet
           countryScore: r.countryScore, // round 11
         },
@@ -439,29 +490,31 @@ export async function runPlanner(
     const feasibles: PlannerAlternate[] = []; // this iteration's runner-up pool (FB-4)
     for (const kept of diversified.kept) {
       const s = (kept as { payload: (typeof scored)[number] }).payload;
+      // measured arrivals from the break_through legs (R16-3) — feeds both the
+      // Tier-3 timing verdicts and the result payload
+      const resolved = resolveStopArrivals(s.r.candidate.stops, s.r.route);
       const verdict = validateCandidate(
         {
           route: s.r.route,
           constraints,
           closureM: s.r.closureM,
           selfOverlap: s.r.selfOverlap,
-          includedStops: s.r.candidate.spotIds.length,
-          requestedStops: params.dropNiceToHaveStops
-            ? constraints.stops
-                .filter((x) => x.importance === 'required')
-                .reduce((a, x) => a + x.count, 0)
-            : requestedStopCount,
+          stopCoverage: stopCoverageOf(effectiveStops, s.r.candidate.stops),
+          stops: resolved,
           relaxedConstraints: params.relaxedConstraints,
         },
         { durationTolerance: params.durationTolerance },
       );
       if (!verdict.feasible) continue;
       feasibleThisRound++;
+      const plannerStops = toPlannerStops(resolved, s.r.candidate);
       feasibles.push({
         route: s.r.route,
         curviness: s.curv.curviness,
         validation: verdict,
         presentKey: s.presentKey,
+        stops: plannerStops,
+        waypoints: s.r.candidate.waypoints,
       });
       if (!best || s.presentKey > bestPresentKey) {
         bestPresentKey = s.presentKey;
@@ -469,12 +522,13 @@ export async function runPlanner(
           routed: {
             route: s.r.route,
             selfOverlap: s.r.selfOverlap,
-            candidateSpotCount: s.r.candidate.spotIds.length,
             closureM: s.r.closureM,
           },
           score: s.breakdown,
           curviness: s.curv.curviness,
           validation: verdict,
+          stops: plannerStops,
+          waypoints: s.r.candidate.waypoints,
         };
       }
     }
@@ -539,6 +593,8 @@ export async function runPlanner(
   result.validation = best.validation;
   result.disclosures = params.disclosures;
   result.elevation = climb;
+  result.stops = best.stops;
+  result.waypoints = best.waypoints;
   emit({
     type: 'done',
     status:

@@ -14,7 +14,7 @@ const FACTS: RouteFacts = {
   targetMin: 90,
   curviness: 2.1,
   roadNames: ['Forks of the Credit Road', 'Mississauga Road'],
-  stops: [{ name: 'Higher Ground Café', type: 'coffee' }],
+  stops: [{ name: 'Higher Ground Café', type: 'coffee', arrival_min: 40 }],
   satisfied: ['duration', 'coffee stop'],
   relaxed: [],
   viewpointCount: 2,

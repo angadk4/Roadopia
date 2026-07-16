@@ -14,7 +14,7 @@ const BASE: ParsedConstraints = validateParsedConstraints({
   shape: 'loop',
   duration_target_s: 5400,
   distance_target_m: null,
-  stops: [{ type: 'coffee', count: 1, importance: 'required' }],
+  stops: [{ type: 'coffee', count: 1, importance: 'required', at_fraction: null }],
   avoid: { highways: true, tolls: false, ferries: false, unpaved: true },
   surface_pref: 'paved',
   character: ['twisty'],
@@ -65,8 +65,14 @@ describe('refine merge (M5-T06, RF6 rules)', () => {
       type: 'viewpoint',
       count: 1,
       importance: 'nice_to_have',
+      at_fraction: null,
     });
-    expect(merged.stops).toContainEqual({ type: 'coffee', count: 1, importance: 'required' });
+    expect(merged.stops).toContainEqual({
+      type: 'coffee',
+      count: 1,
+      importance: 'required',
+      at_fraction: null,
+    });
   });
 
   it('"avoid Erin" becomes a location avoid, not a hard flag; near-Elora persists', () => {

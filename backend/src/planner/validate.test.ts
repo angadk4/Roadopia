@@ -21,6 +21,7 @@ function route(over: Partial<RouteThroughOutput> = {}): RouteThroughOutput {
     },
     distance_m: 42_000,
     duration_s: 5300,
+    legs: [],
     maneuvers: [{ type: 'start', instruction: 'go' }],
     has_highway: false,
     has_toll: false,
@@ -62,8 +63,8 @@ function constraints(over: Partial<ParsedConstraints> = {}): ParsedConstraints {
 const base = {
   closureM: 120,
   selfOverlap: 0.05,
-  includedStops: 0,
-  requestedStops: 0,
+  stopCoverage: [],
+  stops: [],
 };
 
 describe('validateCandidate (M3-T11)', () => {
@@ -112,25 +113,107 @@ describe('validateCandidate (M3-T11)', () => {
     const required = validateCandidate({
       route: route(),
       constraints: constraints({
-        stops: [{ type: 'coffee', count: 1, importance: 'required' }],
+        stops: [{ type: 'coffee', count: 1, importance: 'required', at_fraction: null }],
       }),
       ...base,
-      includedStops: 0,
-      requestedStops: 1,
+      stopCoverage: [{ type: 'coffee', importance: 'required', requested: 1, included: 0 }],
     });
     expect(required.feasible).toBe(false);
+    expect(required.results.find((r) => r.constraint === 'stop_coffee')!.status).toBe('violated');
 
     const nice = validateCandidate({
       route: route(),
       constraints: constraints({
-        stops: [{ type: 'coffee', count: 1, importance: 'nice_to_have' }],
+        stops: [{ type: 'coffee', count: 1, importance: 'nice_to_have', at_fraction: null }],
       }),
       ...base,
-      includedStops: 0,
-      requestedStops: 1,
+      stopCoverage: [{ type: 'coffee', importance: 'nice_to_have', requested: 1, included: 0 }],
     });
     expect(nice.feasible).toBe(true);
-    expect(nice.results.find((r) => r.constraint === 'stops')!.status).toBe('relaxed');
+    expect(nice.results.find((r) => r.constraint === 'stop_coffee')!.status).toBe('relaxed');
+  });
+
+  it('per-type gates: a covered coffee cannot hide a missing required fuel (R16-3)', () => {
+    const v = validateCandidate({
+      route: route(),
+      constraints: constraints({
+        stops: [
+          { type: 'coffee', count: 1, importance: 'required', at_fraction: null },
+          { type: 'fuel', count: 1, importance: 'required', at_fraction: null },
+        ],
+      }),
+      ...base,
+      stopCoverage: [
+        { type: 'coffee', importance: 'required', requested: 1, included: 1 },
+        { type: 'fuel', importance: 'required', requested: 1, included: 0 },
+      ],
+    });
+    expect(v.feasible).toBe(false);
+    expect(v.results.find((r) => r.constraint === 'stop_coffee')!.status).toBe('satisfied');
+    expect(v.results.find((r) => r.constraint === 'stop_fuel')!.status).toBe('violated');
+  });
+
+  it('fraction-timed stop within ±20 % of duration = satisfied; miss = relaxed with actual % (R16-3)', () => {
+    const mkStop = (arrivalS: number | null) => ({
+      spotId: 's1',
+      name: 'Ridge Café',
+      spotType: 'coffee',
+      requestedType: 'coffee' as const,
+      atFraction: 0.5 as const,
+      waypointIndex: 1,
+      arrivalS,
+    });
+    // duration 5300 s; midway = 2650 s; tol ±1060 s
+    const hit = validateCandidate({
+      route: route(),
+      constraints: constraints(),
+      ...base,
+      stops: [mkStop(2400)],
+    });
+    const hitRow = hit.results.find((r) => r.constraint === 'stop_timing_coffee')!;
+    expect(hitRow.status).toBe('satisfied');
+    expect(hitRow.tier).toBe(3);
+
+    const miss = validateCandidate({
+      route: route(),
+      constraints: constraints(),
+      ...base,
+      stops: [mkStop(4800)],
+    });
+    const missRow = miss.results.find((r) => r.constraint === 'stop_timing_coffee')!;
+    expect(missRow.status).toBe('relaxed');
+    expect(missRow.detail).toMatch(/91 %/); // actual 4800/5300 disclosed
+    expect(miss.feasible).toBe(true); // soft: never fails the route
+
+    const unmeasured = validateCandidate({
+      route: route(),
+      constraints: constraints(),
+      ...base,
+      stops: [mkStop(null)],
+    });
+    expect(unmeasured.results.find((r) => r.constraint === 'stop_timing_coffee')!.detail).toMatch(
+      /unmeasured/,
+    );
+  });
+
+  it('anytime stops (at_fraction null) get no timing row', () => {
+    const v = validateCandidate({
+      route: route(),
+      constraints: constraints(),
+      ...base,
+      stops: [
+        {
+          spotId: 's1',
+          name: 'Ridge Café',
+          spotType: 'coffee',
+          requestedType: 'coffee',
+          atFraction: null,
+          waypointIndex: 1,
+          arrivalS: 2400,
+        },
+      ],
+    });
+    expect(v.results.some((r) => r.constraint.startsWith('stop_timing'))).toBe(false);
   });
 
   it('duration outside tolerance is a SOFT relaxed annotation, never infeasibility', () => {

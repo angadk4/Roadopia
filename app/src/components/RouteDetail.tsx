@@ -13,8 +13,8 @@
  * doesn't carry yet — deferred, logged in BD-51.
  */
 
-import Mapbox, { Camera, LineLayer, MapView, ShapeSource } from '@rnmapbox/maps';
-import type { ConstraintResult, Route } from '@shared/types';
+import Mapbox, { Camera, CircleLayer, LineLayer, MapView, ShapeSource } from '@rnmapbox/maps';
+import type { ConstraintResult, Route, RouteStop } from '@shared/types';
 import { useMemo, type ReactElement, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -33,6 +33,23 @@ export interface RouteDetailProps {
 
 function statusGlyph(status: ConstraintResult['status']): string {
   return status === 'satisfied' ? '✓' : status === 'relaxed' ? '⚠' : '✕';
+}
+
+/** Stop-marker colours by DB spot type (matches MapHome's spot palette). */
+const STOP_COLORS: Record<string, string> = {
+  coffee: '#b07b4f',
+  food: '#d1704f',
+  fuel: '#8a93a6',
+  viewpoint: '#4fb0a5',
+  rest: '#7f9a6b',
+  great_road: AMBER,
+};
+
+/** "Ridge Café · coffee · ≈46 min in" (arrival honest-null → no time shown). */
+export function stopLine(stop: RouteStop): string {
+  const bits = [stop.name, stop.type];
+  if (stop.arrival_s !== null) bits.push(`≈${Math.round(stop.arrival_s / 60)} min in`);
+  return bits.join(' · ');
 }
 
 function statusColor(status: ConstraintResult['status'], colors: ThemeColors): string {
@@ -76,6 +93,27 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
   const min = Math.round(route.duration_s / 60);
   const constraints = (route.satisfied_constraints ?? []).filter(
     (c) => c.status !== 'not_applicable',
+  );
+
+  // R16-5: real stops in drive order — rows + typed map markers
+  const stops = useMemo(
+    () => [...(route.stops ?? [])].sort((a, b) => (a.arrival_s ?? 0) - (b.arrival_s ?? 0)),
+    [route.stops],
+  );
+  const stopShape = useMemo(
+    () => ({
+      type: 'FeatureCollection' as const,
+      features: stops.map((s, i) => ({
+        type: 'Feature' as const,
+        id: `stop-${i}`,
+        properties: { color: STOP_COLORS[s.type] ?? '#8a93a6' },
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [s.location.lng, s.location.lat] as [number, number],
+        },
+      })),
+    }),
+    [stops],
   );
 
   const flags: string[] = [];
@@ -124,6 +162,19 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
               style={{ lineColor: AMBER, lineWidth: 3.5, lineCap: 'round', lineJoin: 'round' }}
             />
           </ShapeSource>
+          {stops.length > 0 && (
+            <ShapeSource id="detail-stops" shape={stopShape}>
+              <CircleLayer
+                id="detail-stops-circles"
+                style={{
+                  circleRadius: 6,
+                  circleColor: ['get', 'color'],
+                  circleStrokeWidth: 2,
+                  circleStrokeColor: '#ffffff',
+                }}
+              />
+            </ShapeSource>
+          )}
         </MapView>
         <View
           pointerEvents="none"
@@ -177,6 +228,24 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
           {flags.map((f) => (
             <View key={f} style={[styles.tag, { borderColor: colors.warn }]}>
               <Text style={[styles.tagText, { color: colors.warn }]}>{f}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* stops (R16-5: real spots, MEASURED arrivals — timing verdicts live in
+          the constraints panel below) */}
+      {stops.length > 0 && (
+        <View
+          style={[styles.panel, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <Text style={[styles.panelTitle, { color: colors.text }]}>Stops</Text>
+          {stops.map((s, i) => (
+            <View key={`${s.name}-${i}`} style={styles.stopRow}>
+              <View
+                style={[styles.stopDot, { backgroundColor: STOP_COLORS[s.type] ?? '#8a93a6' }]}
+              />
+              <Text style={[styles.stopText, { color: colors.text }]}>{stopLine(s)}</Text>
             </View>
           ))}
         </View>
@@ -276,6 +345,9 @@ const styles = StyleSheet.create({
   tagText: { ...font.caption },
   panel: { borderWidth: 1, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md },
   panelTitle: { ...font.heading },
+  stopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  stopDot: { width: 10, height: 10, borderRadius: 5 },
+  stopText: { ...font.body, flex: 1 },
   constraintRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
   constraintGlyph: { ...font.body, width: 20, textAlign: 'center' },
   constraintBody: { flex: 1, gap: 2 },

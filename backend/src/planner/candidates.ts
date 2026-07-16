@@ -12,11 +12,11 @@
  * candidates (N_SECTORS/K_CLUSTERS/…) calibrated at M4 per §21.
  */
 
-import type { LatLng } from '@shared/types';
+import type { LatLng, StopFraction, StopRequest, StopType } from '@shared/types';
 
 import { haversineMeters } from '../../../data/curvature/geometry';
 
-import type { CandidateSegment, CandidateSpot } from './retrieve';
+import { STOP_TO_SPOT_TYPE, type CandidateSegment, type CandidateSpot } from './retrieve';
 
 // frozen M4-T12 (was 8): 4 sectors → +0.5 feasible/brief and −6pp med|dur err|
 // on the DEV sweep, VAL-validated (eval/reports/params.md)
@@ -38,10 +38,24 @@ export interface WaypointCandidate {
   /** Return sector for loops (≠ sector when an anchor was available). */
   returnSector: number | null;
   clusterId: number | null;
-  /** Spot ids anchored into this candidate (real spots only). */
-  spotIds: string[];
+  /** Anchored stops — one entry per included spot, typed + index-tracked
+   *  (R16-3; replaces the old type-blind single spotIds). */
+  stops: CandidateStop[];
   /** Σ length·curviness of the backing cluster — the deterministic rank key. */
   clusterWeight: number;
+}
+
+/** One anchored stop on a candidate (R16-3). waypointIndex points into
+ *  WaypointCandidate.waypoints and is maintained through every reorder. */
+export interface CandidateStop {
+  spotId: string;
+  name: string;
+  /** DB spot type (CandidateSpot.type — 'coffee' | 'food' | 'fuel' | …). */
+  spotType: string;
+  /** Request-domain type this stop satisfies (§3.4). */
+  requestedType: StopType;
+  atFraction: StopFraction | null;
+  waypointIndex: number;
 }
 
 interface SegmentInfo {
@@ -174,8 +188,10 @@ export interface GenerateOptions {
   nCandidates?: number;
   nSectors?: number;
   kClusters?: number;
-  /** Whether stop anchoring should be attempted (requested stops exist). */
-  anchorSpots?: boolean;
+  /** The effective stop requests to anchor (R16-3): one spot per requested
+   *  type/count where data allows, typed + fraction-aimed. Empty/omitted = no
+   *  anchoring. */
+  stopRequests?: readonly StopRequest[];
   /** A→B: the destination (required for kind 'atob'). */
   destination?: LatLng;
   /** Loop duration target (s) — sizes cluster choice to the budget (SPK-15 fix). */
@@ -359,13 +375,46 @@ export function generateLoopCandidates(
     };
   };
 
-  const nearestSpotTo = (target: LatLng): CandidateSpot | null => {
-    if (!options.anchorSpots || spots.length === 0) return null;
-    return [...spots].sort(
-      (a, b) =>
-        distM({ lat: a.lat, lng: a.lng }, target) - distM({ lat: b.lat, lng: b.lng }, target) ||
-        a.id.localeCompare(b.id),
-    )[0]!;
+  // R16-3: per-type, per-unit anchoring. A request expands into units
+  // (count copies); each unit gets the nearest UNUSED spot of ITS type.
+  const nearestOfType = (
+    dbType: string | null,
+    target: LatLng,
+    used: Set<string>,
+  ): CandidateSpot | null => {
+    if (dbType === null || spots.length === 0) return null;
+    return (
+      [...spots]
+        .filter((sp) => sp.type === dbType && !used.has(sp.id))
+        .sort(
+          (a, b) =>
+            distM({ lat: a.lat, lng: a.lng }, target) - distM({ lat: b.lat, lng: b.lng }, target) ||
+            a.id.localeCompare(b.id),
+        )[0] ?? null
+    );
+  };
+
+  interface StopUnit {
+    requestedType: StopType;
+    dbType: string | null;
+    atFraction: StopFraction | null;
+  }
+  const stopUnits = (): { anytime: StopUnit[]; fraction: StopUnit[] } => {
+    const anytime: StopUnit[] = [];
+    const fraction: StopUnit[] = [];
+    for (const r of options.stopRequests ?? []) {
+      for (let u = 0; u < r.count; u++) {
+        const unit: StopUnit = {
+          requestedType: r.type,
+          dbType: STOP_TO_SPOT_TYPE[r.type],
+          atFraction: r.at_fraction,
+        };
+        (r.at_fraction === null ? anytime : fraction).push(unit);
+      }
+    }
+    // fraction units placed ascending so earlier insertions keep later slots stable
+    fraction.sort((a, b) => (a.atFraction ?? 0) - (b.atFraction ?? 0));
+    return { anytime, fraction };
   };
 
   // NOTE (SPK-15 run 14, tried + REVERTED): keying the return-anchor distance to
@@ -439,9 +488,6 @@ export function generateLoopCandidates(
     const traverseBest = best.segment.lengthM >= TRAVERSE_MIN_M;
     const second = byValue.find((m) => distM(m.centroid, best.centroid) > 800);
 
-    const spot = nearestSpotTo(primary.centroid);
-    const spotIds = spot ? [spot.id] : [];
-
     const anchor = pickAnchor(
       primary.sector,
       returnSector,
@@ -478,26 +524,86 @@ export function generateLoopCandidates(
         wps.push(tipOf(extraBest.segment));
       }
     }
-    if (spot) wps.push({ lat: spot.lat, lng: spot.lng });
-    wps.push(anchor.centroid);
+    // --- R16-3 stop anchoring: typed units, anytime + fraction-aimed ---
+    const { anytime, fraction } = stopUnits();
+    const used = new Set<string>();
+    const stops: CandidateStop[] = [];
+
+    // anytime units join the angular sweep like any other point (L4 preserved)
+    interface Tagged {
+      p: LatLng;
+      stop?: Omit<CandidateStop, 'waypointIndex'>;
+    }
+    const tagged: Tagged[] = wps.map((p) => ({ p }));
+    for (const unit of anytime) {
+      const sp = nearestOfType(unit.dbType, primary.centroid, used);
+      if (!sp) continue; // unfillable: coverage records the shortfall honestly
+      used.add(sp.id);
+      tagged.push({
+        p: { lat: sp.lat, lng: sp.lng },
+        stop: {
+          spotId: sp.id,
+          name: sp.name,
+          spotType: sp.type,
+          requestedType: unit.requestedType,
+          atFraction: null,
+        },
+      });
+    }
+    tagged.push({ p: anchor.centroid });
 
     // angular order around the origin (L4) so the loop sweeps one way round
-    const ordered = wps
-      .map((p) => ({ p, b: bearingDeg(origin, p) }))
+    // (stable sort — equal bearings keep push order; determinism holds)
+    const orderedTagged = tagged
+      .map((t) => ({ t, b: bearingDeg(origin, t.p) }))
       .sort((a, b) => {
         const rot = (x: number) => (x - (primary.sector * 360) / nSectors + 360) % 360;
         return rot(a.b) - rot(b.b);
       })
-      .map(({ p }) => p);
+      .map(({ t }) => t);
+    const orderedPts: LatLng[] = orderedTagged.map((t) => t.p);
+    orderedTagged.forEach((t, i) => {
+      if (t.stop) stops.push({ ...t.stop, waypointIndex: i });
+    });
+
+    // fraction units: insert AFTER the sweep at sequence-position ≈ fraction.
+    // Drive sequence = [origin, ...O, origin]: arrival at O[i] ≈ (i+1)/(n+1);
+    // slot s = floor(f·(n+1)) puts the stop ≈ f of the way round. The spot is
+    // chosen nearest the slot's bracketing vertices so the sweep is preserved;
+    // genuine sweep breaks die in the assembly gates (overlap/spur/u-turn).
+    for (const unit of fraction) {
+      const n = orderedPts.length;
+      const f = unit.atFraction ?? 0.5;
+      const slot = Math.min(n, Math.max(0, Math.floor(f * (n + 1))));
+      const before = slot === 0 ? origin : orderedPts[slot - 1]!;
+      const after = slot >= n ? origin : orderedPts[slot]!;
+      const aim: LatLng = {
+        lat: (before.lat + after.lat) / 2,
+        lng: (before.lng + after.lng) / 2,
+      };
+      const sp = nearestOfType(unit.dbType, aim, used);
+      if (!sp) continue;
+      used.add(sp.id);
+      orderedPts.splice(slot, 0, { lat: sp.lat, lng: sp.lng });
+      for (const st of stops) if (st.waypointIndex >= slot) st.waypointIndex += 1;
+      stops.push({
+        spotId: sp.id,
+        name: sp.name,
+        spotType: sp.type,
+        requestedType: unit.requestedType,
+        atFraction: unit.atFraction,
+        waypointIndex: slot,
+      });
+    }
 
     return {
       id,
       kind: 'loop',
-      waypoints: ordered,
+      waypoints: orderedPts,
       sector: primary.sector,
       returnSector,
       clusterId: primary.id,
-      spotIds,
+      stops,
       clusterWeight: primary.weight + extraClusters.reduce((s, c) => s + c.weight, 0),
     };
   };
@@ -608,27 +714,53 @@ export function generateAtoBCandidates(
     const via = distM(origin, cluster.centroid) + distM(cluster.centroid, destination);
     if (via > directM * 2.2) continue;
 
-    const wps: Array<{ p: LatLng; prog: number }> = [
-      { p: cluster.centroid, prog: progress(cluster.centroid) },
-    ];
-    const spotIds: string[] = [];
-    if (options.anchorSpots && spots.length > 0) {
-      const best = [...spots].sort((a, b) => {
-        const da =
-          distM(origin, { lat: a.lat, lng: a.lng }) +
-          distM({ lat: a.lat, lng: a.lng }, destination);
-        const db =
-          distM(origin, { lat: b.lat, lng: b.lng }) +
-          distM({ lat: b.lat, lng: b.lng }, destination);
-        return da - db || a.id.localeCompare(b.id);
-      })[0]!;
-      wps.push({
-        p: { lat: best.lat, lng: best.lng },
-        prog: progress({ lat: best.lat, lng: best.lng }),
-      });
-      spotIds.push(best.id);
+    // R16-3: per-unit typed anchoring along the corridor. Anytime units take
+    // the min-detour spot of their type; fraction units first narrow to spots
+    // whose corridor progress best matches f (argmin |progress−f|), then
+    // detour, then id. A `used` set keeps two units off the same spot.
+    interface TaggedWp {
+      p: LatLng;
+      prog: number;
+      stop?: Omit<CandidateStop, 'waypointIndex'>;
+    }
+    const wps: TaggedWp[] = [{ p: cluster.centroid, prog: progress(cluster.centroid) }];
+    const used = new Set<string>();
+    const detour = (p: LatLng) => distM(origin, p) + distM(p, destination) - directM;
+    for (const r of options.stopRequests ?? []) {
+      const dbType = STOP_TO_SPOT_TYPE[r.type];
+      if (dbType === null) continue; // no spot corpus: coverage discloses
+      for (let u = 0; u < r.count; u++) {
+        const pool = spots.filter((sp) => sp.type === dbType && !used.has(sp.id));
+        if (pool.length === 0) break;
+        const best = pool.sort((a, b) => {
+          const pa: LatLng = { lat: a.lat, lng: a.lng };
+          const pb: LatLng = { lat: b.lat, lng: b.lng };
+          if (r.at_fraction !== null) {
+            const fa = Math.abs(progress(pa) - r.at_fraction);
+            const fb = Math.abs(progress(pb) - r.at_fraction);
+            if (Math.abs(fa - fb) > 1e-9) return fa - fb;
+          }
+          return detour(pa) - detour(pb) || a.id.localeCompare(b.id);
+        })[0]!;
+        used.add(best.id);
+        wps.push({
+          p: { lat: best.lat, lng: best.lng },
+          prog: progress({ lat: best.lat, lng: best.lng }),
+          stop: {
+            spotId: best.id,
+            name: best.name,
+            spotType: best.type,
+            requestedType: r.type,
+            atFraction: r.at_fraction,
+          },
+        });
+      }
     }
     wps.sort((a, b) => a.prog - b.prog); // progress order (TSP only ≥4 — M3-T08)
+    const stops: CandidateStop[] = [];
+    wps.forEach((w, i) => {
+      if (w.stop) stops.push({ ...w.stop, waypointIndex: i });
+    });
 
     candidates.push({
       id: `atob-c${cluster.id}`,
@@ -637,7 +769,7 @@ export function generateAtoBCandidates(
       sector: cluster.sector,
       returnSector: null,
       clusterId: cluster.id,
-      spotIds,
+      stops,
       clusterWeight: cluster.weight,
     });
   }

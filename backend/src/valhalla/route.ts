@@ -11,8 +11,14 @@
  *
  * SPK-05 note (2026-07-05, fixtures from Valhalla 3.7.0): the route summary exposes
  * has_highway / has_toll / has_ferry (+has_time_restrictions) but NO has_unpaved —
- * the §50 `has_unpaved` slot is therefore a documented constant `false` until an
- * edge-attribute scan lands (M3+, if unpaved handling needs more than the soft cost).
+ * the mapper emits `false` and ASSEMBLY overrides it from the trace's per-edge
+ * `unpaved` flags (R16-2 — probed live 2026-07-16; the honest measurement).
+ *
+ * R16-2 legs: per-leg summaries are preserved. Valhalla legs exist only between
+ * break/break_through locations ('through' middles never split) — so STOP
+ * waypoints are routed as 'break_through' (a stop IS a stop; no U-turn) and
+ * arrival-at-stop = cumulative leg durations. Probed live: 3 locations with a
+ * break_through middle → 2 legs, each with summary.time.
  */
 
 import { RouteThroughOutputSchema, type Maneuver, type RouteThroughOutput } from '@shared/types';
@@ -32,6 +38,11 @@ export interface AutoCostingOptions {
   exclude_highways?: boolean;
   exclude_tolls?: boolean;
   exclude_ferries?: boolean;
+  /** Best-effort steering only (BD-16): Valhalla permits unpaved at the path's
+   *  start/end and keeps it where no paved alternative exists (probed: option
+   *  present in the 3.7 binary; a gravel-belt corridor kept its gravel). The
+   *  TRACE result-scan is the guarantee; validation gates on the measurement. */
+  exclude_unpaved?: boolean;
   /** Soft preference 0..1 (Valhalla default 1). */
   use_highways?: number;
   use_tolls?: number;
@@ -53,6 +64,12 @@ export interface RouteThroughRequest {
    * waypoint an in-and-out spur when it landed on a minor street).
    */
   middleType?: 'break' | 'through' | 'via';
+  /**
+   * Indices into `waypoints` that are REAL STOPS (R16-2): routed as
+   * 'break_through' (stop without U-turn) regardless of middleType — the only
+   * location type that SPLITS legs, making per-stop arrival times measurable.
+   */
+  stopIndices?: ReadonlyArray<number>;
 }
 
 // --- Valhalla response (subset we consume; external input → validated) ---
@@ -71,8 +88,14 @@ const ValhallaSummarySchema = z.object({
   has_ferry: z.boolean().optional(),
 });
 
+const ValhallaLegSummarySchema = z.object({
+  time: z.number().nonnegative(), // seconds
+  length: z.number().nonnegative(), // kilometres
+});
+
 const ValhallaLegSchema = z.object({
   shape: z.string(),
+  summary: ValhallaLegSummarySchema, // 3.7 always emits it (fixture + probe)
   maneuvers: z.array(ValhallaManeuverSchema).optional(),
 });
 
@@ -165,6 +188,7 @@ export function mapRouteResponse(body: unknown): RouteThroughOutput {
     geometry: { type: 'LineString', coordinates },
     distance_m: summary.length * 1000, // km → m
     duration_s: summary.time,
+    legs: legs.map((l) => ({ duration_s: l.summary.time, distance_m: l.summary.length * 1000 })),
     maneuvers,
     has_highway: summary.has_highway ?? false,
     has_toll: summary.has_toll ?? false,
@@ -181,12 +205,13 @@ export function mapRouteResponse(body: unknown): RouteThroughOutput {
  */
 export function scanConstraintViolations(
   requested: AutoCostingOptions | undefined,
-  result: Pick<RouteThroughOutput, 'has_highway' | 'has_toll' | 'has_ferry'>,
+  result: Pick<RouteThroughOutput, 'has_highway' | 'has_toll' | 'has_ferry' | 'has_unpaved'>,
 ): string[] {
   const violations: string[] = [];
   if (requested?.exclude_highways && result.has_highway) violations.push('highway');
   if (requested?.exclude_tolls && result.has_toll) violations.push('toll');
   if (requested?.exclude_ferries && result.has_ferry) violations.push('ferry');
+  if (requested?.exclude_unpaved && result.has_unpaved) violations.push('unpaved');
   return violations;
 }
 
@@ -201,13 +226,14 @@ export async function routeThrough(
 ): Promise<RouteThroughOutput> {
   const middleType = request.middleType ?? 'break';
   const last = request.waypoints.length - 1;
+  const stopSet = new Set(request.stopIndices ?? []);
   const payload = {
     locations: request.waypoints.map(([lon, lat], i) => {
       const isEndpoint = i === 0 || i === last;
       return {
         lat,
         lon,
-        type: isEndpoint ? 'break' : middleType,
+        type: isEndpoint ? 'break' : stopSet.has(i) ? 'break_through' : middleType,
         // Middle SEARCH waypoints refuse to snap below 'unclassified' (rural
         // unclassified roads stay in; residential crescents/service roads are
         // out) — SPK-15 owner finding: routes ducked into subdivisions because

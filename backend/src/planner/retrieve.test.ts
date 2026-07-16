@@ -66,11 +66,12 @@ describe('retrieveCandidates (M3-T04)', () => {
     expect(out.unavailableStopTypes).toEqual([]);
   });
 
-  it("discloses unavailable stop types ('food' has no DB coverage yet)", async (ctx) => {
+  it("'food' is retrievable since R16-1 (restaurants + fast food seeded)", async (ctx) => {
     if (!db) return ctx.skip();
     const out = await retrieveCandidates(db, scope, { stopTypes: ['food', 'viewpoint'] });
-    expect(out.unavailableStopTypes).toEqual(['food']);
-    expect(out.spots.every((s) => s.type === 'viewpoint')).toBe(true);
+    expect(out.unavailableStopTypes).toEqual([]);
+    expect(out.spots.some((s) => s.type === 'food')).toBe(true);
+    expect(out.spots.every((s) => s.type === 'food' || s.type === 'viewpoint')).toBe(true);
   });
 
   it('no stop types requested ⇒ no spot query, empty spots', async (ctx) => {

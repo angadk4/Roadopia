@@ -95,7 +95,7 @@ export function parseFollowUp(text: string): ConstraintDelta {
   if (/\badd\b|\bthrow\s+in\b|\binclude\b|\bwith\s+a\b|\bstop\s+for\b/i.test(text)) {
     for (const { re, type } of STOP_KEYWORDS) {
       if (re.test(text)) {
-        delta.addStops.push({ type, count: 1, importance: 'nice_to_have' });
+        delta.addStops.push({ type, count: 1, importance: 'nice_to_have', at_fraction: null });
         delta.recognized = true;
       }
     }

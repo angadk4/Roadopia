@@ -20,6 +20,10 @@ export const PRESET_WEIGHTS: Record<Preset, WeightVector> = {
   twisty: { dur: 0.15, cur: 0.55, stop: 0.1, scenic: 0, overlap: 0.25, uturn: 0.05, country: 0 },
   // Chill: hit the time budget, gentle roads, minimal fuss.
   chill: { dur: 0.5, cur: 0.15, stop: 0.15, scenic: 0, overlap: 0.2, uturn: 0.05, country: 0 },
+  // Simple (R16-4): the owner-facing RELABEL of chill — minimal turns, mostly
+  // straight. EXACT same frozen numbers by design (BD-44-class product knob;
+  // no new science). 'chill' stays a parse alias.
+  simple: { dur: 0.5, cur: 0.15, stop: 0.15, scenic: 0, overlap: 0.2, uturn: 0.05, country: 0 },
   // Backroads: character over efficiency; overlap matters (no boring doubling).
   backroads: { dur: 0.2, cur: 0.4, stop: 0.1, scenic: 0, overlap: 0.25, uturn: 0.1, country: 0 },
   // Coffee-stop: the stop is the point.

@@ -22,11 +22,6 @@ describe('buildPlanRequest', () => {
     });
   });
 
-  it('carries the preset chip as the additive preset field (BD-30 transport)', () => {
-    const out = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN, preset: 'twisty' }));
-    expect(out.ok && out.request.preset).toBe('twisty');
-  });
-
   it('includes the destination only for A → B', () => {
     const dest = { lat: 43.5, lng: -80.2 };
     const loop = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN, destination: dest }));
@@ -60,7 +55,163 @@ describe('buildPlanRequest', () => {
   });
 
   it('never sends weights — sliders are not built ([GATE-W]/BD-30)', () => {
-    const out = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN, preset: 'chill' }));
+    const out = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN, style: 'simple' }));
     expect(out.ok && 'weights' in out.request).toBe(false);
+  });
+});
+
+describe('buildPlanRequest — R16-5 section composition (the preset-slot rules)', () => {
+  it('Twisty → preset twisty + twistiness_pref 0.9; Simple → simple + 0.15', () => {
+    const twisty = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN, style: 'twisty' }));
+    expect(twisty.ok && twisty.request.preset).toBe('twisty');
+    expect(twisty.ok && twisty.request.twistiness_pref).toBe(0.9);
+
+    const simple = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN, style: 'simple' }));
+    expect(simple.ok && simple.request.preset).toBe('simple');
+    expect(simple.ok && simple.request.twistiness_pref).toBe(0.15);
+  });
+
+  it('no style, no toggles → NO preset/pref/avoid/character/stops fields at all', () => {
+    const out = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN }));
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect('preset' in out.request).toBe(false);
+      expect('twistiness_pref' in out.request).toBe(false);
+      expect('avoid' in out.request).toBe(false);
+      expect('character' in out.request).toBe(false);
+      expect('stops' in out.request).toBe(false);
+    }
+  });
+
+  it('backroads takes the preset slot over Twisty; the 0.9 pref rides along', () => {
+    const out = buildPlanRequest(
+      draft({
+        brief: 'b',
+        origin: ORIGIN,
+        style: 'twisty',
+        routeOptions: { avoidHighways: false, mostlyBackroads: true, pavedOnly: false },
+      }),
+    );
+    expect(out.ok && out.request.preset).toBe('backroads');
+    expect(out.ok && out.request.twistiness_pref).toBe(0.9);
+  });
+
+  it('backroads + Simple keeps simple and adds the backroad tag (weak combo, honest)', () => {
+    const out = buildPlanRequest(
+      draft({
+        brief: 'b',
+        origin: ORIGIN,
+        style: 'simple',
+        routeOptions: { avoidHighways: false, mostlyBackroads: true, pavedOnly: false },
+      }),
+    );
+    expect(out.ok && out.request.preset).toBe('simple');
+    expect(out.ok && out.request.character).toEqual(['backroad']);
+  });
+
+  it('backroads alone (no style) takes the slot with no pref', () => {
+    const out = buildPlanRequest(
+      draft({
+        brief: 'b',
+        origin: ORIGIN,
+        routeOptions: { avoidHighways: false, mostlyBackroads: true, pavedOnly: false },
+      }),
+    );
+    expect(out.ok && out.request.preset).toBe('backroads');
+    expect(out.ok && 'twistiness_pref' in out.request).toBe(false);
+  });
+
+  it('Scenery → viewpoint stop + scenic tag, NEVER the preset slot ([GATE-S])', () => {
+    const out = buildPlanRequest(
+      draft({ brief: 'b', origin: ORIGIN, style: 'twisty', preferViews: true }),
+    );
+    expect(out.ok && out.request.preset).toBe('twisty'); // untouched
+    expect(out.ok && out.request.character).toEqual(['scenic']);
+    expect(out.ok && out.request.stops).toEqual([
+      { type: 'viewpoint', count: 1, importance: 'nice_to_have', at_fraction: null },
+    ]);
+  });
+
+  it('avoid sends ONLY the toggles that are ON (per-key server merge)', () => {
+    const out = buildPlanRequest(
+      draft({
+        brief: 'b',
+        origin: ORIGIN,
+        routeOptions: { avoidHighways: true, mostlyBackroads: false, pavedOnly: true },
+      }),
+    );
+    expect(out.ok && out.request.avoid).toEqual({ highways: true, unpaved: true });
+
+    const one = buildPlanRequest(
+      draft({
+        brief: 'b',
+        origin: ORIGIN,
+        routeOptions: { avoidHighways: true, mostlyBackroads: false, pavedOnly: false },
+      }),
+    );
+    // an untouched toggle must NOT appear as false (it would clear a
+    // brief-parsed avoid server-side)
+    expect(one.ok && one.request.avoid).toEqual({ highways: true });
+  });
+
+  it('stops rows map when → fraction (Anytime null · Early .25 · Midway .5 · Late .75)', () => {
+    const out = buildPlanRequest(
+      draft({
+        brief: 'b',
+        origin: ORIGIN,
+        stops: [
+          { type: 'coffee', when: 'midway' },
+          { type: 'food', when: 'anytime' },
+          { type: 'fuel', when: 'late' },
+        ],
+      }),
+    );
+    expect(out.ok && out.request.stops).toEqual([
+      { type: 'coffee', count: 1, importance: 'nice_to_have', at_fraction: 0.5 },
+      { type: 'food', count: 1, importance: 'nice_to_have', at_fraction: null },
+      { type: 'fuel', count: 1, importance: 'nice_to_have', at_fraction: 0.75 },
+    ]);
+  });
+
+  it('duplicate (type, when) rows aggregate into one request with count n', () => {
+    const out = buildPlanRequest(
+      draft({
+        brief: 'b',
+        origin: ORIGIN,
+        stops: [
+          { type: 'coffee', when: 'anytime' },
+          { type: 'coffee', when: 'anytime' },
+          { type: 'coffee', when: 'midway' }, // different when = separate unit
+        ],
+      }),
+    );
+    expect(out.ok && out.request.stops).toEqual([
+      { type: 'coffee', count: 2, importance: 'nice_to_have', at_fraction: null },
+      { type: 'coffee', count: 1, importance: 'nice_to_have', at_fraction: 0.5 },
+    ]);
+  });
+
+  it('full house: every section set composes without collisions', () => {
+    const out = buildPlanRequest(
+      draft({
+        brief: 'sunday drive',
+        origin: ORIGIN,
+        style: 'twisty',
+        preferViews: true,
+        routeOptions: { avoidHighways: true, mostlyBackroads: true, pavedOnly: true },
+        stops: [{ type: 'food', when: 'midway' }],
+      }),
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.request.preset).toBe('backroads');
+      expect(out.request.twistiness_pref).toBe(0.9);
+      expect(out.request.avoid).toEqual({ highways: true, unpaved: true });
+      expect(out.request.character).toEqual(['scenic']);
+      expect(out.request.stops).toEqual([
+        { type: 'food', count: 1, importance: 'nice_to_have', at_fraction: 0.5 },
+        { type: 'viewpoint', count: 1, importance: 'nice_to_have', at_fraction: null },
+      ]);
+    }
   });
 });

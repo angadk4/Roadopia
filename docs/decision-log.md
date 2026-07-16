@@ -1221,3 +1221,53 @@ covered). Also recorded: u-turn single-offence pass-through (whole-pool-dirty co
 stays a known structural M4-reopen candidate. Totals this round: 420 tests green
 (app 110 · backend 214 · db 30 · shared 23 · eval 26 · data 17); live E2E full/cancel/
 refine/alternates green.
+
+**BD-57 — Round 16: structured Plan-screen sections, typed multi-stop with measured
+timing, honest surfaces, preset `simple` (2026-07-16).** Owner ask: replace the
+"Character (optional)" chip row with sections that are clearer AND genuinely change the
+route; add food/gas stops with a when-in-the-drive preference; paved-only; honest scenery.
+Owner-scoped choices locked: scenery = soft two-level toggle; timing = Anytime/Early/
+Midway/Late chips (0.25/0.5/0.75). Shipped, six units:
+(1) **Food corpus** — restaurants were already extracted and discarded by one classify()
+branch; fast_food added by local re-filter. Migration 0009 widens spots_type_check;
++16,326 food rows (corpus 21,366: coffee 3,197 · food 16,326 · fuel 1,388 · viewpoint 455);
+SPOTS_LIMIT 25,000; marker letters explicit (fuel 'G', food 'F').
+(2) **Engine layer** — per-leg durations mapped (previously discarded); stop waypoints are
+**break_through** (probed on the pinned 3.7.0: `through` middles do NOT split legs;
+break_through does → arrivals = Σ leg durations, and a stop IS a stop); trace gains
+`edge.unpaved` (probed true on gravel); `exclude_unpaved` wired but probed BEST-EFFORT
+(no observable change on a gravel-belt corridor) → the honesty guarantee is the trace
+result-scan: > UNPAVED_MIN_M (50 m) of unpaved edges overrides has_unpaved (BD-16).
+(3) **Planner core** — `WaypointCandidate.stops: CandidateStop[]` replaces the type-blind
+single spotIds; per-type per-unit anchoring (anytime units join the L4 angular sweep;
+fraction units inserted post-sort at slot floor(f·(n+1)) aimed at the bracketing vertices;
+A→B: argmin |progress−f| → detour → id; used-set dedup; TSP skipped when any fraction stop,
+indices re-derived by object identity); per-type Tier-2 gates `stop_<type>` (a covered
+coffee can no longer hide a missing required fuel) + Tier-3 `stop_timing_<type>`
+(STOP_TIMING_TOLERANCE 0.2 of duration, actual % disclosed; unmeasured arrival = honest
+null, never interpolated); stop_cover = per-type mean; repair pass skips stop-carrying
+candidates (recorded fallback). Explanation facts un-stubbed: stops carry arrival_min
+("Ridge Café (coffee, ≈40 min in)"), arrivals join the grounding allowlist.
+(4) **Transport + parsers** — /plan body += stops (shared-zod re-validated; per-TYPE
+replace vs the brief; cap 6)/avoid (per-key)/character (unioned)/twistiness_pref; LLM parse
+prompt v2 (at_fraction vocabulary; preset enum += simple); rules parser maps
+early-on/halfway/toward-the-end → fractions and simple/easy/mostly-straight → preset.
+**Preset `simple` = chill's EXACT frozen vector relabeled** (owner vocabulary: minimal
+turns, mostly straight; byte-equality pinned by test; chill stays a parse alias; no new
+science, BD-30/[GATE-W] intact).
+(5) **Plan screen** — sections "Drive style" (Twisty·Simple) / "Scenery" (Prefer views →
+viewpoint nice_to_have stop + scenic tag, NEVER the preset slot — [GATE-S] honest lever) /
+"On the route" (avoid-highways · mostly-backroads · paved-only + the stops builder);
+PresetChips deleted; composition rules: backroads takes the slot over twisty (pref rides
+along), simple keeps the slot + backroad tag (weak combo, honest); everything optional
+under an explicit header. RouteDetail: Stops rows with measured arrivals + typed markers.
+(6) **Eval discipline** — config **frozen-m4t12-v9 → v10**; 48-brief VAL:
+**all 48 best geometries + durations + verdicts BYTE-IDENTICAL to v9 (AC 10/48 → 10/48)**
+— the machinery added measurement without moving the corpus; live E2E structured stops run
+(Guelph): Tim Hortons 78 min + Pioneer 118 min, all four stop verdicts satisfied
+(eval/reports/stops-and-surfaces.md — OWNER RATIFICATION REQUESTED).
+**Defect found by live probe, fixed in-round:** the stop-timing regexes shipped with `\b`
+as a literal 0x08 byte (python-patch artifact — dead patterns, silent null fractions);
+fixed byte-level, repo swept, phrase-level test added (the lesson: patch-written regexes
+need phrase tests in the same unit). Totals: backend 235 · shared 23 · app 121 all green,
+tsc clean ×4 (incl. eval); live E2E full/cancel/refine/stops green.

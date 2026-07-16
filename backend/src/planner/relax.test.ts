@@ -15,7 +15,7 @@ function constraints(over: Partial<ParsedConstraints> = {}): ParsedConstraints {
     shape: 'loop',
     duration_target_s: 5400,
     distance_target_m: null,
-    stops: [{ type: 'coffee', count: 1, importance: 'nice_to_have' }],
+    stops: [{ type: 'coffee', count: 1, importance: 'nice_to_have', at_fraction: null }],
     avoid: { highways: true, tolls: true, ferries: false, unpaved: true },
     surface_pref: 'paved',
     character: ['twisty'],

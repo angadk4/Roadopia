@@ -65,6 +65,7 @@ const ROUTE: Route = {
     { constraint: 'avoid_ferries', tier: 2, status: 'not_applicable', detail: '' },
   ],
   agent_explanation: null,
+  stops: [],
 };
 
 const EXPLANATION = {
@@ -118,6 +119,61 @@ describe('RouteDetail', () => {
       tree = create(<RouteDetail route={ROUTE} explanation={null} done="best_so_far" />);
     });
     expect(textOf(tree)).toContain("I ran out of time; here's the best I found.");
+  });
+
+  it('R16-5: real stops render as drive-order rows with measured arrivals (null = no time shown)', () => {
+    const withStops: Route = {
+      ...ROUTE,
+      stops: [
+        {
+          name: 'Transit Fuel',
+          type: 'fuel',
+          requested_type: 'fuel',
+          arrival_s: 3120,
+          at_fraction: 0.75,
+          location: { lat: 43.31, lng: -79.92 },
+          waypoint_index: 2,
+        },
+        {
+          name: 'Ridge Café',
+          type: 'coffee',
+          requested_type: 'coffee',
+          arrival_s: 2400,
+          at_fraction: 0.5,
+          location: { lat: 43.3, lng: -79.9 },
+          waypoint_index: 1,
+        },
+        {
+          name: 'Lookout Point',
+          type: 'viewpoint',
+          requested_type: 'viewpoint',
+          arrival_s: null, // honest unmeasured — no fabricated time
+          at_fraction: null,
+          location: { lat: 43.32, lng: -79.94 },
+          waypoint_index: 3,
+        },
+      ],
+    };
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<RouteDetail route={withStops} explanation={null} done="ok" />);
+    });
+    const text = textOf(tree);
+    expect(text).toContain('Stops');
+    expect(text).toContain('Ridge Café · coffee · ≈40 min in');
+    expect(text).toContain('Transit Fuel · fuel · ≈52 min in');
+    expect(text).toContain('Lookout Point · viewpoint'); // no "min in" when unmeasured
+    expect(text).not.toContain('Lookout Point · viewpoint ·');
+    // drive order (arrival asc): café before fuel despite fixture order
+    expect(text.indexOf('Ridge Café')).toBeLessThan(text.indexOf('Transit Fuel'));
+  });
+
+  it('R16-5: no stops → no Stops panel', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<RouteDetail route={ROUTE} explanation={null} done="ok" />);
+    });
+    expect(textOf(tree)).not.toContain('"Stops"');
   });
 });
 

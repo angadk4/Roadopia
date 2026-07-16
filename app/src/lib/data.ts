@@ -146,14 +146,12 @@ export type SpotRow = z.infer<typeof SpotRowSchema>;
 
 /**
  * Spot budget per load — a safety valve ABOVE the region's OSM spot count
- * (5,040 as of region v5), never a truncator. M7-T09 finding: every
- * row-returning read is capped by PostgREST max-rows (1,000/response) AND
- * planner_find_spots is nearest-first, so pins truncated to a 22.8 km disc
- * around the Oakville shore. map_spots (migration 0008) returns ONE jsonb
- * aggregate — cap-proof, spatially unbiased. ~0.65 MB once per launch;
- * viewport-scoped loading is the M8 egress follow-up (§44).
+ * (21,366 as of R16-1: +16,326 food spots), never a truncator (the M7-T09
+ * lesson). map_spots (migration 0008) returns ONE jsonb aggregate — cap-proof,
+ * spatially unbiased. ~2.7 MB once per launch now; viewport-scoped loading is
+ * the M8 egress follow-up (§44) and got MORE urgent with the food corpus.
  */
-export const SPOTS_LIMIT = 6000;
+export const SPOTS_LIMIT = 25000;
 
 export async function fetchMapSpots(
   cfg: SupabaseConfig,
@@ -211,6 +209,17 @@ export interface SpotFeatureProps {
   label: string;
 }
 
+/** Explicit marker letters — fuel reads 'G' (gas) so food can own 'F' (R16-1). */
+const SPOT_LETTERS: Record<string, string> = {
+  coffee: 'C',
+  food: 'F',
+  fuel: 'G',
+  viewpoint: 'V',
+  rest: 'R',
+  great_road: 'W', // "wow road" — G is taken; polish pass will bring icons
+  meetup: 'M',
+};
+
 export function spotsToFeatureCollection(rows: SpotRow[]): {
   type: 'FeatureCollection';
   features: Array<{
@@ -229,7 +238,7 @@ export function spotsToFeatureCollection(rows: SpotRow[]): {
         id: s.id,
         name: s.name,
         type: s.type,
-        label: (s.type[0] ?? '?').toUpperCase(),
+        label: SPOT_LETTERS[s.type] ?? (s.type[0] ?? '?').toUpperCase(),
       },
       geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
     })),

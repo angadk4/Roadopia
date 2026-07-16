@@ -35,6 +35,7 @@ const TraceEdgeSchema = z.object({
   length: z.number().nonnegative(),
   use: z.string().optional(),
   roundabout: z.boolean().optional(),
+  unpaved: z.boolean().optional(), // R16-2 (probed live: true on gravel edges)
   begin_shape_index: z.number().int().nonnegative().optional(),
   end_shape_index: z.number().int().nonnegative().optional(),
   source_percent_along: z.number().min(0).max(1).optional(),
@@ -54,6 +55,8 @@ export interface TraceEdge {
   /** Valhalla edge use — 'ramp' | 'turn_channel' | 'road' | … (round 15). */
   use?: string;
   roundabout?: boolean;
+  /** Surface honesty (R16-2): true on gravel/dirt edges. */
+  unpaved?: boolean;
   /** Indices into TraceResult.matchedShape (NOT the input geometry). */
   beginShapeIndex?: number;
   endShapeIndex?: number;
@@ -91,6 +94,7 @@ export async function traceRoadClasses(
         'edge.length',
         'edge.use',
         'edge.roundabout',
+        'edge.unpaved',
         'edge.begin_shape_index',
         'edge.end_shape_index',
         'shape',
@@ -122,6 +126,7 @@ export async function traceRoadClasses(
       lengthM: e.length * toMetres * Math.max(0, to - from),
       ...(e.use !== undefined ? { use: e.use } : {}),
       ...(e.roundabout !== undefined ? { roundabout: e.roundabout } : {}),
+      ...(e.unpaved !== undefined ? { unpaved: e.unpaved } : {}),
       ...(e.begin_shape_index !== undefined ? { beginShapeIndex: e.begin_shape_index } : {}),
       ...(e.end_shape_index !== undefined ? { endShapeIndex: e.end_shape_index } : {}),
     };

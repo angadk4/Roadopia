@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-import { CharacterTagSchema, IntensitySchema, LatLngSchema } from './route';
+import {
+  CharacterTagSchema,
+  IntensitySchema,
+  LatLngSchema,
+  StopFractionSchema,
+  StopTypeSchema,
+} from './route';
 
 /**
  * `ParsedConstraints` — the typed object the planner consumes (M3-T01).
@@ -29,10 +35,10 @@ export type Origin = z.infer<typeof OriginSchema>;
 export const DestinationSchema = z.union([LatLngSchema, z.string().min(1)]);
 export type Destination = z.infer<typeof DestinationSchema>;
 
-/** What a user asks to stop for (§3.4) — request domain, distinct from the DB spot
- *  types ('food' has no seeded spot type yet; retrieval maps or discloses absence). */
-export const StopTypeSchema = z.enum(['coffee', 'food', 'fuel', 'viewpoint', 'rest', 'great_road']);
-export type StopType = z.infer<typeof StopTypeSchema>;
+// StopType/StopFraction moved to route.ts (R16-3 — cycle avoidance); re-exported
+// here so every existing importer keeps working.
+export { StopTypeSchema, StopFractionSchema };
+export type { StopType, StopFraction } from './route';
 
 export const StopImportanceSchema = z.enum(['nice_to_have', 'required']);
 export type StopImportance = z.infer<typeof StopImportanceSchema>;
@@ -41,6 +47,10 @@ export const StopRequestSchema = z.object({
   type: StopTypeSchema,
   count: z.number().int().positive(),
   importance: StopImportanceSchema,
+  /** Aim the stop at this fraction of the drive; null = anytime. Soft
+   *  (tier-3), disclosed when missed. `.default(null)` keeps pre-R16 payloads
+   *  (refine round-trips, eval gold) valid. */
+  at_fraction: StopFractionSchema.nullable().default(null),
 });
 export type StopRequest = z.infer<typeof StopRequestSchema>;
 
@@ -56,11 +66,14 @@ export type Avoid = z.infer<typeof AvoidSchema>;
 export const SurfacePrefSchema = z.enum(['paved', 'any']);
 export type SurfacePref = z.infer<typeof SurfacePrefSchema>;
 
-/** §3.4 preset list (Hard rule D: engagement/character framing, never speed). */
+/** §3.4 preset list (Hard rule D: engagement/character framing, never speed).
+ *  'simple' (R16-4) = the owner-facing relabel of chill's FROZEN vector
+ *  (minimal turns, mostly straight roads); 'chill' stays a recognized alias. */
 export const PresetSchema = z.enum([
   'scenic',
   'twisty',
   'chill',
+  'simple',
   'backroads',
   'coffee_stop',
   'avoid_highways',

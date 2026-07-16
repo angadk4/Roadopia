@@ -7,7 +7,6 @@ import { act } from 'react';
 import { create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it } from 'vitest';
 
-import PresetChips from '../../components/PresetChips';
 import { EMPTY_DRAFT, PlanDraftContext, type PlanDraft } from '../../lib/plan_draft';
 import MapHome from '../MapHome';
 import { CreateScreen, SavedScreen } from '../placeholders';
@@ -34,25 +33,29 @@ function planScreenWith(draft: Partial<PlanDraft>): ReactTestRenderer {
 }
 
 describe('screen smoke', () => {
-  it('PlanScreen renders brief input, origin buttons, shape + preset chips (FR-040)', () => {
+  it('PlanScreen renders brief input, origin buttons, shape + R16-5 sections (FR-040)', () => {
     const text = textOf(planScreenWith({}));
     expect(text).toContain('Plan a drive');
     expect(text).toContain('Use my location');
     expect(text).toContain('Pick on map');
     expect(text).toContain('Loop');
     expect(text).toContain('A → B');
-    // all six presets, no sliders (BD-30 / Hard rule L)
-    for (const label of [
-      'Scenic',
-      'Twisty',
-      'Chill',
-      'Backroads',
-      'Coffee stop',
-      'Avoid highways',
-    ]) {
-      expect(text).toContain(label);
-    }
+    // R16-5 sections replace the chip row; still presets-only under the hood
+    // (BD-30 / Hard rule L — buildPlanRequest composes onto the preset slot)
+    expect(text).toContain('optional');
+    expect(text).toContain('Drive style');
+    expect(text).toContain('Twisty');
+    expect(text).toContain('Simple');
+    expect(text).toContain('Scenery');
+    expect(text).toContain('Prefer views');
+    expect(text).toContain('On the route');
+    expect(text).toContain('Avoid highways');
+    expect(text).toContain('Mostly backroads');
+    expect(text).toContain('Paved roads only');
+    expect(text).toContain('Add a stop');
     expect(text.toLowerCase()).not.toContain('slider');
+    // Chill is gone from the UI ('Simple' replaced it, owner ask R16)
+    expect(text).not.toContain('Chill');
     // CTA blocked with friendly reasons
     expect(text).toContain('Describe the drive you want.');
     expect(text).toContain('Add a start point.');
@@ -69,12 +72,22 @@ describe('screen smoke', () => {
     expect(text).not.toContain('Add a start point.');
   });
 
-  it('PresetChips marks the active chip selected', () => {
-    let tree!: ReactTestRenderer;
-    act(() => {
-      tree = create(<PresetChips value="twisty" onChange={() => {}} />);
-    });
-    expect(textOf(tree)).toContain('"selected":true');
+  it('PlanScreen marks the active drive-style chip selected; stops builder rows render', () => {
+    const text = textOf(
+      planScreenWith({
+        style: 'twisty',
+        stops: [
+          { type: 'coffee', when: 'midway' },
+          { type: 'fuel', when: 'late' },
+        ],
+      }),
+    );
+    expect(text).toContain('"selected":true');
+    expect(text).toContain('Coffee');
+    expect(text).toContain('Gas');
+    expect(text).toContain('Midway');
+    expect(text).toContain('Late');
+    expect(text).toContain('Remove');
   });
 
   it('Create/Saved placeholders render honest milestone copy', () => {

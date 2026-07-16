@@ -19,12 +19,19 @@ import type {
 } from '@shared/types';
 
 import { EPSILON_CLOSURE_M, SELF_OVERLAP_CAP } from './loop';
+import type { ResolvedStop, StopCoverage } from './stops';
 
 // frozen M4-T12 (was 0.1): p80 of the frozen config's |dur err| across DEV+VAL —
 // §21 "the band where most feasible routes land"; misses beyond it disclose.
 // The 0.1 bar failed routes the planner measurably cannot hit (BD-29: 8/9
 // seeded failures were pure duration misses, unrepairable by any move).
 export const DURATION_TOLERANCE_DEFAULT = 0.2;
+
+// R16-3: a fraction-timed stop ("coffee midway") is satisfied when its measured
+// arrival lands within ±20 % of total duration of the asked fraction — the chip
+// vocabulary (0.25/0.5/0.75) makes neighbouring chips just-distinguishable at
+// this width. Soft (Tier 3): misses disclose the actual %, never fail the route.
+export const STOP_TIMING_TOLERANCE = 0.2;
 
 // Single source of truth moved to shared at M7-T05 (the client constraints
 // panel renders these rows); re-exported so existing backend imports hold.
@@ -36,9 +43,11 @@ export interface ValidationInput {
   /** Loop closure distance (m) from assembly; null for A→B. */
   closureM: number | null;
   selfOverlap: number;
-  /** Spot ids actually included in the candidate vs requested count. */
-  includedStops: number;
-  requestedStops: number;
+  /** Per-type request-vs-included tally (R16-3; replaces the scalar counts —
+   *  a missing required fuel stop must not hide behind a covered coffee). */
+  stopCoverage: StopCoverage[];
+  /** The candidate's stops with measured arrivals (timing verdicts). */
+  stops: ResolvedStop[];
   /** Tier-2 constraints the relaxation ladder has already relaxed (disclosed). */
   relaxedConstraints?: string[];
 }
@@ -122,20 +131,22 @@ export function validateCandidate(
     });
   }
 
-  // --- Tier 2: required stops present or absence reported ---
-  const requiredRequested = constraints.stops.some((s) => s.importance === 'required');
-  if (input.requestedStops > 0) {
-    const covered = input.includedStops >= input.requestedStops;
+  // --- Tier 2: required stops present or absence reported — PER TYPE (R16-3;
+  // the old scalar gate let a covered coffee hide a missing required fuel) ---
+  for (const c of input.stopCoverage) {
+    if (c.requested <= 0) continue;
+    const key = `stop_${c.type}`;
+    const covered = c.included >= c.requested;
     const status: ConstraintStatus = covered
       ? 'satisfied'
-      : requiredRequested && !relaxed.has('stops')
+      : c.importance === 'required' && !relaxed.has(key) && !relaxed.has('stops')
         ? 'violated'
         : 'relaxed';
     results.push({
-      constraint: 'stops',
+      constraint: key,
       tier: 2,
       status,
-      detail: `${input.includedStops}/${input.requestedStops} requested stops included`,
+      detail: `${c.included}/${c.requested} requested ${c.type} stops included`,
     });
   }
 
@@ -148,6 +159,37 @@ export function validateCandidate(
       tier: 3,
       status: err <= durationTolerance ? 'satisfied' : 'relaxed',
       detail: `duration ${Math.round(route.duration_s)} s vs target ${constraints.duration_target_s} s (${(err * 100).toFixed(0)} % err, tol ${durationTolerance * 100} %)`,
+    });
+  }
+
+  // --- Tier 3 (soft): fraction-timed stop arrivals (R16-3) ---
+  // Verified against MEASURED per-leg arrivals (break_through legs) — never a
+  // geometric estimate. Unmeasured arrivals disclose honestly as relaxed.
+  const nthOfType = new Map<string, number>();
+  for (const s of input.stops) {
+    if (s.atFraction === null) continue;
+    const nth = (nthOfType.get(s.requestedType) ?? 0) + 1;
+    nthOfType.set(s.requestedType, nth);
+    const key =
+      nth === 1 ? `stop_timing_${s.requestedType}` : `stop_timing_${s.requestedType}_${nth}`;
+    if (s.arrivalS === null || route.duration_s <= 0) {
+      results.push({
+        constraint: key,
+        tier: 3,
+        status: 'relaxed',
+        detail: `${s.name}: arrival unmeasured — timing not verifiable`,
+      });
+      continue;
+    }
+    const actual = s.arrivalS / route.duration_s;
+    const off = Math.abs(actual - s.atFraction);
+    results.push({
+      constraint: key,
+      tier: 3,
+      status: off <= STOP_TIMING_TOLERANCE ? 'satisfied' : 'relaxed',
+      detail: `${s.name} at ${(actual * 100).toFixed(0)} % of the drive (asked ${(
+        s.atFraction * 100
+      ).toFixed(0)} %, tol ±${STOP_TIMING_TOLERANCE * 100} %)`,
     });
   }
 

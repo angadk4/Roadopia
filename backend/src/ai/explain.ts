@@ -23,8 +23,9 @@ export interface RouteFacts {
   curviness: number;
   /** Named roads actually on the route (from maneuvers), deduped. */
   roadNames: string[];
-  /** Real stops included (name + type from the spots table). */
-  stops: Array<{ name: string; type: string }>;
+  /** Real stops included (name + type from the spots table; arrival measured
+   *  from per-leg durations — R16-3; null = unmeasured, never estimated). */
+  stops: Array<{ name: string; type: string; arrival_min: number | null }>;
   satisfied: string[];
   relaxed: string[];
   viewpointCount: number;
@@ -56,6 +57,8 @@ function groundingFactsOf(facts: RouteFacts): GroundingFacts {
       facts.distanceKm,
       ...(facts.targetMin !== null ? [facts.targetMin] : []),
       facts.curviness,
+      // measured stop arrivals (R16-3) — "≈40 min in" must ground
+      ...facts.stops.flatMap((s) => (s.arrival_min !== null ? [s.arrival_min] : [])),
     ],
   };
 }
@@ -63,7 +66,12 @@ function groundingFactsOf(facts: RouteFacts): GroundingFacts {
 /** Deterministic fallback — same facts, no model (FR-261 degrade path). */
 export function templateExplanation(facts: RouteFacts): Explanation {
   const roads = facts.roadNames.slice(0, 3).join(', ');
-  const stops = facts.stops.map((s) => `${s.name} (${s.type})`).join(', ');
+  const stops = facts.stops
+    .map(
+      (s) =>
+        `${s.name} (${s.type}${s.arrival_min !== null ? `, ≈${Math.round(s.arrival_min)} min in` : ''})`,
+    )
+    .join(', ');
   const bits = [
     `A ${Math.round(facts.durationMin)} minute, ${Math.round(facts.distanceKm)} km loop` +
       (facts.originName ? ` from ${facts.originName}` : '') +

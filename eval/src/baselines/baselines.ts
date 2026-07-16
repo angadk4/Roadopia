@@ -211,17 +211,23 @@ export async function runBaseline(
       ? Math.max(haversine(oPt, coords[0]!), haversine(oPt, coords[coords.length - 1]!))
       : null;
     const selfOverlap = selfOverlapRatio(routed.geometry, undefined, origin);
-    const requestedStops = c.stops.filter((s) => s.importance === 'required').length;
-    const includedStops =
-      id === 'B3' && c.stops.length > 0 && c.stops[0]!.importance === 'required' ? 1 : 0;
+    // baselines carry no typed CandidateStop bookkeeping — synthesize the
+    // per-type coverage the R16-3 gate expects (B3 anchors the first stop only)
+    const requiredStops = c.stops.filter((s) => s.importance === 'required');
+    const stopCoverage = requiredStops.map((s, i) => ({
+      type: s.type,
+      importance: s.importance,
+      requested: s.count,
+      included: id === 'B3' && i === 0 ? 1 : 0,
+    }));
 
     const verdict = validateCandidate({
       route: routed,
       constraints: c,
       closureM,
       selfOverlap,
-      includedStops,
-      requestedStops,
+      stopCoverage,
+      stops: [],
     });
     const violations = verdict.results
       .filter((res) => res.status === 'violated')
@@ -241,8 +247,8 @@ export async function runBaseline(
         selfOverlap,
         curvature: measureCurvature(routed.geometry).curviness,
         connected: true,
-        requiredStopsRequested: requestedStops,
-        requiredStopsPresent: includedStops,
+        requiredStopsRequested: stopCoverage.reduce((a, sc) => a + sc.requested, 0),
+        requiredStopsPresent: stopCoverage.reduce((a, sc) => a + sc.included, 0),
       },
       verdict.feasible,
       violations,

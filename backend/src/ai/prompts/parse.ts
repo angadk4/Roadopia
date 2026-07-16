@@ -76,7 +76,7 @@ export const PARSE_JSON_SCHEMA: Record<string, unknown> = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['type', 'count', 'importance'],
+        required: ['type', 'count', 'importance', 'at_fraction'],
         properties: {
           type: {
             type: 'string',
@@ -84,6 +84,7 @@ export const PARSE_JSON_SCHEMA: Record<string, unknown> = {
           },
           count: INT,
           importance: { type: 'string', enum: ['nice_to_have', 'required'] },
+          at_fraction: { enum: [0.25, 0.5, 0.75, null] },
         },
       },
     },
@@ -116,7 +117,7 @@ export const PARSE_JSON_SCHEMA: Record<string, unknown> = {
     intensity: nullable({ type: 'string', enum: ['chill', 'moderate', 'spirited'] }),
     preset: nullable({
       type: 'string',
-      enum: ['scenic', 'twisty', 'chill', 'backroads', 'coffee_stop', 'avoid_highways'],
+      enum: ['scenic', 'twisty', 'chill', 'simple', 'backroads', 'coffee_stop', 'avoid_highways'],
     }),
     location_constraints: {
       type: 'array',
@@ -161,11 +162,11 @@ RULES (the §3.4/§3.5 contract):
 - origin/destination: place-name STRINGS exactly as the user names them ('current' when they say "from here"/"my location"; null when no origin is given — then also put "origin" in missing). NEVER output coordinates.
 - shape: "loop" unless the brief clearly travels A to B (then destination is required or listed in missing). No destination mentioned => loop.
 - duration_target_s in SECONDS (e.g. "90 min" => 5400; "2 hours" => 7200); distance_target_m in metres. Ranges use the midpoint.
-- stops: only types the user asks for; importance "required" ONLY with must/need/has-to language, else "nice_to_have"; "grab a coffee"-style counts as one coffee stop.
+- stops: only types the user asks for; importance "required" ONLY with must/need/has-to language, else "nice_to_have"; "grab a coffee"-style counts as one coffee stop. at_fraction places the stop WITHIN the drive: "early on"/"near the start" => 0.25, "halfway"/"midway"/"in the middle" => 0.5, "toward the end"/"late in the drive" => 0.75, no timing language => null. Scope the timing to ITS stop when the sentence is clear ("coffee early on, gas near the end").
 - avoid booleans are BLANKET bans only ("no highways", "avoid tolls", "no gravel" => unpaved:true + surface_pref:"paved"). A named road ("skip the 403", "avoid the QEW") is a location_constraints entry {kind:"avoid"}, NOT avoid.highways.
 - "near X"/"along Y" => location_constraints {kind:"near"}.
 - twistiness_pref: "twisty" ~0.7, "very twisty"/"twistiest" ~0.9, "gentle"/"nothing crazy" ~0.25, unstated null. scenic_pref similar for scenery emphasis. intensity: chill/moderate/spirited ONLY from engagement words, never speed.
-- preset: set only when one preset clearly dominates the brief, else null.
+- preset: set only when one preset clearly dominates the brief, else null. "simple"/"easy"/"mostly straight"/"minimal turns" asks => "simple" (never "chill" — same character, "simple" is the canonical label).
 - Hedges and vibe words ("hour tops", "ish", "the back way") go in ambiguous_terms with your best reading applied.
 - confidence_overall: ~0.9+ crisp briefs, 0.5-0.7 hedged/ambiguous.
 - clarification.needed=true ONLY for (a) no origin at all, or (b) a shape contradiction (e.g. "loop from X to Y" — also record contradictions[{kind:"shape"}]). Everything else: best effort, needed=false.
@@ -175,7 +176,7 @@ RULES (the §3.4/§3.5 contract):
 
 export const PARSE_PROMPT: PromptTemplate = {
   id: 'parse',
-  version: 1,
+  version: 2, // R16-4: stops gained at_fraction; preset enum gained 'simple'
   model: HAIKU,
   maxTokens: 1_500,
   system: PARSE_SYSTEM_PROMPT,

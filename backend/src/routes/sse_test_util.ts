@@ -98,6 +98,7 @@ export const ROUTE_FIXTURE: RouteThroughOutput = {
     { type: 'left', instruction: 'Turn left onto Sulphur Springs Road.' },
     { type: 'right', instruction: 'Turn right onto Mineral Springs Road.' },
   ],
+  legs: [],
   has_highway: false,
   has_toll: false,
   has_ferry: false,
@@ -123,5 +124,7 @@ export function okPlannerResult(events: GenerationEvent[] = []): PlannerResult {
     elevation: { climb_m: 410 },
     iterations: 1,
     alternates: [],
+    stops: [],
+    waypoints: [],
   };
 }

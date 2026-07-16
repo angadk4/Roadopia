@@ -1,10 +1,14 @@
 /**
- * Plan screen (M7-T03; FR-040, §15, §27.4).
+ * Plan screen (M7-T03, sections restructured R16-5; FR-040, §15, §27.4).
  *
  * Inputs: free-text brief (≤ MAX_BRIEF_CHARS) · origin (current location
  * DEFAULT — BD-27 — or a dropped pin; place names belong in the brief, the
  * gazetteer resolves them server-side) · shape (loop | A→B + destination) ·
- * ONE preset chip (BD-30: presets only, no sliders — Hard rule L).
+ * the R16-5 fine-tune sections (ALL optional — the brief alone plans):
+ *   Drive style (Twisty | Simple) · Scenery (Prefer views) · On the route
+ *   (avoid highways / mostly backroads / paved only + the stops builder).
+ * BD-30 still holds: the sections compose onto the ONE preset slot server-side
+ * (plan_draft.buildPlanRequest) — presets only, no sliders (Hard rule L).
  *
  * §18 states handled here: location-permission-denied → rationale + "drop a
  * pin instead"; location errors → same fallback. Out-of-region briefs are the
@@ -19,10 +23,10 @@
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import PresetChips from '../components/PresetChips';
+import StopsBuilder from '../components/StopsBuilder';
 import { MAX_BRIEF_CHARS } from '../lib/api';
 import { getCurrentLocation, type LocationResult } from '../lib/location';
-import { buildPlanRequest, usePlanDraft } from '../lib/plan_draft';
+import { buildPlanRequest, usePlanDraft, type DriveStyle } from '../lib/plan_draft';
 import { font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
 type LocationState = 'idle' | 'fetching' | 'denied' | 'error';
@@ -227,10 +231,120 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
         )}
       </View>
 
-      {/* presets — BD-30: presets only */}
+      {/* --- R16-5 fine-tune sections (all optional; brief alone plans) --- */}
+      <Text style={[styles.optionalHint, { color: colors.textMuted }]}>
+        Everything below is optional — your description plans the drive; these fine-tune it.
+      </Text>
+
+      {/* drive style */}
       <View style={styles.section}>
-        <Text style={[styles.label, { color: colors.text }]}>Character (optional)</Text>
-        <PresetChips value={draft.preset} onChange={(preset) => setDraft({ preset })} />
+        <Text style={[styles.label, { color: colors.text }]}>Drive style</Text>
+        <View style={styles.buttonRow}>
+          {(['twisty', 'simple'] as const).map((s: DriveStyle) => {
+            const active = draft.style === s;
+            return (
+              <Pressable
+                key={s}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                onPress={() => setDraft({ style: active ? null : s })}
+                style={({ pressed }) => [
+                  styles.shapeChip,
+                  {
+                    backgroundColor: active ? colors.accent : colors.surface,
+                    borderColor: active ? colors.accent : colors.border,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <Text
+                  style={[styles.secondaryLabel, { color: active ? colors.onAccent : colors.text }]}
+                >
+                  {s === 'twisty' ? 'Twisty' : 'Simple'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={[styles.note, { color: colors.textMuted }]}>
+          Twisty hunts for curves; Simple keeps turns minimal and roads mostly straight.
+        </Text>
+      </View>
+
+      {/* scenery */}
+      <View style={styles.section}>
+        <Text style={[styles.label, { color: colors.text }]}>Scenery</Text>
+        <View style={styles.buttonRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: draft.preferViews }}
+            onPress={() => setDraft({ preferViews: !draft.preferViews })}
+            style={({ pressed }) => [
+              styles.shapeChip,
+              {
+                backgroundColor: draft.preferViews ? colors.accent : colors.surface,
+                borderColor: draft.preferViews ? colors.accent : colors.border,
+                opacity: pressed ? 0.8 : 1,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.secondaryLabel,
+                { color: draft.preferViews ? colors.onAccent : colors.text },
+              ]}
+            >
+              Prefer views
+            </Text>
+          </Pressable>
+        </View>
+        {draft.preferViews && (
+          <Text style={[styles.note, { color: colors.textMuted }]}>
+            We'll aim for a viewpoint on the way — and tell you honestly if none fit.
+          </Text>
+        )}
+      </View>
+
+      {/* on the route */}
+      <View style={styles.section}>
+        <Text style={[styles.label, { color: colors.text }]}>On the route</Text>
+        <View style={styles.buttonRow}>
+          {(
+            [
+              ['avoidHighways', 'Avoid highways'],
+              ['mostlyBackroads', 'Mostly backroads'],
+              ['pavedOnly', 'Paved roads only'],
+            ] as const
+          ).map(([key, label]) => {
+            const active = draft.routeOptions[key];
+            return (
+              <Pressable
+                key={key}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                onPress={() =>
+                  setDraft({ routeOptions: { ...draft.routeOptions, [key]: !active } })
+                }
+                style={({ pressed }) => [
+                  styles.shapeChip,
+                  {
+                    backgroundColor: active ? colors.accent : colors.surface,
+                    borderColor: active ? colors.accent : colors.border,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <Text
+                  style={[styles.secondaryLabel, { color: active ? colors.onAccent : colors.text }]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={[styles.sublabel, { color: colors.text }]}>Stops along the way</Text>
+        <StopsBuilder stops={draft.stops} onChange={(stops) => setDraft({ stops })} />
       </View>
 
       {/* submit */}
@@ -307,6 +421,8 @@ const styles = StyleSheet.create({
   clearLabel: { ...font.button, fontSize: 14 },
   destRow: { marginTop: spacing.xs },
   note: { ...font.body, fontSize: 13 },
+  optionalHint: { ...font.caption, lineHeight: 16 },
+  sublabel: { ...font.body, fontWeight: '600', marginTop: spacing.sm },
   cta: {
     minHeight: HIT_TARGET + 8,
     borderRadius: radius.lg,

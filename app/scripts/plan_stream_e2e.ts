@@ -149,9 +149,64 @@ async function refineRun(): Promise<void> {
   );
 }
 
+/** R16-6: multi-stop timed request via the STRUCTURED body (the Plan screen's
+ *  stops builder shape) — stops must arrive as real named spots with monotonic
+ *  measured arrivals; timing verdicts land in satisfied_constraints. */
+async function stopsRun(): Promise<void> {
+  let stops: Array<{
+    name: string;
+    type: string;
+    arrival_s: number | null;
+    at_fraction: number | null;
+  }> = [];
+  let verdicts: string[] = [];
+  const t0 = Date.now();
+  const result = await streamPlan(
+    {
+      brief: '2 hour loop on nice country roads',
+      origin: { lat: 43.5448, lng: -80.2482 }, // Guelph
+      stops: [
+        { type: 'coffee', count: 1, importance: 'nice_to_have', at_fraction: 0.5 },
+        { type: 'fuel', count: 1, importance: 'nice_to_have', at_fraction: 0.75 },
+      ],
+    },
+    {
+      baseUrl: BASE,
+      sessionId: 'e2e-stops',
+      fetchImpl,
+      onEvent: (e) => {
+        if (e.type === 'route') {
+          stops = e.route.stops;
+          verdicts = (e.route.satisfied_constraints ?? [])
+            .filter((c) => c.constraint.startsWith('stop'))
+            .map((c) => `${c.constraint}=${c.status}`);
+        }
+      },
+    },
+  );
+  console.log('--- STOPS RUN (structured: coffee midway + gas late) ---');
+  console.log('done:', result.done, '| wall:', ((Date.now() - t0) / 1000).toFixed(1) + 's');
+  for (const s of stops) {
+    console.log(
+      `stop: ${s.name} [${s.type}] at_fraction=${s.at_fraction} arrival=${
+        s.arrival_s === null ? 'null' : Math.round(s.arrival_s / 60) + ' min'
+      }`,
+    );
+  }
+  console.log('verdicts:', verdicts.join(' | '));
+  const arrivals = stops.map((s) => s.arrival_s).filter((a): a is number => a !== null);
+  const monotonic = arrivals.every((a, i) => i === 0 || a > arrivals[i - 1]!);
+  if (stops.length !== 2 || arrivals.length !== 2 || !monotonic) {
+    throw new Error(
+      `stops run failed honesty bars: n=${stops.length} measured=${arrivals.length} monotonic=${monotonic}`,
+    );
+  }
+}
+
 fullRun()
   .then(() => cancelRun())
   .then(() => refineRun())
+  .then(() => stopsRun())
   .catch((e) => {
     console.error('E2E FAILED', e);
     process.exit(1);

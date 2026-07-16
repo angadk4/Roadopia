@@ -64,6 +64,7 @@ describe('domain schemas round-trip parse/serialize', () => {
       owner_id: null,
       origin_type: 'ai',
       forked_from: null,
+      stops: [],
     };
     expectRoundTrip(RouteSchema, route);
   });
@@ -86,7 +87,7 @@ describe('domain schemas round-trip parse/serialize', () => {
       shape: 'loop',
       duration_target_s: 5400,
       distance_target_m: null,
-      stops: [{ type: 'coffee', count: 1, importance: 'nice_to_have' }],
+      stops: [{ type: 'coffee', count: 1, importance: 'nice_to_have', at_fraction: null }],
       avoid: { highways: true, tolls: false, ferries: false, unpaved: true },
       surface_pref: 'paved',
       character: ['twisty', 'flowing'],
@@ -129,6 +130,7 @@ describe('domain schemas round-trip parse/serialize', () => {
       distance_m: 42000,
       duration_s: 5400,
       maneuvers: [{ type: 'turn', instruction: 'Turn left', distance_m: 300 }],
+      legs: [],
       has_highway: false,
       has_toll: false,
       has_ferry: false,

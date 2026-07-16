@@ -47,6 +47,7 @@ import {
   uturnCount,
   UTURN_PRESENT_PENALTY,
 } from '../backend/src/planner/score';
+import { resolveStopArrivals, stopCoverageOf, stopCoverScore } from '../backend/src/planner/stops';
 import { DURATION_TOLERANCE_DEFAULT, validateCandidate } from '../backend/src/planner/validate';
 
 const DB_URL =
@@ -185,7 +186,7 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
     });
     const anchorPoints = await retrieveAnchorPoints(db, scope);
     const candidates = generateLoopCandidates(origin, retrieved.segments, retrieved.spots, {
-      anchorSpots: retrieved.spots.length > 0,
+      stopRequests: constraints.stops, // R16-3: typed per-unit anchoring
       durationS,
       anchorPoints,
       avgSpeedKmh: avgSpeedKmh ?? baseSpeed,
@@ -286,7 +287,6 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
         : ''),
   );
 
-  const requestedStops = constraints.stops.reduce((s, x) => s + x.count, 0);
   const durationFiltered = prefilterByDuration(
     assembled,
     constraints.duration_target_s,
@@ -304,8 +304,7 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
         durationTargetS: constraints.duration_target_s,
         curviness: curv.curviness,
         twistinessPref: constraints.twistiness_pref,
-        stopCover:
-          requestedStops > 0 ? Math.min(1, a.candidate.spotIds.length / requestedStops) : 1,
+        stopCover: stopCoverScore(stopCoverageOf(constraints.stops, a.candidate.stops)),
         scenicSignal: 0,
         countryScore: a.countryScore, // round 11
       },
@@ -351,8 +350,8 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
       constraints,
       closureM: s.a.closureM,
       selfOverlap: s.a.selfOverlap,
-      includedStops: s.a.candidate.spotIds.length,
-      requestedStops,
+      stopCoverage: stopCoverageOf(constraints.stops, s.a.candidate.stops),
+      stops: resolveStopArrivals(s.a.candidate.stops, s.a.route),
     });
     if (verdict.feasible) {
       feasible++;

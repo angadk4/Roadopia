@@ -16,7 +16,9 @@ describe('parseRules — canonical briefs (gold fixture)', () => {
     expect(pc.origin).toEqual({ lat: 43.2557, lng: -79.8711 }); // gazetteer-resolved
     expect(pc.twistiness_pref).toBeGreaterThanOrEqual(0.6);
     expect(pc.character).toContain('twisty');
-    expect(pc.stops).toEqual([{ type: 'coffee', count: 1, importance: 'nice_to_have' }]);
+    expect(pc.stops).toEqual([
+      { type: 'coffee', count: 1, importance: 'nice_to_have', at_fraction: null },
+    ]);
     expect(pc.avoid.highways).toBe(true);
     expect(pc.clarification.needed).toBe(false);
     expect(resolveDisposition(pc)).toBe('proceed');
@@ -94,7 +96,9 @@ describe('parseRules — canonical briefs (gold fixture)', () => {
     const pc = parseRules('45 min drive from here with a viewpoint');
     expect(pc.origin).toBe('current');
     expect(pc.duration_target_s).toBe(2700);
-    expect(pc.stops).toEqual([{ type: 'viewpoint', count: 1, importance: 'nice_to_have' }]);
+    expect(pc.stops).toEqual([
+      { type: 'viewpoint', count: 1, importance: 'nice_to_have', at_fraction: null },
+    ]);
     expect(pc.clarification.needed).toBe(false);
   });
 
@@ -104,6 +108,37 @@ describe('parseRules — canonical briefs (gold fixture)', () => {
     expect(pc.character).toContain('backroad');
     expect(pc.stops.some((s) => s.type === 'food' && s.importance === 'required')).toBe(true);
     expect(pc.origin).toEqual({ lat: 43.218, lng: -79.987 });
+  });
+
+  // R16-3 stop-timing phrases. These pin the LIVE regexes — the first cut of
+  // this matcher shipped with \b written as a literal 0x08 byte (a python-patch
+  // artifact) and could never match anything; only a phrase-level test catches
+  // that class of dead pattern.
+  it('11) stop-timing phrases map to fractions: early 0.25 · halfway 0.5 · late 0.75', () => {
+    const half = parseRules('2 hour loop from Guelph with a coffee stop halfway');
+    expect(half.stops).toEqual([
+      { type: 'coffee', count: 1, importance: 'nice_to_have', at_fraction: 0.5 },
+    ]);
+    expect(parseRules('loop from Erin, coffee stop early on').stops[0]!.at_fraction).toBe(0.25);
+    expect(parseRules('loop from Erin, gas stop near the start').stops[0]!.at_fraction).toBe(0.25);
+    expect(parseRules('loop from Milton, food stop toward the end').stops[0]!.at_fraction).toBe(
+      0.75,
+    );
+    expect(parseRules('loop from Milton, coffee midway through').stops[0]!.at_fraction).toBe(0.5);
+    // no timing phrase → anytime; "Half day" is a duration, not a fraction cue
+    expect(parseRules('loop from Ancaster with a coffee stop').stops[0]!.at_fraction).toBeNull();
+    expect(
+      parseRules('Half day tour from Ancaster with a coffee stop').stops[0]!.at_fraction,
+    ).toBeNull();
+  });
+
+  it("12) 'simple'/'mostly straight' asks steer the FROZEN simple preset (R16-4)", () => {
+    expect(parseRules('a simple hour loop from Guelph').preset).toBe('simple');
+    expect(parseRules('mostly straight roads from Milton, an hour').preset).toBe('simple');
+    expect(parseRules('easy cruise from Paris Ontario').preset).toBe('simple');
+    // chill-family words still set INTENSITY; twisty asks never turn simple
+    expect(parseRules('a relaxing hour from Paris Ontario').intensity).toBe('chill');
+    expect(parseRules('90 minute twisty loop from Hamilton').preset).toBeNull();
   });
 });
 

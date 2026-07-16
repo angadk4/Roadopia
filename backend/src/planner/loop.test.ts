@@ -38,7 +38,7 @@ function candidate(id: string, waypoints: LatLng[]): WaypointCandidate {
     sector: 0,
     returnSector: 4,
     clusterId: 0,
-    spotIds: [],
+    stops: [],
     clusterWeight: 1,
   };
 }

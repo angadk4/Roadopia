@@ -120,7 +120,7 @@ describe('fetchMapSpots', () => {
     expect(url).toBe('http://sb/rest/v1/rpc/map_spots');
     // must exceed the region's 5,040 spots — a smaller value truncates the map
     expect(body['p_limit']).toBe(SPOTS_LIMIT);
-    expect(SPOTS_LIMIT).toBeGreaterThan(5040);
+    expect(SPOTS_LIMIT).toBeGreaterThan(21366); // R16-1 food corpus included
     expect(rows[0]!.type).toBe('coffee');
   });
 });

@@ -30,6 +30,7 @@ const FIXTURE: RouteThroughOutput = {
   },
   distance_m: 4200,
   duration_s: 300,
+  legs: [],
   maneuvers: [{ type: 'start', instruction: 'Drive northeast.' }],
   has_highway: false,
   has_toll: false,

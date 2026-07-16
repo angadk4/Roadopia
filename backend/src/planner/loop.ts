@@ -169,13 +169,16 @@ export async function assembleLoop(
   // use_living_streets 0 (round 7): living streets ARE neighbourhood streets;
   // Valhalla's default 0.1 already avoids them mostly — pin to 0.
   const biasedCosting = { use_highways: 0.2, use_living_streets: 0, ...costingOptions };
-  const route = await routeThrough(baseUrl, {
+  let route = await routeThrough(baseUrl, {
     waypoints,
     // search waypoints are pass-throughs, never stops (SPK-15). 'through'
     // forbids u-turns at the point — Valhalla then CIRCLES A BLOCK to reverse
     // heading (the round-8 micro-loop root cause); 'via' permits the u-turn,
     // which the u-turn detectors see and punish honestly (rq8 A/B decides).
     middleType,
+    // R16-3: stop waypoints ARE stops — break_through splits legs there (real
+    // arrival times) while still forbidding u-turns. +1 skips the origin slot.
+    stopIndices: candidate.stops.map((s) => s.waypointIndex + 1),
     costingOptions: biasedCosting,
   });
 
@@ -235,6 +238,12 @@ export async function assembleLoop(
     try {
       trace = await traceRoadClasses(baseUrl, route.geometry);
       const edges = trace.edges;
+      // R16-2 honesty: Valhalla route summaries carry no unpaved flag — the
+      // trace does. Override the mapper's constant-false from measurement
+      // (UNPAVED_MIN_M floor absorbs snap noise). Trace failure keeps false;
+      // trace:null already marks the candidate unknown at presentation.
+      const unpavedM = edges.reduce((acc, e) => acc + (e.unpaved === true ? e.lengthM : 0), 0);
+      if (unpavedM > UNPAVED_MIN_M) route = { ...route, has_unpaved: true };
       residentialShare = residentialShareOf(edges, route.geometry, origin);
       // round 8b: the absolute run (same edges, no extra call) — the share
       // scales with route length, a subdivision weave does not
@@ -285,6 +294,9 @@ export async function assembleLoop(
 // an over-cap residential run — drop the waypoint nearest the offence and
 // re-route; the connector that dragged the route through the neighbourhood
 // disappears with its waypoint) -------------------------------------------
+
+/** Snap-noise floor for the unpaved result-scan (R16-2; config v10). */
+export const UNPAVED_MIN_M = 50;
 
 /** Max repair re-routes per candidate (latency-bounded; §33 spirit). */
 export const REPAIR_PASS_CAP = 2;
@@ -401,10 +413,13 @@ export async function assembleLoopWithRepair(
   let best = current;
   let bestRepairs = 0;
   let cand = candidate;
-  const spotAnchored = candidate.spotIds.length > 0;
+  // Repair moves waypoints without adjusting stop indices — skip whenever the
+  // candidate carries stops (the pre-R16 spot-anchored skip, now per the plan's
+  // recorded fallback; stop-aware index maintenance stays future work).
+  const stopAnchored = candidate.stops.length > 0;
   for (let pass = 1; pass <= REPAIR_PASS_CAP; pass++) {
     const pos = offencePosition(current, origin);
-    if (pos !== null && !spotAnchored) {
+    if (pos !== null && !stopAnchored) {
       let nearest = 0;
       let nearestD = Infinity;
       cand.waypoints.forEach((w, i) => {

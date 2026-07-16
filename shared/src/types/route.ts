@@ -91,6 +91,35 @@ export const ConstraintResultSchema = z.object({
 export type ConstraintResult = z.infer<typeof ConstraintResultSchema>;
 export type ConstraintStatus = ConstraintResult['status'];
 
+// --- Route stops (R16-3: real, timed stops on the payload) ---
+// StopType/StopFraction live HERE (constraints.ts re-exports them) because
+// constraints.ts already imports route.ts — the reverse import would cycle.
+
+/** What a user asks to stop for (§3.4) — request domain, distinct from the DB
+ *  spot types (retrieval maps request → spot type or discloses absence). */
+export const StopTypeSchema = z.enum(['coffee', 'food', 'fuel', 'viewpoint', 'rest', 'great_road']);
+export type StopType = z.infer<typeof StopTypeSchema>;
+
+/** Where in the drive a stop should land (R16-3): Early/Midway/Late chips. */
+export const StopFractionSchema = z.union([z.literal(0.25), z.literal(0.5), z.literal(0.75)]);
+export type StopFraction = z.infer<typeof StopFractionSchema>;
+
+/** A chosen stop on a generated route — grounded spot + measured arrival. */
+export const RouteStopSchema = z.object({
+  name: z.string(),
+  /** DB spot type ('coffee' | 'food' | 'fuel' | 'viewpoint' | …). */
+  type: z.string(),
+  /** The request-domain stop type this satisfies. */
+  requested_type: StopTypeSchema,
+  /** Measured arrival (s from start) via per-leg durations; null = unknown. */
+  arrival_s: z.number().nonnegative().nullable(),
+  at_fraction: StopFractionSchema.nullable(),
+  location: LatLngSchema,
+  /** Index into Route.waypoints — which waypoint is this stop. */
+  waypoint_index: z.number().int().nonnegative(),
+});
+export type RouteStop = z.infer<typeof RouteStopSchema>;
+
 // --- Route ---
 
 /**
@@ -129,6 +158,8 @@ export const RouteSchema = z.object({
   // AI-route-only provenance (§21):
   generation_request_id: z.string().uuid().nullable().optional(),
   satisfied_constraints: z.array(ConstraintResultSchema).nullable().optional(),
+  /** Real, timed stops (R16-3). Default [] keeps pre-R16 rows valid. */
+  stops: z.array(RouteStopSchema).default([]),
   agent_explanation: z.string().nullable().optional(),
 });
 export type Route = z.infer<typeof RouteSchema>;

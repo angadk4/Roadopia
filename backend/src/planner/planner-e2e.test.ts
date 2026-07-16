@@ -64,6 +64,20 @@ describe('runPlanner e2e (M3-T13)', () => {
     expect(result.route!.duration_s).toBeGreaterThan(1_200);
     expect(result.curviness).toBeGreaterThan(0);
     expect(result.route!.geometry.coordinates.length).toBeGreaterThan(100);
+
+    // R16-3: the coffee stop is a REAL grounded spot with a MEASURED arrival
+    expect(result.stops).toHaveLength(1);
+    const stop = result.stops[0]!;
+    expect(stop.requested_type).toBe('coffee');
+    expect(stop.type).toBe('coffee');
+    expect(stop.name.length).toBeGreaterThan(0);
+    expect(stop.arrival_s).not.toBeNull();
+    expect(stop.arrival_s!).toBeGreaterThan(0);
+    expect(stop.arrival_s!).toBeLessThan(result.route!.duration_s);
+    // marker location = the stop's own waypoint
+    expect(result.waypoints[stop.waypoint_index]).toEqual(stop.location);
+    // per-type Tier-2 gate present
+    expect(v.results.some((r) => r.constraint === 'stop_coffee')).toBe(true);
   }, 60_000);
 
   it('emits ordered stage events with a terminal done (AC)', async (ctx) => {

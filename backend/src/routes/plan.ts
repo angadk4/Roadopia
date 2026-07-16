@@ -17,17 +17,26 @@
  *    payload path (Hard rule I).
  */
 
-import { ParsedConstraintsSchema, PresetSchema } from '@shared/types';
+import {
+  CharacterTagSchema,
+  ParsedConstraintsSchema,
+  PresetSchema,
+  StopRequestSchema,
+  StopTypeSchema,
+} from '@shared/types';
 import type {
+  CharacterTag,
   GenerationEvent,
   LatLng,
   ParsedConstraints,
   Preset,
   Route,
+  StopRequest,
   Weights,
 } from '@shared/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Client } from 'pg';
+import { z } from 'zod';
 
 import type { AiClient } from '../ai/client';
 import type { CostGuard } from '../ai/cost_guard';
@@ -80,7 +89,21 @@ interface PlanBody {
   /** ... plus the follow-up to merge deterministically (RF6, M5-T06). Both or
    *  neither — the pair replaces the parse step with refine-merge. */
   followUp?: string;
+  /** Structured stop rows from the Plan screen's stops builder (R16-4).
+   *  Zod-revalidated in-handler (Hard rule K). Per-TYPE override: a body entry
+   *  replaces the brief's ask for that type; brief-only types ride along. */
+  stops?: unknown;
+  /** Hard-avoid toggles (On the route section) — only the keys sent override. */
+  avoid?: Partial<ParsedConstraints['avoid']>;
+  /** Character tags to add (e.g. scenic from the Scenery toggle) — unioned. */
+  character?: CharacterTag[];
+  /** Twistiness preference 0..1 (Drive style selection). */
+  twistiness_pref?: number;
 }
+
+/** Stops-builder rows cap (sanity bound, Hard rule K). */
+export const MAX_STOP_ROWS = 6;
+const StopOverridesSchema = z.array(StopRequestSchema).max(MAX_STOP_ROWS);
 
 const LATLNG_SCHEMA = {
   type: 'object',
@@ -125,10 +148,15 @@ function factsOf(constraints: ParsedConstraints, result: PlannerResult): RouteFa
     targetMin: constraints.duration_target_s !== null ? constraints.duration_target_s / 60 : null,
     curviness: result.curviness ?? 0,
     roadNames: roadNamesFromManeuvers(route.maneuvers),
-    stops: [], // spot names join the facts when persistence lands (M8)
+    // real stops + MEASURED arrivals (R16-3) — "Ridge Café (coffee, ≈40 min in)"
+    stops: result.stops.map((s) => ({
+      name: s.name,
+      type: s.type,
+      arrival_min: s.arrival_s !== null ? s.arrival_s / 60 : null,
+    })),
     satisfied,
     relaxed,
-    viewpointCount: 0,
+    viewpointCount: result.stops.filter((s) => s.type === 'viewpoint').length,
   };
 }
 
@@ -143,7 +171,7 @@ function routePayload(
     geometry_simplified: null,
     bbox: null,
     is_loop: constraints.shape === 'loop',
-    waypoints: [],
+    waypoints: result.waypoints,
     distance_m: route.distance_m,
     duration_s: route.duration_s,
     curviness: result.curviness ?? 0,
@@ -162,6 +190,7 @@ function routePayload(
     forked_from: null,
     generation_request_id: generationRequestId,
     satisfied_constraints: result.validation?.results ?? null,
+    stops: result.stops, // grounded spots + MEASURED arrivals (R16-3)
   };
 }
 
@@ -177,7 +206,7 @@ function alternatePayload(
     geometry_simplified: null,
     bbox: null,
     is_loop: constraints.shape === 'loop',
-    waypoints: [],
+    waypoints: alt.waypoints,
     distance_m: alt.route.distance_m,
     duration_s: alt.route.duration_s,
     curviness: alt.curviness,
@@ -196,6 +225,7 @@ function alternatePayload(
     forked_from: null,
     generation_request_id: generationRequestId,
     satisfied_constraints: alt.validation.results,
+    stops: alt.stops, // alternates carry stops too (R16-3)
   };
 }
 
@@ -231,6 +261,37 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
             weights: { type: 'object', additionalProperties: { type: 'number' } },
             constraints: { type: 'object' },
             followUp: { type: 'string', minLength: 1, maxLength: MAX_BRIEF_CHARS },
+            stops: {
+              type: 'array',
+              maxItems: MAX_STOP_ROWS,
+              items: {
+                type: 'object',
+                required: ['type', 'count', 'importance'],
+                additionalProperties: false,
+                properties: {
+                  type: { type: 'string', enum: [...StopTypeSchema.options] },
+                  count: { type: 'integer', minimum: 1, maximum: 5 },
+                  importance: { type: 'string', enum: ['nice_to_have', 'required'] },
+                  at_fraction: { enum: [0.25, 0.5, 0.75, null] },
+                },
+              },
+            },
+            avoid: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                highways: { type: 'boolean' },
+                tolls: { type: 'boolean' },
+                ferries: { type: 'boolean' },
+                unpaved: { type: 'boolean' },
+              },
+            },
+            character: {
+              type: 'array',
+              maxItems: 9,
+              items: { type: 'string', enum: [...CharacterTagSchema.options] },
+            },
+            twistiness_pref: { type: 'number', minimum: 0, maximum: 1 },
           },
         },
       },
@@ -291,7 +352,25 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
         weights,
         constraints: rawConstraints,
         followUp,
+        stops: rawStops,
+        avoid: avoidOverrides,
+        character: characterOverrides,
+        twistiness_pref: twistinessOverride,
       } = request.body;
+
+      // structured stop rows re-validate through the SHARED zod schema before
+      // any use (Hard rule K — the Fastify schema is transport-shape only)
+      let stopOverrides: StopRequest[] | null = null;
+      if (rawStops !== undefined) {
+        const parsed = StopOverridesSchema.safeParse(rawStops);
+        if (!parsed.success) {
+          void reply
+            .status(400)
+            .send(errorBody('bad_request', 'The stop rows were not recognizable.', request.id));
+          return;
+        }
+        stopOverrides = parsed.data;
+      }
 
       // refinement round-trip (M7-T07): both fields or neither; the previous
       // constraints re-validate through the SAME shared zod schema before any
@@ -442,6 +521,39 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
         // at run.ts; explicit client weights still win key-by-key (mergeWeights).
         if (preset) constraints = { ...constraints, preset };
         if (weights) constraints = { ...constraints, weights: weights as Weights };
+        // R16-4 structured overrides (the Plan screen's sections):
+        // stops — per-TYPE override: a builder row replaces the brief's ask for
+        // that type (no accidental doubling when both name coffee); brief-only
+        // types ride along.
+        if (stopOverrides !== null) {
+          const overrideTypes = new Set(stopOverrides.map((s) => s.type));
+          constraints = {
+            ...constraints,
+            stops: [
+              ...stopOverrides,
+              ...constraints.stops.filter((s) => !overrideTypes.has(s.type)),
+            ],
+          };
+        }
+        // avoid — only the keys the client sent override (a toggle the user
+        // never touched must not clear a brief-parsed avoid)
+        if (avoidOverrides) {
+          constraints = { ...constraints, avoid: { ...constraints.avoid, ...avoidOverrides } };
+          if (avoidOverrides.unpaved === true) {
+            constraints = { ...constraints, surface_pref: 'paved' };
+          }
+        }
+        // character — union (the Scenery toggle adds 'scenic' without
+        // clobbering brief-derived tags)
+        if (characterOverrides && characterOverrides.length > 0) {
+          constraints = {
+            ...constraints,
+            character: [...new Set([...constraints.character, ...characterOverrides])],
+          };
+        }
+        if (twistinessOverride !== undefined) {
+          constraints = { ...constraints, twistiness_pref: twistinessOverride };
+        }
         sse({
           type: 'step',
           step: 'parse',

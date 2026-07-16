@@ -68,10 +68,21 @@ export const ManeuverSchema = z.object({
 });
 export type Maneuver = z.infer<typeof ManeuverSchema>;
 
+/** One route leg between consecutive BREAK-type locations (R16-2).
+ *  'through' middles never split legs — with S stop waypoints, S+1 legs. */
+export const RouteLegSchema = z.object({
+  duration_s: z.number().nonnegative(),
+  distance_m: z.number().nonnegative(),
+});
+export type RouteLeg = z.infer<typeof RouteLegSchema>;
+
 export const RouteThroughOutputSchema = z.object({
   geometry: LineStringSchema,
   distance_m: z.number().nonnegative(),
   duration_s: z.number().nonnegative(),
+  /** Per-leg summaries in drive order — arrival-at-stop data (R16-2).
+   *  Default [] keeps pre-R16 payloads/fixtures valid. */
+  legs: z.array(RouteLegSchema).default([]),
   maneuvers: z.array(ManeuverSchema),
   has_highway: z.boolean(),
   has_toll: z.boolean(),

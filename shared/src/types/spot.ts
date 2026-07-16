@@ -15,6 +15,7 @@ export const SpotTypeSchema = z.enum([
   'fuel',
   'meetup',
   'rest',
+  'food', // restaurants + fast food (R16-1); cafés stay 'coffee'
 ]);
 export type SpotType = z.infer<typeof SpotTypeSchema>;
 

@@ -14,6 +14,7 @@ import type { LatLng, RouteThroughOutput } from '@shared/types';
 
 import { optimizeWaypointOrder } from '../valhalla/optimize';
 import { routeThrough, type AutoCostingOptions } from '../valhalla/route';
+import { traceRoadClasses, type TraceResult } from '../valhalla/trace';
 
 import type { WaypointCandidate } from './candidates';
 import { selfOverlapRatio } from './overlap';
@@ -33,6 +34,9 @@ export interface AssembledAtoB {
   rejectReasons: string[];
   /** True when TSP reordering was applied (≥4 locations). */
   tspOrdered: boolean;
+  /** Trace result when scanUnpaved ran (R16-2); null otherwise — the loop
+   *  path's class-aware curvature fallback applies. */
+  trace: TraceResult | null;
 }
 
 /**
@@ -49,11 +53,15 @@ export async function assembleAtoB(
     costingOptions,
     detourMax = DETOUR_MAX_DEFAULT,
     selfOverlapCap = ATOB_SELF_OVERLAP_CAP,
+    scanUnpaved = false,
   }: {
     directDistanceM?: number;
     costingOptions?: AutoCostingOptions;
     detourMax?: number;
     selfOverlapCap?: number;
+    /** R16-2: run the trace to measure unpaved metres (only when avoid.unpaved
+     *  is in play — the flag is otherwise not_applicable). Fail-open. */
+    scanUnpaved?: boolean;
   } = {},
 ): Promise<AssembledAtoB> {
   // direct baseline (shared across candidates when provided)
@@ -69,11 +77,15 @@ export async function assembleAtoB(
     direct = directRoute.distance_m;
   }
 
-  // ordering: TSP only with ≥ 4 total locations (o + wps + d); wrapper enforces too
+  // ordering: TSP only with ≥ 4 total locations (o + wps + d); wrapper enforces
+  // too. SKIPPED when any stop is fraction-timed (R16-3) — the optimizer would
+  // undo the deliberate early/midway/late placement the candidate encodes.
   let waypoints = candidate.waypoints;
+  let stops = candidate.stops;
   let tspOrdered = false;
   const totalLocations = candidate.waypoints.length + 2;
-  if (totalLocations >= 4) {
+  const hasFractionStop = candidate.stops.some((s) => s.atFraction !== null);
+  if (totalLocations >= 4 && !hasFractionStop) {
     const order = await optimizeWaypointOrder(baseUrl, {
       waypoints: [origin, ...candidate.waypoints, destination],
       costing: 'auto',
@@ -86,18 +98,41 @@ export async function assembleAtoB(
     if (middle.length === candidate.waypoints.length) {
       waypoints = middle;
       tspOrdered = true;
+      // re-derive stop indices by object identity (middle holds the SAME
+      // LatLng references, just reordered)
+      stops = candidate.stops.map((s) => ({
+        ...s,
+        waypointIndex: middle.indexOf(candidate.waypoints[s.waypointIndex]!),
+      }));
     }
   }
 
-  const route = await routeThrough(baseUrl, {
+  let route = await routeThrough(baseUrl, {
     waypoints: [
       [origin.lng, origin.lat],
       ...waypoints.map((w) => [w.lng, w.lat] as [number, number]),
       [destination.lng, destination.lat],
     ],
     middleType: 'through', // search waypoints are pass-throughs, never stops (SPK-15)
+    // R16-3: stop waypoints split legs (break_through) → measured arrivals
+    stopIndices: stops.map((s) => s.waypointIndex + 1),
     ...(costingOptions ? { costingOptions } : {}),
   });
+
+  // R16-2: honest unpaved measurement (route summaries carry no surface flag)
+  let trace: TraceResult | null = null;
+  if (scanUnpaved) {
+    try {
+      trace = await traceRoadClasses(baseUrl, route.geometry);
+      const unpavedM = trace.edges.reduce(
+        (acc, e) => acc + (e.unpaved === true ? e.lengthM : 0),
+        0,
+      );
+      if (unpavedM > 50) route = { ...route, has_unpaved: true };
+    } catch {
+      trace = null; // fail-open: flag stays false, curvature falls back tag-blind
+    }
+  }
 
   const detourRatio = route.distance_m / direct;
   const selfOverlap = selfOverlapRatio(route.geometry);
@@ -116,12 +151,14 @@ export async function assembleAtoB(
   if (uturns >= 2) rejectReasons.push(`uturns ${uturns}`);
 
   return {
-    candidate,
+    // effective candidate: TSP may have reordered waypoints + stop indices
+    candidate: tspOrdered ? { ...candidate, waypoints, stops } : candidate,
     route,
     detourRatio,
     selfOverlap,
     accepted: rejectReasons.length === 0,
     rejectReasons,
     tspOrdered,
+    trace,
   };
 }

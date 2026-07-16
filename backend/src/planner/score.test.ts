@@ -20,6 +20,7 @@ function route(durationS: number, uturns = 0): RouteThroughOutput {
     },
     distance_m: 30_000,
     duration_s: durationS,
+    legs: [],
     maneuvers: [
       { type: 'start', instruction: 'go' },
       ...Array.from({ length: uturns }, () => ({ type: 'uturn_left', instruction: 'u' })),
@@ -111,6 +112,10 @@ describe('presets (M3-T10 AC)', () => {
     for (const vector of Object.values(PRESET_WEIGHTS)) {
       expect(vector.scenic).toBe(0);
     }
+  });
+
+  it("R16-4: 'simple' is BYTE-IDENTICAL to chill's frozen vector (relabel, no new science)", () => {
+    expect(weightsForPreset('simple')).toEqual(weightsForPreset('chill'));
   });
 
   it('mergeWeights honours §30 keys only and ignores junk', () => {

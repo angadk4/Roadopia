@@ -1,3 +1,4 @@
+import type { ParsedConstraints } from '@shared/types';
 import { Client } from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -92,12 +93,16 @@ describe('POST /plan SSE (M6-T04)', () => {
             curviness: 1.1,
             validation: base.validation!,
             presentKey: 0.5,
+            stops: [],
+            waypoints: [],
           },
           {
             route: ROUTE_FIXTURE,
             curviness: 0.9,
             validation: base.validation!,
             presentKey: 0.4,
+            stops: [],
+            waypoints: [],
           },
         ],
       }),
@@ -117,6 +122,71 @@ describe('POST /plan SSE (M6-T04)', () => {
       // schema-validated by postPlan already; pin the honesty details:
       expect(alt?.type === 'alternate' && alt.route.climb_m).toBeNull(); // enrich is best-only
       expect(alt?.type === 'alternate' && alt.route.curviness).toBe(1.1);
+    } finally {
+      await close();
+    }
+  });
+
+  it('R16-4 structured overrides land in the effective constraints (stops replace per type; avoid/character/pref merge)', async () => {
+    let seen: ParsedConstraints | null = null;
+    const { deps } = baseDeps({
+      planFn: async (c: ParsedConstraints) => {
+        seen = c;
+        return okPlannerResult();
+      },
+    });
+    const app = buildServer({ plan: deps as never });
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, {
+        brief: '90 minute loop with a coffee stop', // brief asks coffee (nice_to_have)
+        origin: { lat: 43.2557, lng: -79.8711 },
+        stops: [
+          // builder row for the SAME type replaces the brief's ask...
+          { type: 'coffee', count: 1, importance: 'required', at_fraction: 0.5 },
+          // ...and adds a type the brief never named (at_fraction defaults null)
+          { type: 'fuel', count: 1, importance: 'nice_to_have' },
+        ],
+        avoid: { unpaved: true },
+        character: ['scenic'],
+        twistiness_pref: 0.15,
+      });
+      expect(run.status).toBe(200);
+      const c = seen!;
+      expect(c.stops).toHaveLength(2); // NOT 3 — coffee replaced, never doubled
+      const coffee = c.stops.find((s) => s.type === 'coffee')!;
+      expect(coffee.importance).toBe('required');
+      expect(coffee.at_fraction).toBe(0.5);
+      expect(c.stops.find((s) => s.type === 'fuel')!.at_fraction).toBeNull();
+      expect(c.avoid.unpaved).toBe(true);
+      expect(c.avoid.highways).toBe(false); // untouched keys stay parsed values
+      expect(c.surface_pref).toBe('paved'); // paved-only toggle implies surface pref
+      expect(c.character).toContain('scenic');
+      expect(c.twistiness_pref).toBe(0.15);
+      // the constraints frame the client keeps for refinement carries the same
+      const frame = run.events.find((e) => e.type === 'constraints');
+      expect(
+        frame?.type === 'constraints' && (frame.constraints as ParsedConstraints).stops,
+      ).toHaveLength(2);
+    } finally {
+      await close();
+    }
+  });
+
+  it('R16-4 malformed stop rows are rejected 400 before any stream', async () => {
+    const { deps } = baseDeps({
+      planFn: async () => okPlannerResult(),
+    });
+    const app = buildServer({ plan: deps as never });
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, {
+        brief: 'loop',
+        origin: { lat: 43.2557, lng: -79.8711 },
+        stops: [{ type: 'nonsense', count: 1, importance: 'nice_to_have' }],
+      });
+      expect(run.status).toBe(400);
+      expect(run.events).toHaveLength(0);
     } finally {
       await close();
     }

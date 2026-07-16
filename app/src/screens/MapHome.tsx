@@ -57,6 +57,8 @@ interface Selected {
 const SPOT_COLORS: [string, string, ...string[]] = [
   'coffee',
   '#b07b4f',
+  'food',
+  '#d1704f', // restaurants + fast food (R16-1)
   'viewpoint',
   '#4fb0a5',
   'fuel',

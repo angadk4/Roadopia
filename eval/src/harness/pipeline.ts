@@ -49,6 +49,11 @@ import {
   type WeightVector,
 } from '../../../backend/src/planner/score';
 import {
+  resolveStopArrivals,
+  stopCoverageOf,
+  stopCoverScore,
+} from '../../../backend/src/planner/stops';
+import {
   DURATION_TOLERANCE_DEFAULT,
   validateCandidate,
   type ValidationVerdict,
@@ -173,7 +178,7 @@ export async function runSearchPass(
   });
   const anchorPoints = await retrieveAnchorPoints(db, scope);
   const candidates = generateLoopCandidates(origin, retrieved.segments, retrieved.spots, {
-    anchorSpots: retrieved.spots.length > 0,
+    stopRequests: constraints.stops, // R16-3: typed per-unit anchoring
     durationS,
     anchorPoints,
     avgSpeedKmh: spec.avgSpeedKmh ?? calib.baseSpeedKmh ?? baseSpeedOf(constraints),
@@ -269,8 +274,7 @@ export function finalizeKept(
         durationTargetS: constraints.duration_target_s,
         curviness: curv.curviness,
         twistinessPref: constraints.twistiness_pref,
-        stopCover:
-          requestedStops > 0 ? Math.min(1, a.candidate.spotIds.length / requestedStops) : 1,
+        stopCover: stopCoverScore(stopCoverageOf(constraints.stops, a.candidate.stops)),
         scenicSignal: 0,
         countryScore: a.countryScore, // round 11
       },
@@ -313,8 +317,8 @@ export function finalizeKept(
         constraints,
         closureM: s.a.closureM,
         selfOverlap: s.a.selfOverlap,
-        includedStops: s.a.candidate.spotIds.length,
-        requestedStops,
+        stopCoverage: stopCoverageOf(constraints.stops, s.a.candidate.stops),
+        stops: resolveStopArrivals(s.a.candidate.stops, s.a.route),
       },
       validateOpts ?? {},
     );
@@ -332,7 +336,7 @@ export function finalizeKept(
       countryScore: s.a.countryScore,
       microloops: s.a.microloops,
       closureM: s.a.closureM,
-      stopsIncluded: s.a.candidate.spotIds.length,
+      stopsIncluded: s.a.candidate.stops.length,
       score: s.breakdown.score,
       presentKey: s.presentKey,
       breakdown: s.breakdown,
