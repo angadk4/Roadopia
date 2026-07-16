@@ -1,0 +1,189 @@
+/**
+ * RouteDetail / Result smoke (M7-T05) — the shared detail component renders
+ * honest stats (≈ routed time), the ACTUAL constraint verdicts (FR-044),
+ * relaxed/best-so-far banners (§18 copy), the grounded explanation, and the
+ * FR-400 disclaimer — with no dead action buttons before M8.
+ */
+import type { Route } from '@shared/types';
+import { act } from 'react';
+import { create, type ReactTestRenderer } from 'react-test-renderer';
+import { describe, expect, it } from 'vitest';
+
+import RouteDetail from '../../components/RouteDetail';
+import ResultScreen from '../ResultScreen';
+
+const ROUTE: Route = {
+  geometry: {
+    type: 'LineString',
+    coordinates: [
+      [-79.98, 43.22],
+      [-79.9, 43.26],
+      [-79.88, 43.2],
+      [-79.98, 43.22],
+    ] as Array<[number, number]>,
+  },
+  geometry_simplified: null,
+  bbox: null,
+  is_loop: true,
+  waypoints: [],
+  distance_m: 67800,
+  duration_s: 4500,
+  curviness: 1.4,
+  elevation_profile: null,
+  climb_m: 312,
+  highway_flag: false,
+  toll_flag: false,
+  ferry_flag: false,
+  unpaved_flag: true,
+  character_tags: ['twisty', 'rural'],
+  intensity: 'moderate',
+  free_tags: [],
+  visibility: 'private',
+  owner_id: null,
+  origin_type: 'ai',
+  forked_from: null,
+  generation_request_id: null,
+  satisfied_constraints: [
+    {
+      constraint: 'duration_target',
+      tier: 3,
+      status: 'satisfied',
+      detail: '75 min vs 90 min asked',
+    },
+    {
+      constraint: 'avoid_highways',
+      tier: 2,
+      status: 'relaxed',
+      detail: 'about 3 km of highway was unavoidable from this start',
+    },
+    {
+      constraint: 'coffee_stop',
+      tier: 2,
+      status: 'violated',
+      detail: 'no coffee spot lies on the route',
+    },
+    { constraint: 'avoid_ferries', tier: 2, status: 'not_applicable', detail: '' },
+  ],
+  agent_explanation: null,
+};
+
+const EXPLANATION = {
+  text: 'This 68 km loop follows six named backroads with sustained curves along the escarpment.',
+  satisfied: ['duration'],
+  relaxed: ['no-highways could not be fully honoured'],
+};
+
+function textOf(tree: ReactTestRenderer): string {
+  return JSON.stringify(tree.toJSON());
+}
+
+describe('RouteDetail', () => {
+  it('renders map, honest stats, tags, flags, constraint verdicts, explanation, disclaimer', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<RouteDetail route={ROUTE} explanation={EXPLANATION} done="ok" />);
+    });
+    const text = textOf(tree);
+    expect(text).toContain('mapbox-mapview');
+    expect(text).toContain('mapbox-linelayer');
+    expect(text).toContain('67.8 km');
+    expect(text).toContain('≈75 min'); // honest routed time (BD-42)
+    expect(text).toContain('loop');
+    expect(text).toContain('312 m');
+    expect(text).toContain('twisty');
+    expect(text).toContain('includes unpaved'); // result-scanned flag
+    expect(text).not.toContain('includes highway'); // false flags stay silent
+    // constraint verdicts — actual, all three states, NA hidden
+    expect(text).toContain('duration target');
+    expect(text).toContain('about 3 km of highway');
+    expect(text).toContain('no coffee spot lies on the route');
+    expect(text).not.toContain('avoid ferries');
+    // explanation + relaxed disclosure
+    expect(text).toContain('sustained curves along the escarpment');
+    expect(text).toContain('no-highways could not be fully honoured');
+    // FR-400 disclaimer, no dead M8 actions
+    expect(text).toContain('Drive to conditions');
+    expect(text).not.toMatch(/"Save"|"Share"|"Navigate"/);
+    // attribution on the detail map too (FR-014)
+    expect(text).toContain('OpenStreetMap contributors');
+  });
+
+  it('shows the relaxed banner for done=relaxed and the §18 timeout copy for best_so_far', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<RouteDetail route={ROUTE} explanation={null} done="relaxed" />);
+    });
+    expect(textOf(tree)).toContain('Some preferences were relaxed');
+    act(() => {
+      tree = create(<RouteDetail route={ROUTE} explanation={null} done="best_so_far" />);
+    });
+    expect(textOf(tree)).toContain("I ran out of time; here's the best I found.");
+  });
+});
+
+describe('ResultScreen', () => {
+  it('hosts RouteDetail + a plan-another action', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <ResultScreen
+          navigation={{ goBack: () => {}, navigate: () => {} }}
+          route={{ params: { route: ROUTE, explanation: EXPLANATION, done: 'ok' } }}
+        />,
+      );
+    });
+    const text = textOf(tree);
+    expect(text).toContain('67.8 km');
+    expect(text).toContain('Plan another drive');
+  });
+
+  it('handles a missing route defensively', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <ResultScreen navigation={{ goBack: () => {}, navigate: () => {} }} route={{}} />,
+      );
+    });
+    expect(textOf(tree)).toContain('No route arrived');
+  });
+
+  it('with held constraints: refine panel present; with previous: comparison rows (M7-T07)', () => {
+    let tree!: ReactTestRenderer;
+    const constraints = { shape: 'loop' } as never; // opaque to the screen
+    act(() => {
+      tree = create(
+        <ResultScreen
+          navigation={{ goBack: () => {}, navigate: () => {} }}
+          route={{
+            params: {
+              route: ROUTE,
+              explanation: null,
+              done: 'ok',
+              constraints,
+              previous: { distance_m: 60000, duration_s: 3600, curviness: 1.1, climb_m: 250 },
+            },
+          }}
+        />,
+      );
+    });
+    const text = textOf(tree);
+    expect(text).toContain('Tweak this drive');
+    expect(text).toContain('hard'); // "hard constraints carry over" hint
+    expect(text).toContain('Compared with the previous drive');
+    expect(text).toContain('+15 min'); // 60→75 real computed delta
+    expect(text).toContain('+7.8 km'); // 60.0→67.8
+  });
+
+  it('without constraints (older payloads): no refine affordance appears', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <ResultScreen
+          navigation={{ goBack: () => {}, navigate: () => {} }}
+          route={{ params: { route: ROUTE, explanation: null, done: 'ok' } }}
+        />,
+      );
+    });
+    expect(textOf(tree)).not.toContain('Tweak this drive');
+  });
+});

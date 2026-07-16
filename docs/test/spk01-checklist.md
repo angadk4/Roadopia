@@ -11,7 +11,7 @@ Verification §21. This file is the record; tick the boxes on-device and paste t
 
 ---
 
-## Status: **iOS leg PASSED (owner, 2026-07-16)** · Android leg OPEN (no device yet)
+## Status: **iOS leg PASSED (owner, 2026-07-16)** · Android **BUILD PASSED** (EAS APK, 2026-07-16) · Android render check OPEN (no device yet)
 
 EAS cloud build (preview profile, Node 24 on the build image) → installed on the owner's real
 iPhone → **all seven checks pass**: launch (New-Arch native build proven), dark map, clustering,

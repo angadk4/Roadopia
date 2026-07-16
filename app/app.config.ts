@@ -69,6 +69,16 @@ const config: ExpoConfig = {
     // Client-safe public token only (Hard rule H; Master Spec §57/§683). Set as
     // an EAS env var / secret named EXPO_PUBLIC_MAPBOX_TOKEN for cloud builds.
     mapboxPublicToken: process.env['EXPO_PUBLIC_MAPBOX_TOKEN'] ?? '',
+    // Agent-backend base URL (M7-T01; NOT a secret). Empty in dev = the app
+    // derives it from the Metro host (phone on the same LAN reaches
+    // `pnpm -C backend dev` with zero config — see lib/api resolveApiBaseUrl).
+    // Set EXPO_PUBLIC_API_URL for EAS builds pointed at a deployed backend.
+    apiUrl: process.env['EXPO_PUBLIC_API_URL'] ?? '',
+    // Supabase Data API for direct client reads (M7-T02; anon key is
+    // CLIENT-SAFE by design — Hard rule H). Empty in dev = derived local
+    // stack (`supabase start`) + the public supabase-cli demo anon key.
+    supabaseUrl: process.env['EXPO_PUBLIC_SUPABASE_URL'] ?? '',
+    supabaseAnonKey: process.env['EXPO_PUBLIC_SUPABASE_ANON_KEY'] ?? '',
     // EAS project link (from `eas init`, M6/SPK-01).
     eas: {
       projectId: '55cb079a-892f-4233-a813-24623af95338',

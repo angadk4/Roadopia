@@ -81,6 +81,49 @@ describe('POST /plan SSE (M6-T04)', () => {
     }
   });
 
+  it('trace frames carry NO reasoning-like field at any depth (M7-T06 / Hard rule I / RG-5)', async () => {
+    const { deps } = baseDeps({
+      planFn: async (_c: unknown, d: PlannerDeps) => {
+        d.onEvent?.({ type: 'step', step: 'scope', status: 'started' });
+        d.onEvent?.({ type: 'tool_call', tool: 'get_isochrone' });
+        d.onEvent?.({ type: 'tool_result', tool: 'get_isochrone', ok: true, count: 1 });
+        d.onEvent?.({ type: 'step', step: 'scope', status: 'completed', detail: 'x1' });
+        return okPlannerResult();
+      },
+    });
+    const app = buildServer({ plan: deps as never });
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, {
+        brief: '90 minute twisty loop',
+        origin: { lat: 43.2557, lng: -79.8711 },
+      });
+      expect(run.events.length).toBeGreaterThan(4);
+      // Walk the RAW wire frames (not the zod-parsed events — zod strips
+      // unknown keys, which would make this vacuous; review 2026-07-16):
+      // no chain-of-thought channel may exist at ANY depth of ANY frame.
+      const FORBIDDEN = /reason|think|thought|chain|cot|scratch|internal/i;
+      const rawFrames = run.rawText
+        .split('\n')
+        .filter((l) => l.startsWith('data: '))
+        .map((l) => JSON.parse(l.slice(6)) as unknown);
+      expect(rawFrames.length).toBeGreaterThan(4);
+      const walk = (value: unknown, path: string): void => {
+        if (Array.isArray(value)) {
+          value.forEach((v, i) => walk(v, `${path}[${i}]`));
+        } else if (value && typeof value === 'object') {
+          for (const [k, v] of Object.entries(value)) {
+            expect(`KEY ${k} at ${path}`).not.toMatch(FORBIDDEN);
+            walk(v, `${path}.${k}`);
+          }
+        }
+      };
+      rawFrames.forEach((f, i) => walk(f, `frame[${i}]`));
+    } finally {
+      await close();
+    }
+  });
+
   it('client cancel mid-run: the loop observes the abort and NO model spend follows', async () => {
     let sawAbort = false;
     let explainCalls = 0;

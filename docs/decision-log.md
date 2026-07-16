@@ -983,3 +983,201 @@ slow launch + cluster smoothness = carried to SPK-02/M7 perf; rig UI quality (hi
 panel sizing/contrast) = recorded as the M7 UI acceptance bar. The rig screen is deleted at
 M7-T01. Owner also completed en route: Apple Developer Program enrollment + Expo account +
 device registration (S0-style [HUMAN] infrastructure, now durable).
+
+**SPK-01 ANDROID BUILD RISK RETIRED (2026-07-16).** The device-free Android APK build ran on
+EAS (preview profile, same hoisted-pnpm + Node 24 image as iOS) and **FINISHED clean** —
+every native dep (@rnmapbox/maps 10.3.2 + Mapbox Maps SDK, expo-modules) compiles under the
+New Architecture on Android too. Artifact: expo.dev APK (internal distribution, 2026-07-16).
+SPK-01's remaining opening is now ONLY the on-device Android render check (needs hardware);
+the "a native dep won't build under New Arch" failure mode is closed on BOTH platforms.
+M7 proceeds iOS-first (owner-authorized batch, 2026-07-16) with the Android render check owed
+before M7-T09 (the hero-flow gate needs both platforms).
+
+**BD-47 — M7-T01 mobile client foundation choices (2026-07-16; the Dependency
+Verification is SILENT on all four — builder's choice, logged for ratification).**
+(1) **Navigation = React Navigation 7** (`@react-navigation/native` + `bottom-tabs`, with
+`react-native-screens` + `react-native-safe-area-context` at Expo-SDK-55-matched versions via
+`expo install`). The doc mandates the capability (§16 four bottom tabs; §20.4 deep links) but
+names no library; React Navigation is the RN standard, New-Arch-compatible, and matches the
+backlog's `app/src/nav/*` shape. expo-router rejected (file-based restructure, heavier, no
+benefit at this scope). (2) **SSE transport = `expo/fetch`** — the WinterCG streaming fetch
+inside the `expo` package, ZERO new dependency; Dep-Verification §14 calls for exactly a
+fetch-stream shim and SPK-03 (device) remains the confirming gate, with `react-native-sse`
+as the documented fallback ladder. The parser is a spec-compliant hand-rolled incremental
+module, fully unit-tested (chunk splits mid-UTF-8-char, CRLF, multi-`data:`, `: ping`
+heartbeats); every frame re-validates through the shared `GenerationEventSchema` — off-schema
+frames are counted and never rendered (Hard rules I/K client-side). (3) **App testing stays
+Vitest** (repo standard, M0-T05) + `react-test-renderer` with a minimal `react-native`
+node-stub alias for component smoke — jest-expo rejected for now (a second runner + babel
+stack for no current need); revisit if RN component-testing needs outgrow the stub.
+(4) **Anonymous session id = per-launch in-memory UUID (Math.random)** for the `x-session-id`
+rate-limit key — not persisted (no storage dep), not security-sensitive (per-IP limits bind
+server-side regardless). Also: **EXPO_PUBLIC_API_URL** joins the client env (optional; dev
+builds derive the backend URL from the Metro host so a phone on the LAN reaches
+`pnpm -C backend dev` zero-config); `eslint-plugin-react-hooks` lands repo-side for `app/src`
+(the BD-4 deferred RN lint — `rules-of-hooks` error, `exhaustive-deps` warn;
+`eslint-plugin-react-native` skipped: flat-config support lags ESLint 9). The SPK-01 rig
+screen is DELETED as recorded; `zod` added to app deps (it consumes `@shared/types`).
+
+**BD-48 — M7-T02 map-home data path: the M8 PUBLIC-read slice pulled forward (2026-07-16).**
+FR-010 (the never-empty anonymous map) reads through the sanctioned direct-Supabase path
+(§49.1) — but routes/spots were still RLS-deny-by-default ("until M8"). Landed now in
+**migration 0007**: SELECT policies exposing exactly the product's public rows —
+`routes.visibility='public'`, `spots.source='osm'` — plus **map_routes()** (SECURITY INVOKER,
+RLS-bound), which returns GeoJSON geometry (PostgREST serializes raw geometry columns as WKB
+hex the app cannot render) and the SIMPLIFIED line per §44 egress discipline. **SPK-13's
+invariant (zero private leakage) is preserved and re-verified**: rls_planner.test.ts's two
+deny-by-default assertions were UPDATED to assert the real invariant (anon sees ONLY
+public/OSM rows, never the seeded private fixtures) — a deliberate posture change, not a
+weakened test — and the new rls_public_read.test.ts adds write-denial + private-invisibility
+coverage (29 db tests green). LIVE verification over PostgREST with the anon key: map_routes
+→ HTTP 200, 8 public seed routes, renderable LineString JSON; planner_find_spots → 1000 OSM
+spots {lat,lng floats}. Client choices (with BD-47's silence rule): **no @supabase/supabase-js
+yet** — two anonymous RPC reads need only a thin typed fetch over /rest/v1/rpc (zod-validated
+rows, Hard rule K); the JS client earns its place at M8 auth. **Zero-config LAN dev**: the app
+derives the local Supabase URL from the Metro host and pairs it with the supabase-cli DEMO
+anon key (a public, docs-published constant — not a secret; used only when no hosted project
+is configured via EXPO_PUBLIC_SUPABASE_URL/_ANON_KEY). Deviations noted for later: custom
+Mapbox Studio style (§19) deferred — stock dark/light until a Studio style exists; spot
+type-ICON sprites (FR-012 letter) deferred to polish — colour + letter markers now; tap-detail
+is an interim sheet upgraded to the shared RouteDetail at M7-T05; hosted roadopia-dev is NOT
+yet migrated/seeded (local stack is the M7 dev world — hosted push rides M8/M12). Ops note:
+local Kong gateway wedged (connection-refused on its own :8000 despite healthy status) —
+`docker restart supabase_kong_db` fixed it; recorded as a known local-stack hiccup.
+
+**BD-49 — M7-T03 Plan screen shipped PRESETS-ONLY + the additive /plan `preset` field
+(2026-07-16).** The backlog block's literal Files/AC ("advanced sliders (clamped)",
+`Sliders.tsx`, "presets/sliders set weights") predates the ratified BD-30 ([GATE-W] W1
+presets-only; sliders DEFERRED). Building sliders would violate Hard rule L, so the Plan
+screen ships: brief (≤500, counter) · origin = current-location default (BD-27; expo-location
+foreground-only) or drop-a-pin crosshair picker, with the §18 permission-denied → "drop a pin
+instead" fallback · shape loop/A→B (+ destination pick) · the six preset chips (FR-350) —
+recorded as a deliberate deviation from the stale task text, per the gate. **Preset
+transport:** /plan's body had NO preset field and PRESET_WEIGHTS is backend-private, so the
+chip now travels as an additive, schema-validated `preset` enum field resolved server-side
+via weightsForPreset (frozen vectors never duplicated into the client; explicit `weights`
+still win key-by-key at mergeWeights). Backend tests cover chip→constraints.preset and
+unknown-preset 400 (plan-degrade 7/7). Place-name ORIGINS stay in the brief (the server
+gazetteer resolves them; client-side Mapbox geocoding deferred — §49.3 cache design rides a
+later milestone). Out-of-region stays server-authoritative (§46: the .poly never ships in
+the app); the Plan flow renders the friendly 400 downstream. Screens keep lightweight prop
+shapes bridged into React Navigation via typed adapters (node-smoke-testable without the
+navigator).
+
+**BD-50 — M7-T04 generation-progress UI + SPK-03 CODE HALF VERIFIED LIVE (2026-07-16).**
+The streamed timeline shipped as a PURE reducer over GenerationEvents (started→completed row
+collapse, per-iteration repeats, tool grounding rows with counts, friendly errors, guard
+rejections, cancel, §14 backgrounding→clean-cancel+retry — every transition unit-tested) +
+a Progress screen that auto-advances to Result on success (replace, so back returns to the
+form). Cancel = AbortController → socket close → the server halts the loop AND model spend
+(M6-proven). §18 states: 429/503/400 guard JSON rendered verbatim (server copy is already
+friendly and names what still works); connection-lost and done:unavailable (incl. clarify
+questions) rendered honestly; the timeline doubles as the M7-T06 reasoning-view source —
+the wire schema has no channel for model reasoning and off-schema frames are dropped
+client-side before the reducer (Hard rule I, both ends). **LIVE E2E over real HTTP** (the
+app's actual plan_stream.ts + sse.ts + shared schema, node fetch injected — the same
+structural streaming interface as expo/fetch): full run = 32 events, wall 8.9 s, parser=llm,
+REAL 67.8 km / ≈75 min route + grounded explanation, done:ok, 0 malformed frames; cancel run
+= aborted after 3 events, done:null/aborted:true. Committed as app/scripts/plan_stream_e2e.ts
+(`pnpm -C app e2e:stream`) for re-verification. Device half of SPK-03 (incremental render on
+hardware + backgrounding) rides the M7-T09 stop. Ops note: the dev backend is launched as
+`npx tsx --env-file=../.env src/start.ts` from backend/ won't resolve REGION_POLY_PATH —
+run from repo root with TSX_TSCONFIG_PATH=backend/tsconfig.json, or `pnpm -C backend dev`
+once a dotenv preload lands; recorded for the M7-T09 handoff instructions.
+
+**BD-51 — M7-T05 shared RouteDetail + constraints panel + the satisfied_constraints schema
+tightening (2026-07-16).** One RouteDetail component serves Result/saved/shared (FR-074;
+§16 cohesion rule 1): bounds-fitted amber route map (with attribution), honest stats — the
+ROUTED time always shown as "≈N min" (BD-42 disclosure), twistiness (FR-070's curviness,
+shown as the neutral retrieval metric — no fun-score, Hard rule C/[GATE-C]), climb,
+result-scanned road flags shown ONLY when true (BD-16), character/intensity tags — the
+constraints panel rendering the agent's ACTUAL ConstraintResult verdicts (✓ satisfied /
+⚠ relaxed / ✕ violated with details; not_applicable hidden; FR-044 never fabricated),
+done=relaxed and best_so_far banners with the §18 copy, the grounded explanation with
+relaxed[] disclosures, and the FR-400 safe-driving disclaimer. NO dead buttons: save/share/
+navigate arrive at M8/M9. **Schema tightening:** shared RouteSchema.satisfied_constraints
+z.unknown() → z.array(ConstraintResultSchema) with the schema moved INTO shared (backend
+validate.ts now imports/re-exports it — single source); the full backend suite (197 tests,
+including every SSE frame parsed through GenerationEventSchema) passed against the deeper
+validation, proving the real wire output conforms. Deferred + noted: per-segment twisty
+overlay on the detail map (§19) needs segment scores the /plan payload doesn't carry;
+spots-along-route rows (FR-073) need a stops list the payload doesn't carry; elevation
+PROFILE chart (payload sends climb only). All additive payload work, candidates for M8+/polish.
+
+**BD-52 — M7-T06 reasoning view live: structurally CoT-free at BOTH ends (2026-07-16).**
+The collapsible "How this route was built" mounts inside RouteDetail (§16 cohesion rule 3)
+and renders ONLY the four permitted kinds of content (pipeline steps · tool calls · grounded
+result counts · validated-output notes like parser=llm) — its sole input is the timeline the
+progress screen assembled from schema-validated GenerationEvents, so there is no code path
+by which unvalidated (or reasoning) content could render. Enforcement is now double-ended:
+client-side, off-schema frames are rejected before decoding (sse.ts, tested incl. a
+synthetic 'thinking' frame); server-side, a NEW plan-sse test walks EVERY frame's keys
+recursively and fails CI on any reasoning-like field (/reason|think|thought|chain|cot|
+scratch|internal/i) at any depth — the task's "backend assertion that trace events contain
+no CoT field", on top of BD-45(9)'s schema gate. RG-5's code-review confirmation rides the
+M7 close-out review.
+
+**BD-53 — M7-T07 conversational refinement live end-to-end; the /plan round-trip API
+(2026-07-16).** M5-T06's refine library was LIBRARY-ONLY (no wire path; Spec §34 "the caller
+holds the running c" had no way to hold it). Landed additively, per the §34 design:
+(1) NEW `constraints` SSE event (additive union member per BD-45(7)) — the effective
+ParsedConstraints emitted after parse/merge, so the client holds the running `c`;
+(2) /plan body accepts optional `constraints` + `followUp` (both-or-neither → else 400):
+the previous c re-validates through the SAME shared zod schema in-handler (Hard rule K),
+then refineConstraints merges deterministically (RF6) — recognized:false is an honest no-op
+(friendly error + done:unavailable, planner never runs, ZERO spend); the parse step reports
+`refine-merge` (no LLM call on refinement turns; FR-049 metrics.parser logs 'refine-merge').
+Hard constraints persist by mergeConstraints construction (M5 retention tests + a new wire
+test). (3) Client: RefinePanel inline ON Result (§16 rule 2), RouteCompare rendering REAL
+COMPUTED deltas from the two route payloads (FR-254 — the client computes, nothing narrates
+numbers), previous-summary threaded Result→Progress→Result; refined result replaces in
+place with back returning to the prior result (comparison + history in one gesture).
+[GATE-RF]'s precondition (one-shot stable) was met by SPK-15/M4/SPK-19; ship-shape is
+RF1+RF4+RF6 exactly as the Protocol prescribes. **LIVE E2E:** run 1 held c → follow-up
+"make it longer" → refine-merge, done:ok, 56 → 61 min (target 60→72 min with the frozen
+±20 % tolerance; the planner's honest best). Backend 198→201 tests green; app 90.
+
+**BD-54 — M7-T08 §18 state matrix closed for the M7 slice (2026-07-16).** All applicable
+rows verified by a single consolidated test file (app state_matrix.test.tsx) + the per-screen
+tests: loading (map banner + streamed steps) · offline SPLIT honestly into never-connected
+("No connection… check your network") vs dropped-mid-run ("Connection lost… nothing was
+saved") — the one real gap found by the audit, fixed · map-data failure keeps the map
+interactive + retry · location-permission-denied → rationale + drop-a-pin (Plan) ·
+out-of-region / rate-limit / kill-switch / spend-cap render the server's friendly JSON
+verbatim (each names a path forward) · planner degradation ladder text · relaxation banner +
+panel · timeout best-so-far banner. Never a raw error string anywhere (tests assert the raw
+cause never appears). Deviations noted: states are CO-LOCATED with their screens rather than
+a components/states/* dir (the backlog's file hint — cohesion beats a premature shared dir);
+geocode-failure n/a by design (place names ride the brief; server gazetteer); upload (M10)
+and auth-sheet (M8) rows land with their milestones; a persistent app-wide admin banner for
+cap/kill (§65) is M11 polish — the inline panel covers the M7 slice.
+
+**BD-55 — M7 close-out adversarial review: 24 findings, 20 confirmed, ALL FIXED (2026-07-16).**
+A 4-lens review (security/privacy · stream correctness · spec/RN · test integrity) with
+per-finding adversarial verification ran over the whole M7 slice before the device handoff.
+The two CRITICALS, both fixed with regression tests:
+(1) **Region-guard bypass on the refine path** — /plan's .poly check covered only
+body.origin/destination; a schema-valid `constraints` blob could carry ANY global coordinate
+(zod checks shape, not geography; out_of_region_flag is attacker-controlled) straight into the
+planner on the anonymous, money-spending endpoint. Fixed: the pre-stream region gate now also
+checks LatLng origin/destination INSIDE the revalidated refine constraints → clean 400
+out_of_region; test proves a Paris-origin refine never reaches the planner.
+(2) **Retry could never succeed** — the run reducer was never reset on a new attempt, so a
+retried stream's terminal event was swallowed by the settled phase. Fixed: `reset` action
+dispatched at every attempt start; regression test drives fail→retry→success→Result.
+Also fixed (majors/minors): stale-stream settlements guarded (strict-mode double-mount /
+superseded attempts can no longer corrupt the run); done-with-no-route now fails honestly
+instead of a dead-end 'succeeded'; late guard/network settlements can't override a settled
+phase; ResultScreen ScrollView keyboardShouldPersistTaps (refine tap was swallowed by
+keyboard dismissal); guard headlines keyed by error code (out_of_region no longer reads
+"Planning is paused"); RouteCompare deltas computed at display precision (no more "+0.0 km
+vs identical columns"); unrecognized follow-up now completes its parse step on the wire;
+per-request socket close-listeners detached in finally (keep-alive accumulation); the no-CoT
+key-walk now walks RAW wire frames (the zod-parsed walk was vacuous for unknown keys); wire
+constraints event asserts hard-constraint retention; rn-stub enforces RN's bare-text
+invariant (device-crash class → CI failure); app.config↔runtime contract test (a renamed
+extra key can no longer ship a tokenless build silently) + Hard-rule-H secret-shape tripwire;
+session-test tautology removed; stale rls_planner header corrected; data-schema fixture test
+renamed to what it proves. 4 findings refuted with evidence (PlanStack remount concern,
+find_spots vacuity, SSE-transport-untested, map tap contracts). Post-fix: 401 tests green
+repo-wide; live E2E (full + cancel + refine) re-verified against the patched backend.

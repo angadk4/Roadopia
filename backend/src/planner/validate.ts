@@ -11,7 +11,12 @@
  * explicitly disclosed-relaxed); soft misses annotate but do not fail (§3.6).
  */
 
-import type { ParsedConstraints, RouteThroughOutput } from '@shared/types';
+import type {
+  ConstraintResult,
+  ConstraintStatus,
+  ParsedConstraints,
+  RouteThroughOutput,
+} from '@shared/types';
 
 import { EPSILON_CLOSURE_M, SELF_OVERLAP_CAP } from './loop';
 
@@ -21,14 +26,9 @@ import { EPSILON_CLOSURE_M, SELF_OVERLAP_CAP } from './loop';
 // seeded failures were pure duration misses, unrepairable by any move).
 export const DURATION_TOLERANCE_DEFAULT = 0.2;
 
-export type ConstraintStatus = 'satisfied' | 'violated' | 'relaxed' | 'not_applicable';
-
-export interface ConstraintResult {
-  constraint: string;
-  tier: 1 | 2 | 3;
-  status: ConstraintStatus;
-  detail: string;
-}
+// Single source of truth moved to shared at M7-T05 (the client constraints
+// panel renders these rows); re-exported so existing backend imports hold.
+export type { ConstraintResult, ConstraintStatus } from '@shared/types';
 
 export interface ValidationInput {
   route: RouteThroughOutput;

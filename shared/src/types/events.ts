@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { ParsedConstraintsSchema } from './constraints';
 import { RouteSchema } from './route';
 import { ExplanationSchema } from './tools';
 
@@ -64,6 +65,17 @@ const ErrorEventSchema = z.object({
   message: z.string(),
 });
 
+/**
+ * The effective ParsedConstraints for this run (M7-T07, additive per BD-45(7)).
+ * Emitted after parse/refine-merge so the client can hold the running `c` for
+ * conversational refinement (Spec §34: "memory is session-scoped; the caller
+ * holds the running c"). VALIDATED parse output only — never model reasoning.
+ */
+const ConstraintsEventSchema = z.object({
+  type: z.literal('constraints'),
+  constraints: ParsedConstraintsSchema,
+});
+
 const DoneEventSchema = z.object({
   type: z.literal('done'),
   status: z.enum(['ok', 'relaxed', 'best_so_far', 'unavailable']),
@@ -77,6 +89,7 @@ export const GenerationEventSchema = z.discriminatedUnion('type', [
   RouteEventSchema,
   ExplanationEventSchema,
   ErrorEventSchema,
+  ConstraintsEventSchema,
   DoneEventSchema,
 ]);
 export type GenerationEvent = z.infer<typeof GenerationEventSchema>;

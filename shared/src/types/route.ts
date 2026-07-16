@@ -74,6 +74,23 @@ export const ElevationProfileSchema = z.object({
 });
 export type ElevationProfile = z.infer<typeof ElevationProfileSchema>;
 
+// --- Constraint verdicts (M3 validate.ts produces; the M7 panel consumes) ---
+
+/**
+ * One validated constraint verdict (FR-042/FR-044: the panel reflects the
+ * agent's ACTUAL satisfied/relaxed results, never fabricated). Tightened from
+ * `z.unknown()` at M7-T05 — this is the exact wire shape the backend has
+ * emitted since M3; now schema-checked end to end (backend imports this).
+ */
+export const ConstraintResultSchema = z.object({
+  constraint: z.string(),
+  tier: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  status: z.enum(['satisfied', 'violated', 'relaxed', 'not_applicable']),
+  detail: z.string(),
+});
+export type ConstraintResult = z.infer<typeof ConstraintResultSchema>;
+export type ConstraintStatus = ConstraintResult['status'];
+
 // --- Route ---
 
 /**
@@ -111,7 +128,7 @@ export const RouteSchema = z.object({
   featured_spot_ids: z.array(z.string().uuid()).optional(),
   // AI-route-only provenance (§21):
   generation_request_id: z.string().uuid().nullable().optional(),
-  satisfied_constraints: z.unknown().optional(), // jsonb; typed in M3/M4
+  satisfied_constraints: z.array(ConstraintResultSchema).nullable().optional(),
   agent_explanation: z.string().nullable().optional(),
 });
 export type Route = z.infer<typeof RouteSchema>;

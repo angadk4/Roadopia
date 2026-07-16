@@ -13,7 +13,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * (`set role anon` — exactly what PostgREST does for anonymous calls) against
  * the local Supabase stack and assert:
  *
- *   1. direct table reads return ZERO rows (RLS deny-by-default until M8);
+ *   1. direct table reads return ONLY public rows (routes.visibility='public' /
+ *      spots.source='osm' — the 0007 public-read floor, BD-48) — never a private row;
  *   2. the INVOKER RPCs return zero private rows for anon;
  *   3. the SECURITY DEFINER planner functions return public/OSM rows but
  *      NEVER a private row — the §55 "cannot select private routes/spots";
@@ -108,21 +109,31 @@ async function asAnon<T extends Record<string, unknown>>(
 }
 
 describe('SPK-13 least-privilege planner read path', () => {
-  it('anon direct table reads: zero rows from routes/spots (deny-by-default RLS)', async (ctx) => {
+  // NOTE (M7-T02, migration 0007): the original posture here was deny-by-default
+  // ("zero rows until M8"). The M8 PUBLIC-read slice landed early to serve
+  // FR-010 (anonymous map renders public seeds), so the SPK-13 invariant these
+  // tests protect is now asserted directly: anon sees ONLY public/OSM rows —
+  // never a private one. Recorded in docs/decision-log.md (BD-48).
+  it('anon direct table reads: ONLY public routes / OSM spots (0007 read floor)', async (ctx) => {
     if (!db) return ctx.skip();
-    const routes = await asAnon('select id from routes');
-    const spots = await asAnon('select id from spots');
-    expect(routes).toHaveLength(0);
-    expect(spots).toHaveLength(0);
+    const routes = await asAnon<{ id: string; visibility: string }>(
+      'select id, visibility from routes',
+    );
+    const spots = await asAnon<{ id: string; source: string }>('select id, source from spots');
+    expect(routes.every((r) => r.visibility === 'public')).toBe(true);
+    expect(routes.some((r) => r.id === privateRouteId)).toBe(false);
+    expect(spots.every((s) => s.source === 'osm')).toBe(true);
+    expect(spots.some((s) => s.id === privateSpotId)).toBe(false);
   });
 
-  it('anon INVOKER RPC (find_spots) returns zero rows — RLS binds the caller', async (ctx) => {
+  it('anon INVOKER RPC (find_spots) returns OSM spots only — RLS binds the caller', async (ctx) => {
     if (!db) return ctx.skip();
-    const rows = await asAnon(
+    const rows = await asAnon<{ id: string; source: string }>(
       `select * from find_spots(p_lat := $1, p_lng := $2, p_radius_m := 50000)`,
       [PRIVATE_LAT, PRIVATE_LNG],
     );
-    expect(rows).toHaveLength(0);
+    expect(rows.every((r) => r.source === 'osm')).toBe(true);
+    expect(rows.some((r) => r.id === privateSpotId)).toBe(false);
   });
 
   it('anon planner_find_spots returns the OSM spot but NEVER the private one (the SPK-13 measure)', async (ctx) => {

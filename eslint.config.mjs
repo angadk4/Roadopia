@@ -12,6 +12,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import importPlugin from 'eslint-plugin-import';
+import reactHooks from 'eslint-plugin-react-hooks';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
@@ -42,6 +43,19 @@ export default tseslint.config(
       ],
       'import/no-duplicates': 'error',
       'import/first': 'error',
+    },
+  },
+  {
+    // React hooks correctness for the RN app (the BD-4 deferred "RN rules for
+    // app/" — landed at M7-T01 when real RN code arrived). rules-of-hooks
+    // catches genuine bugs; exhaustive-deps stays a warning (reviewed, not
+    // build-breaking). eslint-plugin-react-native itself is skipped for now:
+    // its flat-config support lags ESLint 9 (logged in the decision log).
+    files: ['app/src/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
     },
   },
   {

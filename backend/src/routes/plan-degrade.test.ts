@@ -1,3 +1,4 @@
+import { validateParsedConstraints } from '@shared/types';
 import type { Client } from 'pg';
 import { describe, expect, it } from 'vitest';
 
@@ -117,6 +118,219 @@ describe('/plan degradation ladder (M6-T06)', () => {
       const done = run.events[run.events.length - 1];
       expect(done?.type === 'done' && done.status).toBe('unavailable');
       expect(run.rawText).not.toContain('secret stack detail');
+    } finally {
+      await close();
+    }
+  });
+
+  it('client preset chip reaches the planner as constraints.preset (M7-T03 additive field)', async () => {
+    let seen: { preset?: string | null; weights?: Record<string, number> | null } | null = null;
+    const app = appWith({
+      planFn: async (constraints: {
+        preset?: string | null;
+        weights?: Record<string, number> | null;
+      }) => {
+        seen = constraints;
+        return okPlannerResult();
+      },
+    });
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, { ...BODY, preset: 'twisty', weights: { cur: 0.9 } });
+      expect(run.status).toBe(200);
+      expect(seen).not.toBeNull();
+      expect(seen!.preset).toBe('twisty'); // chip overrides the parsed guess
+      expect(seen!.weights).toEqual({ cur: 0.9 }); // explicit weights still win key-by-key
+    } finally {
+      await close();
+    }
+  });
+
+  it('an unknown preset value is rejected by schema validation (400, never the planner)', async () => {
+    const app = appWith();
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, { ...BODY, preset: 'fastest' } as never);
+      expect(run.status).toBe(400);
+      expect(run.rawText).toContain('bad_request');
+    } finally {
+      await close();
+    }
+  });
+
+  it('refine round-trip: follow-up merges deterministically, planner gets c-prime, stream shows refine-merge + constraints event (M7-T07)', async () => {
+    const previous = validateParsedConstraints({
+      origin: { lat: 43.2557, lng: -79.8711 },
+      destination: null,
+      shape: 'loop',
+      duration_target_s: 5400,
+      distance_target_m: null,
+      stops: [{ type: 'coffee', count: 1, importance: 'required' }],
+      avoid: { highways: true, tolls: false, ferries: false, unpaved: false },
+      surface_pref: 'paved',
+      character: ['twisty'],
+      scenic_pref: null,
+      twistiness_pref: 0.7,
+      intensity: null,
+      preset: null,
+      weights: null,
+      location_constraints: [],
+      ambiguous_terms: [],
+      missing: [],
+      contradictions: [],
+      confidence: { overall: 0.9, fields: {} },
+      clarification: { needed: false, question: null },
+      unsafe_flag: false,
+      out_of_region_flag: false,
+      prompt_injection_flag: false,
+    });
+    let seen: { duration_target_s?: number | null; avoid?: { highways?: boolean } } | null = null;
+    const app = appWith({
+      planFn: async (constraints: typeof seen) => {
+        seen = constraints;
+        return okPlannerResult();
+      },
+    });
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, {
+        brief: 'make it longer',
+        constraints: previous,
+        followUp: 'make it longer',
+      } as never);
+      expect(run.status).toBe(200);
+      expect(seen!.duration_target_s).toBe(5400 + 1080); // RF6: +20% step
+      expect(seen!.avoid?.highways).toBe(true); // hard constraints persist (§34)
+      const parseDone = run.events.find(
+        (e) => e.type === 'step' && e.step === 'parse' && e.status === 'completed',
+      );
+      expect(parseDone?.type === 'step' && parseDone.detail).toBe('refine-merge'); // zero LLM spend
+      const cEvent = run.events.find((e) => e.type === 'constraints');
+      expect(cEvent?.type === 'constraints' && cEvent.constraints.duration_target_s).toBe(6480);
+      // the wire c the client re-sends next turn must keep hard constraints (§34)
+      expect(cEvent?.type === 'constraints' && cEvent.constraints.avoid.highways).toBe(true);
+      expect(
+        cEvent?.type === 'constraints' &&
+          cEvent.constraints.stops.some((st) => st.importance === 'required'),
+      ).toBe(true);
+    } finally {
+      await close();
+    }
+  });
+
+  it('an unrecognizable follow-up is an honest no-op: error + done unavailable, planner never runs', async () => {
+    const previous = validateParsedConstraints({
+      origin: { lat: 43.2557, lng: -79.8711 },
+      destination: null,
+      shape: 'loop',
+      duration_target_s: 5400,
+      distance_target_m: null,
+      stops: [],
+      avoid: { highways: false, tolls: false, ferries: false, unpaved: false },
+      surface_pref: 'any',
+      character: [],
+      scenic_pref: null,
+      twistiness_pref: null,
+      intensity: null,
+      preset: null,
+      weights: null,
+      location_constraints: [],
+      ambiguous_terms: [],
+      missing: [],
+      contradictions: [],
+      confidence: { overall: 0.9, fields: {} },
+      clarification: { needed: false, question: null },
+      unsafe_flag: false,
+      out_of_region_flag: false,
+      prompt_injection_flag: false,
+    });
+    let plannerRan = false;
+    const app = appWith({
+      planFn: async () => {
+        plannerRan = true;
+        return okPlannerResult();
+      },
+    });
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, {
+        brief: 'x',
+        constraints: previous,
+        followUp: 'purple monkey dishwasher',
+      } as never);
+      expect(run.status).toBe(200);
+      expect(plannerRan).toBe(false);
+      const err = run.events.find((e) => e.type === 'error');
+      expect(err?.type === 'error' && err.message).toContain("couldn't apply that follow-up");
+      const done = run.events[run.events.length - 1];
+      expect(done?.type === 'done' && done.status).toBe('unavailable');
+    } finally {
+      await close();
+    }
+  });
+
+  it('refine constraints carrying OUT-OF-REGION coordinates are rejected 400 (Hard rule K — review 2026-07-16)', async () => {
+    const paris = validateParsedConstraints({
+      origin: { lat: 48.8566, lng: 2.3522 }, // Paris — schema-valid, region-invalid
+      destination: null,
+      shape: 'loop',
+      duration_target_s: 5400,
+      distance_target_m: null,
+      stops: [],
+      avoid: { highways: false, tolls: false, ferries: false, unpaved: false },
+      surface_pref: 'any',
+      character: [],
+      scenic_pref: null,
+      twistiness_pref: null,
+      intensity: null,
+      preset: null,
+      weights: null,
+      location_constraints: [],
+      ambiguous_terms: [],
+      missing: [],
+      contradictions: [],
+      confidence: { overall: 0.9, fields: {} },
+      clarification: { needed: false, question: null },
+      unsafe_flag: false,
+      out_of_region_flag: false, // attacker-controlled boolean — must NOT be trusted
+      prompt_injection_flag: false,
+    });
+    let plannerRan = false;
+    const app = appWith({
+      planFn: async () => {
+        plannerRan = true;
+        return okPlannerResult();
+      },
+    });
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, {
+        brief: 'make it longer',
+        constraints: paris,
+        followUp: 'make it longer',
+      } as never);
+      expect(run.status).toBe(400);
+      expect(run.rawText).toContain('out_of_region');
+      expect(plannerRan).toBe(false); // no spend, no isochrone, nothing
+    } finally {
+      await close();
+    }
+  });
+
+  it('followUp without constraints (or garbage constraints) is a 400, never a stream', async () => {
+    const app = appWith();
+    const { port, close } = await listen(app);
+    try {
+      const xor = await postPlan(port, { ...BODY, followUp: 'longer' } as never);
+      expect(xor.status).toBe(400);
+      expect(xor.rawText).toContain('bad_request');
+      const garbage = await postPlan(port, {
+        ...BODY,
+        constraints: { nonsense: true },
+        followUp: 'longer',
+      } as never);
+      expect(garbage.status).toBe(400);
+      expect(garbage.rawText).toContain('not recognizable');
     } finally {
       await close();
     }

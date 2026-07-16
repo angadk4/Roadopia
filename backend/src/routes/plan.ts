@@ -17,7 +17,15 @@
  *    payload path (Hard rule I).
  */
 
-import type { GenerationEvent, LatLng, ParsedConstraints, Route, Weights } from '@shared/types';
+import { ParsedConstraintsSchema, PresetSchema } from '@shared/types';
+import type {
+  GenerationEvent,
+  LatLng,
+  ParsedConstraints,
+  Preset,
+  Route,
+  Weights,
+} from '@shared/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Client } from 'pg';
 
@@ -31,6 +39,7 @@ import { logGeneration, toDbStatus } from '../db/generation_log';
 import { errorBody } from '../lib/errors';
 import type { RateLimiter } from '../lib/rate_limit';
 import type { RegionBoundary } from '../lib/region';
+import { refineConstraints } from '../planner/refine';
 import { runPlanner, type PlannerResult } from '../planner/run';
 
 export const MAX_BRIEF_CHARS = 500;
@@ -61,7 +70,16 @@ interface PlanBody {
   origin?: LatLng;
   destination?: LatLng;
   shape?: 'loop' | 'a_to_b';
+  /** Preset chip from the Plan screen (M7-T03) — resolved to the FROZEN
+   *  PRESET_WEIGHTS server-side (BD-30; vectors never live in the client). */
+  preset?: Preset;
   weights?: Record<string, number>;
+  /** Conversational refinement (M7-T07; Spec §34): the running ParsedConstraints
+   *  from the previous run (zod-validated in-handler — Hard rule K) ... */
+  constraints?: unknown;
+  /** ... plus the follow-up to merge deterministically (RF6, M5-T06). Both or
+   *  neither — the pair replaces the parse step with refine-merge. */
+  followUp?: string;
 }
 
 const LATLNG_SCHEMA = {
@@ -175,7 +193,10 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
             origin: LATLNG_SCHEMA,
             destination: LATLNG_SCHEMA,
             shape: { type: 'string', enum: ['loop', 'a_to_b'] },
+            preset: { type: 'string', enum: [...PresetSchema.options] },
             weights: { type: 'object', additionalProperties: { type: 'number' } },
+            constraints: { type: 'object' },
+            followUp: { type: 'string', minLength: 1, maxLength: MAX_BRIEF_CHARS },
           },
         },
       },
@@ -227,8 +248,58 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
         return;
       }
 
-      const { brief, origin, destination, shape, weights } = request.body;
-      for (const p of [origin, destination]) {
+      const {
+        brief,
+        origin,
+        destination,
+        shape,
+        preset,
+        weights,
+        constraints: rawConstraints,
+        followUp,
+      } = request.body;
+
+      // refinement round-trip (M7-T07): both fields or neither; the previous
+      // constraints re-validate through the SAME shared zod schema before any
+      // use (Hard rule K — client JSON is data, never trusted).
+      let refineBase: ParsedConstraints | null = null;
+      if (rawConstraints !== undefined || followUp !== undefined) {
+        if (rawConstraints === undefined || followUp === undefined) {
+          void reply
+            .status(400)
+            .send(
+              errorBody(
+                'bad_request',
+                'Refinement needs both the previous constraints and a follow-up.',
+                request.id,
+              ),
+            );
+          return;
+        }
+        const revalidated = ParsedConstraintsSchema.safeParse(rawConstraints);
+        if (!revalidated.success) {
+          void reply
+            .status(400)
+            .send(
+              errorBody(
+                'bad_request',
+                'The refinement state was not recognizable — plan a fresh drive instead.',
+                request.id,
+              ),
+            );
+          return;
+        }
+        refineBase = revalidated.data;
+      }
+
+      // Hard rule K: the .poly guard must also cover coordinates ARRIVING
+      // INSIDE the refine constraints (zod checks shape, not geography —
+      // review finding 2026-07-16). Origin/destination may also be 'current'
+      // or a place-name string there; only LatLng objects are checkable here.
+      const refineCoords = [refineBase?.origin, refineBase?.destination].filter(
+        (v): v is LatLng => v !== null && v !== undefined && typeof v === 'object',
+      );
+      for (const p of [origin, destination, ...refineCoords]) {
         if (p && !deps.region.contains(p)) {
           void reply
             .status(400)
@@ -263,9 +334,13 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
       // NB: watch the SOCKET — IncomingMessage 'close' fires once the request
       // body is consumed, which is immediately for a JSON POST.
       const aborter = new AbortController();
-      request.raw.socket.once('close', () => {
+      const socket = request.raw.socket;
+      const onSocketClose = (): void => {
         if (!raw.writableEnded) aborter.abort();
-      });
+      };
+      // detached in finally — keep-alive sockets are reused across requests,
+      // so once() listeners would otherwise accumulate (review 2026-07-16)
+      socket.once('close', onSocketClose);
 
       const t0 = performance.now();
       const entriesBefore = deps.ledger?.entries().length ?? 0;
@@ -273,12 +348,37 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
       let result: PlannerResult | null = null;
 
       try {
-        // parse (LLM primary, rules fallback — M5-T03)
+        // parse (LLM primary, rules fallback — M5-T03), or the deterministic
+        // refine-merge when a follow-up round-trip arrived (M7-T07; RF6 rules)
         sse({ type: 'step', step: 'parse', status: 'started' });
-        const outcome = await parseFn(brief, {
-          client: aborter.signal.aborted ? null : deps.aiClient,
-        });
-        constraints = outcome.constraints;
+        let parserKind: string; // 'llm' | 'rules' | 'refine-merge' (FR-049 metric)
+        if (refineBase !== null && followUp !== undefined) {
+          const refined = refineConstraints(refineBase, followUp);
+          if (!refined.recognized) {
+            // honest no-op: nothing merged, nothing planned, zero spend
+            sse({
+              type: 'step',
+              step: 'parse',
+              status: 'completed',
+              detail: 'refine-merge: unrecognized',
+            });
+            sse({
+              type: 'error',
+              message:
+                "I couldn't apply that follow-up — try 'longer', 'shorter', 'more twisty', 'avoid highways', or ask for a stop like 'add a coffee stop'.",
+            });
+            sse({ type: 'done', status: 'unavailable' });
+            return;
+          }
+          constraints = refined.merged;
+          parserKind = 'refine-merge';
+        } else {
+          const outcome = await parseFn(brief, {
+            client: aborter.signal.aborted ? null : deps.aiClient,
+          });
+          constraints = outcome.constraints;
+          parserKind = outcome.parser;
+        }
         // client-provided inputs override parsed guesses (§27.4: origin/shape
         // are INPUTS; the brief fills the rest)
         if (origin) {
@@ -304,13 +404,18 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
           };
         }
         if (shape) constraints = { ...constraints, shape };
+        // preset override (M7-T03): the planner resolves it via weightsForPreset
+        // at run.ts; explicit client weights still win key-by-key (mergeWeights).
+        if (preset) constraints = { ...constraints, preset };
         if (weights) constraints = { ...constraints, weights: weights as Weights };
         sse({
           type: 'step',
           step: 'parse',
           status: 'completed',
-          detail: `parser=${outcome.parser}`,
+          detail: parserKind === 'refine-merge' ? 'refine-merge' : `parser=${parserKind}`,
         });
+        // the effective running `c` — the client holds it for refinement (§34)
+        sse({ type: 'constraints', constraints });
 
         if (aborter.signal.aborted) return; // disconnected during parse
 
@@ -378,7 +483,7 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
           tokenCostUsd: costUsd,
           metrics: {
             planner_status: result.status,
-            parser: outcome.parser,
+            parser: parserKind,
             disclosures: result.disclosures,
             aborted: aborter.signal.aborted,
             events: result.events.length,
@@ -414,6 +519,7 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
         }).catch(() => undefined);
       } finally {
         clearInterval(heartbeat);
+        socket.removeListener('close', onSocketClose);
         if (!raw.writableEnded) raw.end();
       }
     },

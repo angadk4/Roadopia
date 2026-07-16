@@ -88,11 +88,17 @@ export const serverEnvSchema = z.object({
 export type ServerConfig = z.infer<typeof serverEnvSchema>;
 
 /** The client-safe subset — the ONLY keys the app build may hold (Spec §57). */
-export const clientEnvSchema = serverEnvSchema.pick({
-  SUPABASE_URL: true,
-  SUPABASE_ANON_KEY: true,
-  MAPBOX_PUBLIC_TOKEN: true,
-});
+export const clientEnvSchema = serverEnvSchema
+  .pick({
+    SUPABASE_URL: true,
+    SUPABASE_ANON_KEY: true,
+    MAPBOX_PUBLIC_TOKEN: true,
+  })
+  .extend({
+    // Agent-backend base URL for the app (M7-T01). NOT a secret; optional —
+    // dev builds derive it from the Metro host when absent (app/src/lib/api.ts).
+    EXPO_PUBLIC_API_URL: z.string().url().optional(),
+  });
 
 export type ClientConfig = z.infer<typeof clientEnvSchema>;
 
