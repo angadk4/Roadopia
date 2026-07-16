@@ -388,8 +388,9 @@ function insertBetter(after: AssembledLoop, before: AssembledLoop): boolean {
 /**
  * assembleLoop + up to REPAIR_PASS_CAP targeted repairs, two moves:
  *  - DROP (round 9): a micro-loop or over-cap residential run → drop the
- *    waypoint nearest the offence (spot-anchored candidates skipped — which
- *    waypoint is the requested stop is not recoverable).
+ *    waypoint nearest the offence (R16-fix: STOP waypoints are excluded from
+ *    the search and never dropped; the remaining stops' indices are maintained
+ *    so break_through routing stays correct).
  *  - INSERT (round 11b): no offence, but the longest ARTERIAL run exceeds the
  *    trigger → insert a waypoint on the best nearby curvy segment to drag the
  *    boring connector onto backroads; kept ONLY when countryness gains ≥
@@ -413,22 +414,26 @@ export async function assembleLoopWithRepair(
   let best = current;
   let bestRepairs = 0;
   let cand = candidate;
-  // Repair moves waypoints without adjusting stop indices — skip whenever the
-  // candidate carries stops (the pre-R16 spot-anchored skip, now per the plan's
-  // recorded fallback; stop-aware index maintenance stays future work).
-  const stopAnchored = candidate.stops.length > 0;
+  // R16-fix: repair now runs on STOP-carrying candidates too. Stop waypoints are
+  // never moved (the offence search below excludes them); DROP/INSERT maintain
+  // every stop's waypointIndex so break_through leg-splitting stays correct
+  // through the repair (assembleLoop reads candidate.stops for stopIndices).
   for (let pass = 1; pass <= REPAIR_PASS_CAP; pass++) {
     const pos = offencePosition(current, origin);
-    if (pos !== null && !stopAnchored) {
-      let nearest = 0;
+    if (pos !== null) {
+      // only NON-stop (search) waypoints are movable — never relocate/drop a stop
+      const stopIdx = new Set(cand.stops.map((s) => s.waypointIndex));
+      let nearest = -1;
       let nearestD = Infinity;
       cand.waypoints.forEach((w, i) => {
+        if (stopIdx.has(i)) return;
         const d = dM(w.lng, w.lat, pos[0], pos[1]);
         if (d < nearestD) {
           nearestD = d;
           nearest = i;
         }
       });
+      if (nearest === -1) break; // no movable waypoint left — keep best so far
 
       // --- SHIFT first (round 13): RELOCATE the offending waypoint onto the
       // best clean curvy segment near the offence — preserves the loop's
@@ -469,6 +474,10 @@ export async function assembleLoopWithRepair(
         ...cand,
         id: `${cand.id}-rp${pass}`,
         waypoints: cand.waypoints.filter((_, i) => i !== nearest),
+        // dropped index `nearest` is non-stop; shift stops above it down by one
+        stops: cand.stops.map((s) =>
+          s.waypointIndex > nearest ? { ...s, waypointIndex: s.waypointIndex - 1 } : s,
+        ),
       };
       try {
         current = await assembleLoop(baseUrl, origin, cand, costingOptions, opts);
@@ -499,6 +508,10 @@ export async function assembleLoopWithRepair(
         ...cand,
         id: `${cand.id}-in${pass}`,
         waypoints: [...cand.waypoints.slice(0, slot), p, ...cand.waypoints.slice(slot)],
+        // new point occupies `slot`; shift stops at/after it up by one
+        stops: cand.stops.map((s) =>
+          s.waypointIndex >= slot ? { ...s, waypointIndex: s.waypointIndex + 1 } : s,
+        ),
       };
       let attempt: AssembledLoop;
       try {

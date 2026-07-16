@@ -343,7 +343,9 @@ export async function runPlanner(
                   { repairSegments: retrieved.segments }, // round 11b INSERT material
                 );
                 return {
-                  candidate,
+                  // R16-fix: the REPAIRED candidate (maintained stops + waypoints)
+                  // must flow downstream so arrivals/coverage/markers match a.route
+                  candidate: a.candidate,
                   route: a.route,
                   selfOverlap: a.selfOverlap,
                   spursWide: a.spursWide,

@@ -140,11 +140,12 @@ export function buildPlanRequest(draft: PlanDraft): BuildResult {
   }
   if (draft.preferViews) character.push('scenic');
 
-  // --- stops: builder rows (+ the Scenery viewpoint ask) ---
+  // --- stops: builder rows only ---
+  // NOTE (R16-fix): scenery no longer injects a viewpoint STOP. A sparse
+  // viewpoint dragged loops off-corridor and skipped the repair pass. Scenery
+  // becomes a country-road ROUTING preference in Thread B; a viewpoint stop is
+  // requested only when the brief explicitly says so ("with a viewpoint").
   const stops = stopRequestsOf(draft.stops);
-  if (draft.preferViews) {
-    stops.push({ type: 'viewpoint', count: 1, importance: 'nice_to_have', at_fraction: null });
-  }
 
   // --- avoid: send ONLY the toggles that are ON (an untouched toggle must
   // not clear a brief-parsed avoid — the server merges per key) ---

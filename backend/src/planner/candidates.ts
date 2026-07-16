@@ -28,6 +28,17 @@ export const CLUSTER_RADIUS_M = 2_500;
 /** Return anchor sits roughly at this fraction of the cluster distance from origin. */
 export const RETURN_ANCHOR_DISTANCE_FRACTION = 0.6;
 
+// R16-fix: a DEFENSIVE sanity bound on how far an anchored stop may sit from its
+// aim point — the stop-aware repair pass (loop.ts) is what actually keeps stopped
+// loops clean (it removes the u-turns/overlaps a detour creates); this cap only
+// stops a truly ABSURD anchor (a stop many times the loop's reach away) from
+// wasting the candidate pool. Scaled to the loop's target perimeter with a floor
+// so short loops can still reach a nearby town. Measured live: coffee/fuel/
+// viewpoint stops 1–25 km out all produce clean loops well within this bound; an
+// over-cap spot is simply not anchored and coverage discloses it honestly.
+export const STOP_DETOUR_FLOOR_M = 10_000;
+export const STOP_DETOUR_PERIMETER_FRACTION = 0.3;
+
 export interface WaypointCandidate {
   id: string;
   kind: 'loop' | 'atob';
@@ -249,6 +260,14 @@ export function generateLoopCandidates(
   const nCandidates = options.nCandidates ?? N_CANDIDATES_DEFAULT;
   const pfx = options.idPrefix ?? '';
 
+  // R16-fix: max distance an anchored stop may sit from its aim point, scaled to
+  // the loop's target perimeter (same model as durationFitFactor) with a floor.
+  const targetLoopM = ((options.durationS ?? 5400) / 3600) * (options.avgSpeedKmh ?? 55) * 1000;
+  const maxStopDetourM = Math.max(
+    STOP_DETOUR_FLOOR_M,
+    STOP_DETOUR_PERIMETER_FRACTION * targetLoopM,
+  );
+
   // Waypoint material NEVER includes residential fragments (owner rounds 2+3:
   // crescents/courts made waypoints in-and-out neighbourhood spurs). No sparse
   // fallback — a thin pool must not readmit subdivision streets; retrieval
@@ -381,11 +400,18 @@ export function generateLoopCandidates(
     dbType: string | null,
     target: LatLng,
     used: Set<string>,
+    maxDetourM?: number,
   ): CandidateSpot | null => {
     if (dbType === null || spots.length === 0) return null;
     return (
       [...spots]
-        .filter((sp) => sp.type === dbType && !used.has(sp.id))
+        .filter(
+          (sp) =>
+            sp.type === dbType &&
+            !used.has(sp.id) &&
+            // R16-fix: reject a spot too far from the aim to keep the loop sane
+            (maxDetourM === undefined || distM({ lat: sp.lat, lng: sp.lng }, target) <= maxDetourM),
+        )
         .sort(
           (a, b) =>
             distM({ lat: a.lat, lng: a.lng }, target) - distM({ lat: b.lat, lng: b.lng }, target) ||
@@ -536,8 +562,8 @@ export function generateLoopCandidates(
     }
     const tagged: Tagged[] = wps.map((p) => ({ p }));
     for (const unit of anytime) {
-      const sp = nearestOfType(unit.dbType, primary.centroid, used);
-      if (!sp) continue; // unfillable: coverage records the shortfall honestly
+      const sp = nearestOfType(unit.dbType, primary.centroid, used, maxStopDetourM);
+      if (!sp) continue; // unfillable (or too far): coverage records the shortfall honestly
       used.add(sp.id);
       tagged.push({
         p: { lat: sp.lat, lng: sp.lng },
@@ -581,7 +607,7 @@ export function generateLoopCandidates(
         lat: (before.lat + after.lat) / 2,
         lng: (before.lng + after.lng) / 2,
       };
-      const sp = nearestOfType(unit.dbType, aim, used);
+      const sp = nearestOfType(unit.dbType, aim, used, maxStopDetourM);
       if (!sp) continue;
       used.add(sp.id);
       orderedPts.splice(slot, 0, { lat: sp.lat, lng: sp.lng });

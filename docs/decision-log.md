@@ -1271,3 +1271,26 @@ as a literal 0x08 byte (python-patch artifact — dead patterns, silent null fra
 fixed byte-level, repo swept, phrase-level test added (the lesson: patch-written regexes
 need phrase tests in the same unit). Totals: backend 235 · shared 23 · app 121 all green,
 tsc clean ×4 (incl. eval); live E2E full/cancel/refine/stops green.
+
+**BD-58 — R17 Thread A: R16 stop-carrying loop regression fixed; stop-aware repair +
+defensive detour cap (2026-07-16).** The owner reported that R16 loops with a stop regressed
+(U-turns, random-road-then-U-turn, overlaps), worst on "Prefer views". Diagnosis: R16's
+switch to type-SPECIFIC stop anchoring (`nearestOfType`, correct — a coffee stop must anchor
+coffee) exposed a pre-existing weakness — the loop repair pass had always SKIPPED
+stop-carrying candidates, which was harmless only because the old type-BLIND anchoring always
+put a dense spot on the cluster. A sparse viewpoint (455 region-wide) with no detour cap +
+skipped repair = a dragged, uncleaned loop. DECISION: (1) make the repair pass STOP-AWARE
+(runs on stopped candidates; stop waypoints are never moved; DROP/INSERT maintain the
+remaining stops' waypointIndex; also fixes a latent INSERT index bug) — this is the actual
+fix, confirmed live: coffee/fuel/viewpoint stops 1–25 km out all yield clean loops. (2) Keep
+a DEFENSIVE detour cap `max(10 km, 0.30·targetPerimeter)` on stop anchoring — repair is what
+keeps loops clean, so the cap only blocks absurd anchors that would waste the pool; an
+over-cap spot is not anchored and coverage discloses it. (3) run.ts threads the REPAIRED
+candidate downstream so measured arrivals/markers stay correct. (4) The app "Prefer views"
+toggle no longer injects a viewpoint STOP (it caused the worst drag) — scenery becomes a
+routing preference in Thread B; explicit "with a viewpoint" briefs still get a (now capped +
+repair-cleaned) viewpoint stop. Evidence: 48-brief VAL — 44 stop-free briefs BYTE-IDENTICAL
+to v10 (regression guard), 4 stop briefs improved (Fonthill FAIL→PASS, all microloop→0),
+AC 10→11; live multi-stop e2e green; backend 235 / app 121 / shared 23 / eval 26 green.
+No config_id bump (no scored-param change; the detour cap is generation-side, stop-free
+output unchanged). Owner ratification requested.

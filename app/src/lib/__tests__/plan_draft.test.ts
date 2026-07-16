@@ -121,15 +121,15 @@ describe('buildPlanRequest — R16-5 section composition (the preset-slot rules)
     expect(out.ok && 'twistiness_pref' in out.request).toBe(false);
   });
 
-  it('Scenery → viewpoint stop + scenic tag, NEVER the preset slot ([GATE-S])', () => {
+  it('Scenery adds the scenic tag but NO viewpoint stop (R16-fix) and never the preset slot', () => {
     const out = buildPlanRequest(
       draft({ brief: 'b', origin: ORIGIN, style: 'twisty', preferViews: true }),
     );
     expect(out.ok && out.request.preset).toBe('twisty'); // untouched
     expect(out.ok && out.request.character).toEqual(['scenic']);
-    expect(out.ok && out.request.stops).toEqual([
-      { type: 'viewpoint', count: 1, importance: 'nice_to_have', at_fraction: null },
-    ]);
+    // scenery no longer injects a viewpoint STOP (it dragged loops + skipped
+    // repair); it becomes a routing preference in Thread B
+    expect(out.ok && 'stops' in out.request).toBe(false);
   });
 
   it('avoid sends ONLY the toggles that are ON (per-key server merge)', () => {
@@ -208,9 +208,9 @@ describe('buildPlanRequest — R16-5 section composition (the preset-slot rules)
       expect(out.request.twistiness_pref).toBe(0.9);
       expect(out.request.avoid).toEqual({ highways: true, unpaved: true });
       expect(out.request.character).toEqual(['scenic']);
+      // scenery contributes the scenic tag but no longer a viewpoint stop (R16-fix)
       expect(out.request.stops).toEqual([
         { type: 'food', count: 1, importance: 'nice_to_have', at_fraction: 0.5 },
-        { type: 'viewpoint', count: 1, importance: 'nice_to_have', at_fraction: null },
       ]);
     }
   });
