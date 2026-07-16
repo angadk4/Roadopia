@@ -962,3 +962,24 @@ block was added for metro/babel configs (the RN lint work BD-4 deferred to SPK-0
 linker stays ISOLATED for now (root layout untouched, 286 tests safe) with `node-linker=hoisted`
 documented as the EAS fallback if the cloud build hits symlink resolution. These corrections are
 owner-ratifiable; none blocks the device build.
+
+**SPK-01 iOS LEG PASSED (owner on real iPhone, 2026-07-16); Android leg OPEN.** EAS cloud
+build (preview profile) installed and verified on the owner's physical iPhone: all seven
+checks pass — native build under the New Architecture (the spike's core assertion), dark map
+render, clustering, amber route line + distinct high-curvature overlay, dark/light contrast,
+attribution, HUD. The full spike bar is BOTH devices; Android repeats when a device exists
+(the APK build itself can run device-free anytime and would retire the Android BUILD risk).
+Build-path corrections (all now in the repo): pnpm workspace switched to `nodeLinker: hoisted`
+(pnpm-workspace.yaml — Expo autolinking requires a flat node_modules; isolated store broke
+EAS with "Cannot find expo-modules-autolinking"; note: this pnpm reads linker config from the
+workspace YAML, not .npmrc) — 286 tests + typecheck/lint/format re-verified green under the
+hoisted layout; Node 24.16.0 pinned in eas.json build profiles (EAS image defaults to Node 20,
+which pnpm 11.8 rejects — the SAME ERR_UNKNOWN_BUILTIN_MODULE failure recorded at M0-T09,
+now fixed in a second environment); bundle id `com.angadk4.roadopia` (com.roadopia.app taken)
++ EAS projectId in app.config.ts; expo patch alignment via `expo install --fix` (doctor 19/19).
+Owner feedback triaged into the record: route-line "doesn't follow roads" = the 8-point test
+fixture (real Valhalla geometry at M7); lone-point "clusters" = correct Mapbox semantics;
+slow launch + cluster smoothness = carried to SPK-02/M7 perf; rig UI quality (hit targets,
+panel sizing/contrast) = recorded as the M7 UI acceptance bar. The rig screen is deleted at
+M7-T01. Owner also completed en route: Apple Developer Program enrollment + Expo account +
+device registration (S0-style [HUMAN] infrastructure, now durable).

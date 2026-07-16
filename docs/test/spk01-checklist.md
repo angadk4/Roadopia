@@ -11,11 +11,33 @@ Verification §21. This file is the record; tick the boxes on-device and paste t
 
 ---
 
-## Status: iOS build PENDING (owner) · Android leg DEFERRED (no device yet)
+## Status: **iOS leg PASSED (owner, 2026-07-16)** · Android leg OPEN (no device yet)
 
-The scaffold + toolchain are built and locally verified. What remains is the [HUMAN] core:
-build on EAS, install on a real iPhone, eyeball the render. Android repeats once a device is on
-hand — **the gate is not "passed" until both are ticked** (the spike's bar is both devices).
+EAS cloud build (preview profile, Node 24 on the build image) → installed on the owner's real
+iPhone → **all seven checks pass**: launch (New-Arch native build proven), dark map, clustering,
+amber line + distinct curvy overlay, dark/light toggle, attribution, HUD. Android leg repeats
+when a device is on hand — the spike's full bar is both devices.
+
+**Owner observations, triaged (2026-07-16):**
+
+- *"Route line doesn't follow roads — lines of best fit"* — CORRECT, it's the test fixture: 8
+  hand-typed coordinates joined point-to-point. The spike only proves a LineLayer renders. M7
+  feeds this exact layer real Valhalla geometry (hundreds of road-hugging vertices from /plan).
+- *"Un-clustered dots stay dots instead of a cluster of 1"* — standard Mapbox semantics: a
+  cluster forms at ≥2 points; a lone point renders as itself (desired in the real app).
+- *"Slow launch; clustering not perfectly smooth"* — REAL WATCH-ITEM → carried to **SPK-02**
+  (60 fps route-render spike at M7) and the M7 perf eye. Part is preview-build overhead +
+  first-run style download; measure properly with real data.
+- *"HUD panel sizing/opacity poor; toggle looks like plain text; tiny hit target"* — the rig is
+  deliberately throwaway (deleted at M7-T01), BUT the specific complaints are recorded as the
+  **M7 UI acceptance bar**: real buttons must look tappable, ≥44 pt hit targets, deliberate
+  panel sizing/contrast (§663/§667 + owner taste).
+
+**Build-path fixes that got us here (all committed):** hoisted pnpm layout (`nodeLinker:
+hoisted` in pnpm-workspace.yaml — EAS autolinking can't see pnpm's isolated store) · Node
+24.16.0 pinned in eas.json build profiles (EAS image defaults to Node 20; pnpm 11.8 needs ≥22)
+· unique bundle id `com.angadk4.roadopia` + projectId in app.config.ts · `expo install --fix`
+patch alignment · stray root eas.json/app.json (from running eas outside `app/`) removed.
 
 ---
 
@@ -74,16 +96,16 @@ eas build --platform ios --profile development
 When it finishes (~10–20 min), EAS gives a QR / install link → open it on the iPhone → install
 the dev client → it launches straight into the SPK-01 screen.
 
-### Verify on the iPhone (tick each)
+### Verify on the iPhone (ticked by the owner, 2026-07-16)
 
-- [ ] Build **succeeds** (no native dep fails to compile under New Arch)
-- [ ] App launches; **map renders** (stock dark style)
-- [ ] **Clusters** show at low zoom; pins resolve on zoom-in (FR-012)
-- [ ] **Amber route line** renders, with the **brighter/thicker high-curvature overlay** distinct
-      against it (§663)
-- [ ] Tap "↺ toggle theme" → **light style** renders; contrast OK on both (§663/§667)
-- [ ] **Attribution** visible ("© OpenStreetMap contributors · © Mapbox" + the Mapbox logo)
-- [ ] The HUD shows `SPK-01 · <theme> · ios` (confirms it's the real build, not a stale cache)
+- [x] Build **succeeds** (no native dep fails to compile under New Arch)
+- [x] App launches; **map renders** (stock dark style) — slow first launch, noted above
+- [x] **Clusters** show at low zoom; pins resolve on zoom-in (FR-012) — smoothness watch-item
+- [x] **Amber route line** renders, with the **brighter/thicker high-curvature overlay** distinct
+      against it (§663) — fixture is straight segments; real geometry lands at M7
+- [x] Tap "↺ toggle theme" → **light style** renders; contrast OK on both (§663/§667)
+- [x] **Attribution** visible ("© OpenStreetMap contributors · © Mapbox" + the Mapbox logo)
+- [x] The HUD shows `SPK-01 · <theme> · ios` (confirms it's the real build, not a stale cache)
 
 ### Android leg (deferred — repeat when a device is on hand)
 
