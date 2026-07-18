@@ -116,6 +116,104 @@ export const UTURN_PRESENT_PENALTY = 10;
  */
 export const DURATION_PRESENT_PENALTY = 5;
 
+/**
+ * Presentation-layer arterial aversion (R18-1). The R18 audit measured bests
+ * at 76 % mean arterial share — "boring main roads" was the owner's core
+ * complaint, and the scalar `w_country` lever was DISPROVEN (BD-39: pool
+ * variance ~0.007 under identical connectors). A THRESHOLD tier works where
+ * the scalar couldn't: once costing profiles make connectors differ, a clean
+ * on-target backroad route must beat a clean on-target arterial route, while
+ * cleanliness (−10) and timing (−5) still dominate (2 < 5 < 10 keeps every
+ * BD-42 tier strictly separated). Applies only above the soft share; the
+ * `simple` profile is exempt (fast arterials are what "simple" asked for).
+ */
+export const ARTERIAL_PRESENT_PENALTY = 2;
+export const ARTERIAL_SHARE_SOFT = 0.5;
+
+// --- R18-2: graded dirtiness + within-tier duration grade -------------------
+
+/**
+ * Graded offence units (R18-2) — replaces the boolean dirty flag's blindness:
+ * in an all-dirty pool, one u-turn must beat u-turn+spur+retrace (BD-56's
+ * "single-offence pass-through" gap). Unknown-is-dirty: a missing trace adds
+ * half a unit rather than reading as clean (fixes the `?? 0` inconsistency).
+ * Canonical here; the eval harness imports THIS (never a local copy).
+ */
+export interface OffenceInput {
+  uturns: number;
+  microloops: number;
+  spursWide: number;
+  selfOverlap: number;
+  retraceRunM: number;
+  residentialShare: number | null;
+  residentialRunM: number | null;
+  traceNull: boolean;
+}
+
+export const RETRACE_UNIT_SOFT_M = 1_200; // mirrors RETRACE_RUN_SOFT_M (no import cycle)
+export const RESIDENTIAL_UNIT_SOFT_SHARE = 0.05;
+export const RESIDENTIAL_UNIT_SOFT_RUN_M = 500;
+
+export function fallbackOffenceUnits(d: OffenceInput): number {
+  let units = 0;
+  units += d.uturns * 1.0;
+  units += d.microloops * 1.0;
+  units += d.spursWide * 0.75;
+  units += Math.max(0, d.selfOverlap - 0.15) / 0.05;
+  units += Math.max(0, d.retraceRunM - RETRACE_UNIT_SOFT_M) / 1000;
+  if (d.residentialShare !== null) {
+    units += Math.max(0, d.residentialShare - RESIDENTIAL_UNIT_SOFT_SHARE) * 20;
+  }
+  if (d.residentialRunM !== null) {
+    units += Math.max(0, d.residentialRunM - RESIDENTIAL_UNIT_SOFT_RUN_M) / 500;
+  }
+  if (d.traceNull) units += 0.5;
+  return Math.round(units * 100) / 100;
+}
+
+/**
+ * Tier bases (R18-2). BD-42's ordering was always LEXICOGRAPHIC intent —
+ * clean+on > clean+off > dirty+on > dirty+off — but the historical −5/−10
+ * encodings only worked because nothing else moved the scalar. With the R18
+ * within-tier grades stacked (duration grade ≤ 2 + arterial tier 2 + dirty
+ * grade ≤ 4.5 + score spread ~1.35 ≈ 10), 5-point gaps can interleave — the
+ * tier-order property test PROVED it. Fix: tier bases far larger than any
+ * possible within-tier spread (100 ≫ ~10), making the ordering un-crossable
+ * by construction instead of by hope. Same semantics, provable encoding.
+ */
+export const PRESENT_TIER_DUROFF = 100;
+export const PRESENT_TIER_DIRTY = 200;
+
+/**
+ * Within-dirty grading: dirtyPenalty = TIER_DIRTY + min(CAP, units × UNIT) —
+ * in an all-dirty pool, least-offence wins (one whole offence unit, 1.5,
+ * outweighs the ~1.35 max scalar-score spread). DIRTY_GRADE_UNIT = 0 reverts
+ * to boolean tiering exactly.
+ */
+export const DIRTY_GRADE_UNIT = 1.5;
+export const DIRTY_GRADE_CAP = 4.5;
+
+export function dirtyPenaltyOf(dirty: boolean, units: number): number {
+  if (!dirty) return 0;
+  return PRESENT_TIER_DIRTY + Math.min(DIRTY_GRADE_CAP, units * DIRTY_GRADE_UNIT);
+}
+
+/**
+ * Within-tier duration grade (R18-2): the 10-20 % undershoot zone sat in the
+ * dead band between the resize trigger (25 %) and the −5 demotion (20 %), and
+ * durFit (w 0.3) lost to cur (w 0.35). This grade — max 2.0 at the band edge,
+ * linear below — makes a 4 %-err clean route beat a 16 %-err clean route
+ * unless the latter is genuinely much better. 2 < 5 < 10 preserves the BD-42
+ * lexicographic order exactly; DURATION_GRADE_MAX = 0 disables (exact no-op).
+ */
+export const DURATION_GRADE_MAX = 2.0;
+
+export function durationGradeOf(durationS: number, targetS: number | null): number {
+  if (targetS === null || targetS <= 0) return 0;
+  const err = Math.abs(durationS - targetS) / targetS;
+  return DURATION_GRADE_MAX * (Math.min(err, 0.2) / 0.2);
+}
+
 export interface ScoreBreakdown {
   score: number;
   terms: {

@@ -34,6 +34,8 @@ export interface ConstraintDelta {
   duration?: { kind: 'longer' | 'shorter' } | { kind: 'set'; targetS: number };
   addStops: StopRequest[];
   avoidLocations: string[];
+  /** R18-4: "actually go through Hockley" — through-intents merge in too. */
+  throughLocations: string[];
   /** Explicit hard-avoid changes only — true = add, false = the user lifted it. */
   setAvoid: Partial<ParsedConstraints['avoid']>;
   twistinessDelta?: number;
@@ -69,6 +71,7 @@ export function parseFollowUp(text: string): ConstraintDelta {
   const delta: ConstraintDelta = {
     addStops: [],
     avoidLocations: [],
+    throughLocations: [],
     setAvoid: {},
     recognized: false,
   };
@@ -124,6 +127,18 @@ export function parseFollowUp(text: string): ConstraintDelta {
     const isGeneric = /^(?:it|this|them|that)$/i.test(place);
     if (!isHardKeyword && !isGeneric) {
       delta.avoidLocations.push(place);
+      delta.recognized = true;
+    }
+  }
+
+  // "go through X" / "route it via X" (R18-4 location intents)
+  const throughRe = /\b(?:go\s+)?(?:through|via)\s+(?:the\s+)?([A-Za-z][\w.'\- ]+)/i.exec(text);
+  if (throughRe?.[1]) {
+    const place = throughRe[1]
+      .split(/[,!?;.]|\b(?:with|and|then|instead|please|for)\b/i)[0]!
+      .trim();
+    if (place.length > 1) {
+      delta.throughLocations.push(place);
       delta.recognized = true;
     }
   }
@@ -199,6 +214,13 @@ export function mergeConstraints(c: ParsedConstraints, delta: ConstraintDelta): 
     if (!merged.location_constraints.some((lc) => lc.kind === 'avoid' && lc.text === place)) {
       merged.location_constraints.push({ kind: 'avoid', text: place });
       changes.push(`avoid location "${place}"`);
+    }
+  }
+
+  for (const place of delta.throughLocations) {
+    if (!merged.location_constraints.some((lc) => lc.kind === 'through' && lc.text === place)) {
+      merged.location_constraints.push({ kind: 'through', text: place });
+      changes.push(`through "${place}"`);
     }
   }
 

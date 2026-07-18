@@ -108,7 +108,7 @@ function placeAfter(brief: string, patterns: RegExp[]): string | null {
     if (m?.[1]) {
       // sentence periods break the capture, but abbreviation dots ("St.") survive
       const cut = m[1].split(
-        /[,!?;]|(?<!\bSt)\.(?=\s|$)|\b(?:with|and|then|no|avoid|without|via|for|that|which|from|to|towards?|around|along|ending|end|finish(?:ing)?|near|by|in\s+about)\b/i,
+        /[,!?;]|(?<!\bSt)\.(?=\s|$)|\b(?:with|and|then|no|avoid|without|via|for|that|which|from|to|towards?|around|along|ending|end|finish(?:ing)?|near|by|in\s+about|through|past)\b/i,
       )[0]!;
       const name = cut.trim().replace(/\s+/g, ' ');
       if (name.length > 1) return name;
@@ -279,6 +279,13 @@ export function parseRules(brief: string, sliderWeights?: Weights): ParsedConstr
   if (/\b(?:simple|easy|mostly\s+straight|minimal\s+turns?)\b/i.test(brief)) {
     preset = 'simple';
     fields['preset'] = 0.7;
+  } else if (/\b(?:backroads?|country\s+roads?)\b/i.test(brief)) {
+    // R18-4 mapping fix (found by the R18-3 A→B probe): "backroads" phrasing
+    // previously set a DISPLAY TAG only — the ask never reached the adopted
+    // BACKROADS costing profile or its preset weights. "I only want country
+    // roads" now means something.
+    preset = 'backroads';
+    fields['preset'] = 0.7;
   }
 
   // "twisty but relaxing" — soft tension resolved by moderating the target (§3.5.5)
@@ -287,8 +294,32 @@ export function parseRules(brief: string, sliderWeights?: Weights): ParsedConstr
     ambiguous.push('twisty + relaxing → moderate curviness target');
   }
 
-  // --- location constraints ("avoid downtown", "near X" without origin semantics) ---
+  // --- location constraints ("through <road>", "via/along/past X", "avoid
+  // downtown", "near X" without origin semantics) — R18-4: these are REAL
+  // routing intents now (resolve_locations.ts), extracted with the same
+  // clause-break truncation as origins so "through Forks of the Credit with a
+  // coffee stop" captures the road, not the sentence. ---
   const locationConstraints: ParsedConstraints['location_constraints'] = [];
+  const seenIntents = new Set<string>();
+  const CLAUSE_BREAK =
+    /[,!?;]|(?<!\bSt)\.(?=\s|$)|\b(?:with|and|then|no|avoid|without|via|for|that|which|from|to|towards?|around|along|ending|end|finish(?:ing)?|near|by|in\s+about|through|past|loop|drive|route|stop)\b/i;
+  const NON_PLACES =
+    // pronouns/deixis + timing words + GENERIC scenery ("through the
+    // countryside", "past the Mennonite farms" — character, not places; the
+    // reqset gold agrees: location_constraints [] on all of them)
+    /^(?:me|here|my(?:\s+location)?|the|start|end|middle|beginning|lake|water|river|town|city|way|it|countryside|country|forests?(?:\s+(?:roads?|tracts?))?|woods|vineyards?(?:\s+and\s+orchards?)?|orchards?|(?:mennonite\s+)?farms?|farmland|fields|hills|suburbs)$/i;
+  const intentRe = /\b(through|via|along|past|near)\s+(?:the\s+)?([A-Za-z][\w.'\- ]+)/gi;
+  for (const m of brief.matchAll(intentRe)) {
+    const word = m[1]!.toLowerCase();
+    const text = m[2]!.split(CLAUSE_BREAK)[0]!.trim().replace(/\s+/g, ' ');
+    if (text.length <= 1 || NON_PLACES.test(text)) continue;
+    const kind: 'through' | 'near' = word === 'past' || word === 'near' ? 'near' : 'through';
+    const key = `${kind}:${text.toLowerCase()}`;
+    if (seenIntents.has(key)) continue;
+    seenIntents.add(key);
+    locationConstraints.push({ kind, text });
+  }
+  if (locationConstraints.length > 0) fields['location_constraints'] = 0.7;
   const avoidPlace = brief.match(
     /\bavoid\s+(?:the\s+)?(downtown[\w ']*|city\s+cent(?:re|er)[\w ']*)/i,
   );

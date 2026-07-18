@@ -243,3 +243,29 @@ describe('validateCandidate (M3-T11)', () => {
     expect(broken.feasible).toBe(false);
   });
 });
+
+describe('location-intent rows (R18-4 groundwork)', () => {
+  it('every location constraint surfaces as an honest relaxed Tier-2 row — never silently ignored', () => {
+    const v = validateCandidate({
+      route: route(),
+      constraints: constraints({
+        location_constraints: [
+          { kind: 'through', text: 'Forks of the Credit' },
+          { kind: 'near', text: 'Belfountain' },
+          { kind: 'avoid', text: 'downtown Hamilton' },
+        ],
+      }),
+      ...base,
+    });
+    const via = v.results.find((r) => r.constraint === 'via_forks_of_the_credit')!;
+    expect(via.tier).toBe(2);
+    expect(via.status).toBe('relaxed');
+    expect(via.detail).toMatch(/did not shape this drive/);
+    expect(v.results.find((r) => r.constraint === 'near_belfountain')!.status).toBe('relaxed');
+    expect(v.results.find((r) => r.constraint === 'avoid_area_downtown_hamilton')!.status).toBe(
+      'relaxed',
+    );
+    // honesty rows are disclosures, not infeasibility
+    expect(v.feasible).toBe(true);
+  });
+});

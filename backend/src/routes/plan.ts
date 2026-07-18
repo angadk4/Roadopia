@@ -191,6 +191,9 @@ function routePayload(
     generation_request_id: generationRequestId,
     satisfied_constraints: result.validation?.results ?? null,
     stops: result.stops, // grounded spots + MEASURED arrivals (R16-3)
+    country_score: result.countryScore, // measured road-class honesty (R18-1)
+    arterial_share: result.arterialShare,
+    urban_share: result.urbanShare, // R19: measured urban-context honesty
   };
 }
 
@@ -226,6 +229,9 @@ function alternatePayload(
     generation_request_id: generationRequestId,
     satisfied_constraints: alt.validation.results,
     stops: alt.stops, // alternates carry stops too (R16-3)
+    country_score: alt.countryScore,
+    arterial_share: alt.arterialShare,
+    urban_share: alt.urbanShare,
   };
 }
 
@@ -585,8 +591,18 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
           return;
         }
         if (result.route === null) {
+          // R18-4 honesty: an unrecognized place NAME is the user's to fix, not
+          // a planner outage — pass the planner's specific "I don't recognize
+          // 'X'" line through instead of the (dishonest here) unavailable copy.
+          const unknownPlace =
+            result.status === 'unavailable'
+              ? result.events.find(
+                  (e): e is Extract<typeof e, { type: 'error' }> =>
+                    e.type === 'error' && e.message.startsWith("I don't recognize"),
+                )
+              : undefined;
           const message = [
-            FRIENDLY[result.status] ?? FRIENDLY['unavailable']!,
+            unknownPlace?.message ?? FRIENDLY[result.status] ?? FRIENDLY['unavailable']!,
             ...result.disclosures,
           ]
             .join(' ')

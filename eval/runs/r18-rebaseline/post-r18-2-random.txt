@@ -1,0 +1,85 @@
+[1/30] PASS 10276ms  120 minute backroads loop from Erin with a coffee stop
+[2/30] PASS 8004ms  120 minute twisty loop from Kitchener with a coffee stop
+[3/30] fail 2323ms  180 minute scenic loop from Orangeville, no highways
+[4/30] fail 2321ms  90 minute simple loop from Orangeville with a food stop, no highways
+[5/30] fail 12897ms  150 minute twisty loop from Caledon East with a fuel stop, no highways
+[6/30] fail 1845ms  60 minute loop from Kitchener
+[7/30] fail 5606ms  120 minute backroads loop from Owen Sound with a coffee stop
+[8/30] fail 2303ms  45 minute twisty loop from Goderich, no highways
+[9/30] fail 4570ms  45 minute loop from Creemore with a food stop
+[10/30] fail 2424ms  45 minute twisty loop from Cobourg with a coffee stop
+[11/30] fail 2309ms  120 minute scenic loop from Orangeville with a food stop
+[12/30] PASS 2666ms  60 minute backroads loop from Belfountain with a fuel stop
+[13/30] fail 5121ms  90 minute backroads loop from Grand Bend
+[14/30] fail 5719ms  120 minute twisty loop from Cambridge
+[15/30] PASS 6734ms  45 minute backroads loop from London with a food stop
+[16/30] PASS 4864ms  90 minute backroads loop from Brantford with a food stop, no highways
+[17/30] fail 2679ms  90 minute simple loop from St. Catharines with a food stop
+[18/30] PASS 3936ms  150 minute twisty loop from Belfountain with a coffee stop
+[19/30] PASS 2425ms  90 minute simple loop from St. Thomas with a fuel stop
+[20/30] fail 13741ms  180 minute simple loop from Stratford with a coffee stop, no highways
+[21/30] fail 6694ms  150 minute scenic loop from Cobourg with a coffee stop, no highways
+[22/30] PASS 6755ms  150 minute loop from St. Jacobs with a fuel stop
+[23/30] fail 3861ms  60 minute scenic loop from Stratford with a coffee stop
+[24/30] fail 3439ms  60 minute loop from Collingwood with a fuel stop
+[25/30] fail 3522ms  120 minute loop from Brantford with a fuel stop
+[26/30] PASS 8555ms  90 minute loop from Belfountain with a food stop
+[27/30] fail 1371ms  45 minute rural loop from Grand Bend
+[28/30] fail 3699ms  60 minute twisty loop from Barrie with a coffee stop
+[29/30] fail 7328ms  90 minute simple loop from Goderich with a coffee stop
+[30/30] fail 7732ms  60 minute scenic loop from Orangeville with a food stop
+
+wrote eval/spk15-routes-random.geojson — paste into geojson.io to inspect the loops
+=== SPK-15 loop-generation quality report ===
+
+brief                                         kept  feas  maxOv  selfOv μ/max  durErr%  min   curv   res%  ctry  µloop  art%  cvy%  lpi   corD  ms     verdict
+--------------------------------------------------------------------------------------------------------------------
+120 minute backroads loop from Erin with a c  4     4     0.36   0.06/0.14     -2       117   0.61   0     0.39  0      92    1     0.33  0.13  10276  PASS
+120 minute twisty loop from Kitchener with a  4     4     0.30   0.03/0.09     -16      101   1.12   0     0.43  0      79    1     0.61  0.00  8004   PASS
+180 minute scenic loop from Orangeville, no   4     4     0.57   0.11/0.25     -7       167   0.57   8     0.39  1      79    0     0.24  0.09  2323   FAIL funnel gen 11→routed 11→ok 8 (rej: self_overlap×3,microloops×1); duration-prefilter dropped 1
+90 minute simple loop from Orangeville with   4     4     0.45   0.09/0.23     +1       91    0.69   4     0.57  0      63    3     0.44  0.01  2321   FAIL funnel gen 11→routed 11→ok 10 (rej: self_overlap×1); duration-prefilter dropped 3; repaired×3
+150 minute twisty loop from Caledon East wit  4     4     0.59   0.02/0.07     -19      121   0.96   1     0.52  0      70    2     0.27  0.09  12897  FAIL resized×1 (median 105 min vs target 150 min → v 54); resized×2 (median 113 min vs target 150 min → v 72); funnel gen 46→routed 41→ok 35 (rej: spurs×4,microloops×3); duration-prefilter dropped 12; repaired×2
+60 minute loop from Kitchener                 3     3     0.51   0.04/0.10     +2       61    1.45   1     0.42  0      96    12    0.36  0.00  1845   FAIL funnel gen 12→routed 12→ok 8 (rej: spurs×1,microloops×2,self_overlap×1,uturns×1); duration-prefilter dropped 3; repaired×3
+120 minute backroads loop from Owen Sound wi  3     3     0.54   0.11/0.15     +6       127   0.98   14    0.35  0      59    25    0.37  0.13  5606   FAIL ladder-assisted (merged τ×1.3, θ 0.4); funnel gen 25→routed 27→ok 17 (rej: self_overlap×10,microloops×3,spurs×1); duration-prefilter dropped 5; repaired×2
+45 minute twisty loop from Goderich, no high  0     0     0.00   0.00/0.00     —        —     —      —     —     —      —     —     —     —     2303   FAIL ladder-assisted (merged τ×1.3, θ 0.4); funnel gen 12→routed 18→ok 0 (rej: snap×18,self_overlap×16,spurs×7,uturns×3)
+45 minute loop from Creemore with a food sto  3     3     0.41   0.00/0.01     +4       47    0.87   0     0.67  0      35    36    0.39  0.01  4570   FAIL resized×1 (median 74 min vs target 45 min → v 33); resized×2 (median 53 min vs target 45 min → v 28); ladder-assisted (merged τ×1.3, θ 0.4); funnel gen 41→routed 44→ok 37 (rej: self_overlap×6,uturns×2,residential×1); duration-prefilter dropped 18; repaired×2
+45 minute twisty loop from Cobourg with a co  3     3     0.50   0.04/0.12     -17      37    0.89   0     0.31  0      89    17    0.44  0.00  2424   FAIL funnel gen 20→routed 20→ok 9 (rej: residential×10,self_overlap×1); duration-prefilter dropped 4; repaired×3
+120 minute scenic loop from Orangeville with  3     3     0.38   0.13/0.21     -16      101   1.33   0     0.53  0      74    4     0.19  0.15  2309   FAIL funnel gen 12→routed 12→ok 10 (rej: self_overlap×2); duration-prefilter dropped 5
+60 minute backroads loop from Belfountain wi  4     4     0.36   0.05/0.14     +8       65    0.48   0     0.36  0      91    5     0.43  0.01  2666   PASS
+90 minute backroads loop from Grand Bend      2     2     0.58   0.10/0.19     +5       94    0.78   0     0.32  0      89    13    0.06  0.00  5121   FAIL resized×1 (median 61 min vs target 90 min → v 82); ladder-assisted (merged τ×1.3, θ 0.4); funnel gen 27→routed 27→ok 6 (rej: self_overlap×21,uturns×7,spurs×7); duration-prefilter dropped 1; repaired×2
+120 minute twisty loop from Cambridge         4     4     0.39   0.00/0.01     +28      153   0.83   0     0.38  0      92    2     0.29  0.00  5719   FAIL resized×1 (median 42 min vs target 120 min → v 90); resized×2 (median 187 min vs target 120 min → v 58); funnel gen 33→routed 33→ok 24 (rej: self_overlap×9); duration-prefilter dropped 17; repaired×1
+45 minute backroads loop from London with a   4     4     0.56   0.07/0.16     -6       42    1.62   0     0.43  0      78    24    0.34  0.00  6734   PASS
+90 minute backroads loop from Brantford with  4     4     0.57   0.07/0.25     +7       96    0.96   0     0.46  0      89    3     0.30  0.00  4864   PASS
+90 minute simple loop from St. Catharines wi  3     3     0.54   0.06/0.11     +9       98    0.86   0     0.36  0      86    6     0.25  0.00  2679   FAIL funnel gen 11→routed 11→ok 11; duration-prefilter dropped 1; repaired×3
+150 minute twisty loop from Belfountain with  4     4     0.36   0.11/0.16     +15      173   1.12   0     0.53  0      72    2     0.04  0.19  3936   PASS
+90 minute simple loop from St. Thomas with a  4     4     0.52   0.10/0.24     +12      101   0.49   0     0.43  0      88    2     0.38  0.00  2425   PASS
+180 minute simple loop from Stratford with a  3     3     0.40   0.14/0.29     +1       182   0.57   0     0.43  1      87    1     0.07  0.32  13741  FAIL resized×1 (median 145 min vs target 180 min → v 52); resized×2 (median 145 min vs target 180 min → v 65); funnel gen 33→routed 33→ok 21 (rej: self_overlap×12,spurs×9,uturns×3); duration-prefilter dropped 9; repaired×2
+150 minute scenic loop from Cobourg with a c  0     0     0.00   0.00/0.00     —        —     —      —     —     —      —     —     —     —     6694   FAIL ladder-assisted (merged τ×1.3, θ 0.4); funnel gen 19→routed 19→ok 0 (rej: snap×19,self_overlap×16,uturns×6,spurs×14,microloops×1)
+150 minute loop from St. Jacobs with a fuel   4     4     0.40   0.13/0.28     -16      126   0.66   0     0.30  0      97    1     0.47  0.00  6755   PASS
+60 minute scenic loop from Stratford with a   3     3     0.55   0.07/0.12     -7       56    0.43   1     0.39  0      84    3     0.34  0.08  3861   FAIL ladder-assisted (merged τ×1.3, θ 0.4); funnel gen 24→routed 26→ok 24 (rej: self_overlap×2,microloops×1); duration-prefilter dropped 11; repaired×3
+60 minute loop from Collingwood with a fuel   0     0     0.00   0.00/0.00     —        —     —      —     —     —      —     —     —     —     3439   FAIL ladder-assisted (merged τ×1.3, θ 0.4); funnel gen 21→routed 23→ok 0 (rej: snap×23,self_overlap×7,microloops×3)
+120 minute loop from Brantford with a fuel s  4     4     0.56   0.02/0.05     -29      85    0.51   0     0.19  0      95    1     0.36  0.02  3522   FAIL funnel gen 12→routed 12→ok 9 (rej: self_overlap×3); duration-prefilter dropped 2; repaired×3
+90 minute loop from Belfountain with a food   4     4     0.41   0.06/0.16     +13      102   1.21   0     0.59  0      64    7     0.04  0.04  8555   PASS
+45 minute rural loop from Grand Bend          3     3     0.60   0.21/0.29     -10      40    1.71   0     0.38  0      59    11    0.27  0.12  1371   FAIL funnel gen 15→routed 15→ok 14 (rej: self_overlap×1); duration-prefilter dropped 4; repaired×2
+60 minute twisty loop from Barrie with a cof  2     2     0.35   0.00/0.00     +8       65    1.24   0     0.63  0      48    20    0.06  0.00  3699   FAIL resized×1 (median 92 min vs target 60 min → v 33); funnel gen 23→routed 23→ok 21 (rej: spurs×2); duration-prefilter dropped 11; repaired×2
+90 minute simple loop from Goderich with a c  4     4     0.47   0.17/0.24     +19      107   0.69   0     0.43  0      67    19    0.28  0.16  7328   FAIL resized×1 (median 111 min vs target 90 min → v 44); resized×2 (median 128 min vs target 90 min → v 31); funnel gen 34→routed 34→ok 15 (rej: self_overlap×19,microloops×4,uturns×2,spurs×2); duration-prefilter dropped 5; repaired×4
+60 minute scenic loop from Orangeville with   3     3     0.52   0.04/0.12     +4       62    0.55   5     0.43  0      73    11    0.56  0.00  7732   FAIL resized×1 (median 105 min vs target 60 min → v 31); resized×2 (median 105 min vs target 60 min → v 18); ladder-assisted (merged τ×1.3, θ 0.4); funnel gen 45→routed 45→ok 23 (rej: self_overlap×22,microloops×4); duration-prefilter dropped 15; repaired×3
+
+-- summary --
+briefs passing all AC: 9/30
+mean presented: 3.1 (target ≥ 4)
+mean duration error of best: 11 %
+mean wall time per brief: 5191 ms
+
+-- essence scoreboard (R18-0; suite=random) --
+no-route briefs: 3/30
+|durErr| p50/p80: 8 % / 16 %
+arterial share of bests: mean 78 % · p80 91 %
+curvy share of bests:    mean 0.09 · p20 0.01
+loopiness of bests:      p20 0.19
+corridor doubling:       p80 0.13
+dirty units of bests:    mean 1.95 · max 18.94
+determinism hash: b9ebfb59718eee06
+
+-- SPK-15 AC --
+≥ K_PRESENT distinct, overlap ≤ τ, low self-overlap, durErr ≤ 25 %, u-turn+spur+µloop-free best, retrace ≤ 1200 m, residential ≤ 5 %, feasible: 9/30 briefs — inspect FAIL rows

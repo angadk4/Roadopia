@@ -13,25 +13,35 @@ import { haversineMeters } from '../../../data/curvature/geometry';
 import { routeThrough, type AutoCostingOptions } from '../valhalla/route';
 import { traceRoadClasses, type TraceResult } from '../valhalla/trace';
 
-import { countryClassFactor, type WaypointCandidate } from './candidates';
+import { countryClassFactor, traversalSpanOf, type WaypointCandidate } from './candidates';
 import {
   maxRetraceRunM,
   microloopEvents,
+  maxRetraceRunInfo,
   microloopPositions,
   selfOverlapRatio,
   spurEvents,
+  spurPositions,
   SPUR_WINDOW_WIDE_STEPS,
   ORIGIN_GRACE_RADIUS_M,
 } from './overlap';
 import {
+  arterialShareOf,
   countryScoreOf,
   maxClassRunInfo,
   maxResidentialRunInfo,
+  pointAt,
   residentialShareOf,
 } from './residential';
 import type { CandidateSegment } from './retrieve';
 
-/** Loop-closure tolerance ε (m): both routed endpoints within this of the origin. */
+/** Pin-snap sanity cap (R18-2): a "loop from X" whose nearest drivable road
+ *  is further than this from the pin is dishonest to present. */
+export const SNAP_OFFSET_MAX_M = 1_500;
+
+/** Loop-closure tolerance ε (m): the routed loop's start↔end self-closure
+ *  (R18-2 semantics fix — was distance-to-the-origin-pin, which conflated
+ *  closure with snap offset). */
 export const EPSILON_CLOSURE_M = 300;
 /** Self-overlap SOFT threshold (scoring/validation annotation; §3.6 default). */
 export const SELF_OVERLAP_CAP = 0.15;
@@ -109,7 +119,11 @@ export const INSERT_MAX_DURATION_GROWTH = 1.25;
 export interface AssembledLoop {
   candidate: WaypointCandidate;
   route: RouteThroughOutput;
+  /** Start↔end self-closure (m) — R18-2 semantics. */
   closureM: number;
+  /** Distance from the user's pin to the routed start/end (m) — disclosed
+   *  when notable; rejected above SNAP_OFFSET_MAX_M. */
+  snapOffsetM: number;
   selfOverlap: number;
   /** Micro-retrace excursions, ASSEMBLY window (round 5 gate: reject ≥2). */
   spurs: number;
@@ -127,6 +141,9 @@ export interface AssembledLoop {
   /** Route countryness 0..1 (round 11) — length-weighted class factor of the
    *  traced route; null = trace failed. Scoring term (w_country). */
   countryScore: number | null;
+  /** Arterial share 0..1 (R18-1 honesty metric) — length-weighted
+   *  motorway/trunk/primary/secondary(+ramps) share; null = trace failed. */
+  arterialShare: number | null;
   /** Longest contiguous ARTERIAL run (m) outside grace; null = trace failed. */
   arterialRunM: number | null;
   /** Midpoint [lng, lat] of that run — the INSERT repair aims at it. */
@@ -150,7 +167,11 @@ export async function assembleLoop(
   {
     selfOverlapCap = SELF_OVERLAP_HARD_REJECT,
     middleType = 'through',
-  }: { selfOverlapCap?: number; middleType?: 'through' | 'via' } = {},
+    maxUturns = 1,
+    maxSpurs = 1,
+    maxMicroloops = 1,
+    residentialHardShare = RESIDENTIAL_HARD_SHARE,
+  }: AssemblyOpts = {},
 ): Promise<AssembledLoop> {
   const waypoints: Array<[number, number]> = [
     [origin.lng, origin.lat],
@@ -185,7 +206,14 @@ export async function assembleLoop(
   const coords = route.geometry.coordinates;
   const start = coords[0]!;
   const end = coords[coords.length - 1]!;
-  const closureM = Math.max(
+  // R18-2 closure-semantics fix (found via the Hockley kill-town): closure =
+  // does the loop CLOSE ON ITSELF (start↔end). The old max-distance-to-the-
+  // ORIGIN-PIN conflated closure with SNAP OFFSET — a gazetteer pin 346 m
+  // off-road auto-rejected every loop from that town as "broken" even though
+  // the routed loop closed perfectly. The snap offset is tracked separately,
+  // capped sanely, and DISCLOSED (never silently teleported).
+  const closureM = haversineMeters(start, end);
+  const snapOffsetM = Math.max(
     haversineMeters([origin.lng, origin.lat], start),
     haversineMeters([origin.lng, origin.lat], end),
   );
@@ -193,6 +221,9 @@ export async function assembleLoop(
 
   const rejectReasons: string[] = [];
   if (closureM > EPSILON_CLOSURE_M) rejectReasons.push(`closure ${Math.round(closureM)} m > ε`);
+  if (snapOffsetM > SNAP_OFFSET_MAX_M) {
+    rejectReasons.push(`snap offset ${Math.round(snapOffsetM)} m — pin too far from any road`);
+  }
   if (selfOverlap > selfOverlapCap) {
     rejectReasons.push(`self_overlap ${selfOverlap.toFixed(2)} > ${selfOverlapCap}`);
   }
@@ -202,19 +233,19 @@ export async function assembleLoop(
   // (≥2) to keep pools alive, and the PRESENTATION layer is strictly
   // u-turn-averse (any u-turn ranks below every clean route; run.ts / eval).
   const uturns = route.maneuvers.filter((m) => m.type.startsWith('uturn')).length;
-  if (uturns >= 2) rejectReasons.push(`uturns ${uturns}`);
+  if (uturns > maxUturns) rejectReasons.push(`uturns ${uturns}`);
   // Spurs (round 5): same two-tier shape as u-turns — repeat offenders die at
   // assembly (narrow window, proven pool-viable), singles are last-resort
   // presentation material only. The wide window + retrace run are computed for
   // the presentation layer and NEVER reject here (round-6 lesson above).
   const spurs = spurEvents(route.geometry, origin);
-  if (spurs >= 2) rejectReasons.push(`spurs ${spurs}`);
+  if (spurs > maxSpurs) rejectReasons.push(`spurs ${spurs}`);
   // Micro-loops (round 8): crescent/block spins — small closed circuits with
   // no doubled travel, no u-turn maneuver, negligible residential share; only
   // a cycle detector sees them. Same two-tier: repeat offenders die here,
   // singles are last-resort presentation material ranked below every clean route.
   const microloops = microloopEvents(route.geometry, origin);
-  if (microloops >= 2) rejectReasons.push(`microloops ${microloops}`);
+  if (microloops > maxMicroloops) rejectReasons.push(`microloops ${microloops}`);
   const spursWide = spurEvents(
     route.geometry,
     origin,
@@ -231,6 +262,7 @@ export async function assembleLoop(
   let residentialRunM: number | null = null;
   let residentialRunMid: [number, number] | null = null;
   let countryScore: number | null = null;
+  let arterialShare: number | null = null;
   let arterialRunM: number | null = null;
   let arterialRunMid: [number, number] | null = null;
   let trace: TraceResult | null = null;
@@ -251,10 +283,11 @@ export async function assembleLoop(
       residentialRunM = runInfo.runM;
       residentialRunMid = runInfo.mid;
       countryScore = countryScoreOf(edges); // round 11 — same edges, no extra call
+      arterialShare = arterialShareOf(edges); // R18-1 — same edges, no extra call
       const artInfo = maxClassRunInfo(edges, route.geometry, ARTERIAL_CLASSES, origin);
       arterialRunM = artInfo.runM;
       arterialRunMid = artInfo.mid;
-      if (residentialShare > RESIDENTIAL_HARD_SHARE) {
+      if (residentialShare > residentialHardShare) {
         rejectReasons.push(`residential ${(residentialShare * 100).toFixed(0)}%`);
       }
     } catch {
@@ -262,6 +295,7 @@ export async function assembleLoop(
       residentialRunM = null;
       residentialRunMid = null;
       countryScore = null;
+      arterialShare = null;
       arterialRunM = null;
       arterialRunMid = null;
       trace = null;
@@ -272,6 +306,7 @@ export async function assembleLoop(
     candidate,
     route,
     closureM,
+    snapOffsetM,
     selfOverlap,
     spurs,
     spursWide,
@@ -280,6 +315,7 @@ export async function assembleLoop(
     residentialRunM,
     residentialRunMid,
     countryScore,
+    arterialShare,
     arterialRunM,
     arterialRunMid,
     microloops,
@@ -298,19 +334,100 @@ export async function assembleLoop(
 /** Snap-noise floor for the unpaved result-scan (R16-2; config v10). */
 export const UNPAVED_MIN_M = 50;
 
-/** Max repair re-routes per candidate (latency-bounded; §33 spirit). */
-export const REPAIR_PASS_CAP = 2;
+/** Max repair re-routes per candidate (R18-2: 2 → 4; passes 3-4 run only while
+ *  the offence score strictly improves — no burn on unrepairable candidates). */
+export const REPAIR_PASS_CAP = 4;
 
-/** Weighted offence magnitude — micro-loops dominate, then over-cap run metres. */
-function offenceScore(a: AssembledLoop): number {
-  return a.microloops * 10_000 + Math.max(0, (a.residentialRunM ?? 0) - RESIDENTIAL_RUN_SOFT_M);
+/**
+ * Assembly gate caps (R18-2). Defaults reproduce the frozen behavior
+ * byte-identically (round-6 lesson: NEVER default-relax); the ladder's
+ * assembly-relax rung passes the RELAXED set below — with disclosure — as the
+ * last resort before any redirect.
+ */
+export interface AssemblyOpts {
+  selfOverlapCap?: number;
+  middleType?: 'through' | 'via';
+  maxUturns?: number;
+  maxSpurs?: number;
+  maxMicroloops?: number;
+  residentialHardShare?: number;
+}
+export const SELF_OVERLAP_RELAXED = 0.45;
+export const UTURNS_RELAXED_MAX = 2;
+export const SPURS_RELAXED_MAX = 2;
+export const MICROLOOPS_RELAXED_MAX = 2;
+export const RESIDENTIAL_HARD_RELAXED = 0.3;
+/** Span-atomic DROP floor: a chain reduced below this many spans is gutted. */
+export const CHAIN_DROP_MIN_SPANS = 2;
+/** INSERT waypoint-count guard (was a literal 6; chains carry up to 15). */
+export const INSERT_MAX_WAYPOINTS = 16;
+
+export const RELAXED_ASSEMBLY_CAPS: AssemblyOpts = {
+  selfOverlapCap: SELF_OVERLAP_RELAXED,
+  maxUturns: UTURNS_RELAXED_MAX,
+  maxSpurs: SPURS_RELAXED_MAX,
+  maxMicroloops: MICROLOOPS_RELAXED_MAX,
+  residentialHardShare: RESIDENTIAL_HARD_RELAXED,
+};
+
+/** U-turn positions [lng, lat] recovered from cumulative maneuver distance
+ *  (maneuvers carry no shape index — R18-2; ±tens of metres is ample aim). */
+export function uturnPositions(route: RouteThroughOutput): Array<readonly [number, number]> {
+  const coords = route.geometry.coordinates as Array<[number, number]>;
+  if (coords.length < 2) return [];
+  const cum: number[] = [0];
+  for (let i = 1; i < coords.length; i++) {
+    cum.push(cum[i - 1]! + haversineMeters(coords[i - 1]!, coords[i]!));
+  }
+  const out: Array<readonly [number, number]> = [];
+  let d = 0;
+  for (const m of route.maneuvers) {
+    if (m.type.startsWith('uturn')) out.push(pointAt(coords, cum, d));
+    if (m.distance_m === undefined) return out.length > 0 ? out : []; // fail-open
+    d += m.distance_m;
+  }
+  return out;
 }
 
-/** [lng, lat] of the worst LOCALIZED offence, or null when nothing repairable. */
+/** Weighted offence magnitude (R18-2: eyes on ALL repairable offence classes;
+ *  self-overlap overflow dominates, then micro-loops/u-turns/spurs, then
+ *  over-cap run metres). preferred() and the SHIFT keep-rule see improvement
+ *  on every class the repair pass can now aim at. */
+function offenceScore(a: AssembledLoop): number {
+  return (
+    Math.max(0, a.selfOverlap - 0.15) * 20_000 * 5 +
+    a.microloops * 10_000 +
+    uturnCountOf(a.route) * 8_000 +
+    a.spursWide * 6_000 +
+    Math.max(0, (a.residentialRunM ?? 0) - RESIDENTIAL_RUN_SOFT_M) +
+    Math.max(0, a.retraceRunM - RETRACE_RUN_SOFT_M)
+  );
+}
+
+function uturnCountOf(route: RouteThroughOutput): number {
+  return route.maneuvers.filter((m) => m.type.startsWith('uturn')).length;
+}
+
+/** [lng, lat] of the worst LOCALIZED offence, or null when nothing repairable.
+ *  Priority: micro-loops → u-turns → spurs → residential run → retrace run
+ *  (R18-2 gave the repair pass eyes for the classes it previously ignored). */
 function offencePosition(a: AssembledLoop, origin: LatLng): readonly [number, number] | null {
   const loops = microloopPositions(a.route.geometry, origin);
   if (loops.length > 0) return loops[0]!;
+  const uts = uturnPositions(a.route);
+  if (uts.length > 0) return uts[0]!;
+  const spurs = spurPositions(
+    a.route.geometry,
+    origin,
+    ORIGIN_GRACE_RADIUS_M,
+    SPUR_WINDOW_WIDE_STEPS,
+  );
+  if (spurs.length > 0) return spurs[0]!;
   if ((a.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M) return a.residentialRunMid;
+  if (a.retraceRunM > RETRACE_RUN_SOFT_M) {
+    const info = maxRetraceRunInfo(a.route.geometry, undefined, origin);
+    if (info.mid !== null) return info.mid;
+  }
   return null;
 }
 
@@ -323,8 +440,9 @@ function preferred(a: AssembledLoop, b: AssembledLoop): AssembledLoop {
 const dM = (aLng: number, aLat: number, bLng: number, bLat: number): number =>
   Math.hypot((aLng - bLng) * 111_320 * Math.cos((43.2 * Math.PI) / 180), (aLat - bLat) * 111_320);
 
-/** Mid vertex of a candidate segment — the INSERT waypoint (round 11b). */
-function segMidVertex(seg: CandidateSegment): LatLng {
+/** Mid vertex of a candidate segment — the INSERT waypoint (round 11b).
+ *  Exported for the A→B repair pass (R18-3 parity). */
+export function segMidVertex(seg: CandidateSegment): LatLng {
   const coords = seg.geometry.coordinates;
   const [lng, lat] = coords[Math.floor(coords.length / 2)]!;
   return { lat, lng };
@@ -333,9 +451,9 @@ function segMidVertex(seg: CandidateSegment): LatLng {
 /**
  * Pick the best repair segment near the arterial run's midpoint: highest
  * BD-26 rank (curviness·length·classFactor) within reach, not already
- * shadowed by an existing waypoint.
+ * shadowed by an existing waypoint. Exported for the A→B repair pass (R18-3).
  */
-function pickInsertSegment(
+export function pickInsertSegment(
   segments: readonly CandidateSegment[],
   runMid: readonly [number, number],
   waypoints: readonly LatLng[],
@@ -346,7 +464,9 @@ function pickInsertSegment(
     const v = segMidVertex(s);
     if (dM(v.lng, v.lat, runMid[0], runMid[1]) > 20_000) continue; // out of reach
     if (waypoints.some((w) => dM(v.lng, v.lat, w.lng, w.lat) < 1_500)) continue; // shadowed
-    const rank = s.curviness * s.lengthM * countryClassFactor(s.highway);
+    // R19: never repair-INSERT a subdivision collector (urbanShare fail-open 0)
+    const rank =
+      s.curviness * s.lengthM * countryClassFactor(s.highway) * (1 - (s.urbanShare ?? 0));
     if (rank > bestRank) {
       bestRank = rank;
       best = s;
@@ -403,10 +523,10 @@ export async function assembleLoopWithRepair(
   origin: LatLng,
   candidate: WaypointCandidate,
   costingOptions?: AutoCostingOptions,
-  opts: {
-    selfOverlapCap?: number;
-    middleType?: 'through' | 'via';
+  opts: AssemblyOpts & {
     repairSegments?: readonly CandidateSegment[];
+    /** R18-2 cost bound: checked at each pass top (run.ts passes outOfBudget). */
+    shouldStop?: () => boolean;
   } = {},
 ): Promise<AssembledLoop & { repairsApplied: number }> {
   let current = await assembleLoop(baseUrl, origin, candidate, costingOptions, opts);
@@ -418,15 +538,30 @@ export async function assembleLoopWithRepair(
   // never moved (the offence search below excludes them); DROP/INSERT maintain
   // every stop's waypointIndex so break_through leg-splitting stays correct
   // through the repair (assembleLoop reads candidate.stops for stopIndices).
+  // R18-2: passes 3-4 run only while the offence score strictly improved.
+  let prevOffence = Infinity;
   for (let pass = 1; pass <= REPAIR_PASS_CAP; pass++) {
+    if (opts.shouldStop?.() === true) break;
+    const curOffence = offenceScore(current);
+    if (pass > 2 && curOffence >= prevOffence) break; // no longer improving
+    prevOffence = curOffence;
     const pos = offencePosition(current, origin);
     if (pos !== null) {
-      // only NON-stop (search) waypoints are movable — never relocate/drop a stop
+      // only NON-stop (search) waypoints are movable — never relocate/drop a
+      // stop, and never touch a PINNED user-intent span (R18-4: "through
+      // Forks of the Credit" survives every repair pass)
       const stopIdx = new Set(cand.stops.map((s) => s.waypointIndex));
+      const pinnedIdx = new Set<number>();
+      for (const sp of cand.spans ?? []) {
+        if (sp.pinned === true) {
+          pinnedIdx.add(sp.startIndex);
+          pinnedIdx.add(sp.endIndex);
+        }
+      }
       let nearest = -1;
       let nearestD = Infinity;
       cand.waypoints.forEach((w, i) => {
-        if (stopIdx.has(i)) return;
+        if (stopIdx.has(i) || pinnedIdx.has(i)) return;
         const d = dM(w.lng, w.lat, pos[0], pos[1]);
         if (d < nearestD) {
           nearestD = d;
@@ -439,15 +574,39 @@ export async function assembleLoopWithRepair(
       // best clean curvy segment near the offence — preserves the loop's
       // reach (DROP shrinks it) and works on 2-waypoint candidates (the
       // Bolton class DROP could never touch). Falls back to DROP below.
+      // R18-3: if the offending waypoint belongs to a chained SPAN, repair the
+      // whole span atomically — never leave a dangling endpoint.
+      const hitSpan = (cand.spans ?? []).find(
+        (sp) => sp.startIndex === nearest || sp.endIndex === nearest,
+      );
       if (opts.repairSegments !== undefined) {
-        const others = cand.waypoints.filter((_, i) => i !== nearest);
+        const others = cand.waypoints.filter(
+          (_, i) => i !== nearest && i !== hitSpan?.startIndex && i !== hitSpan?.endIndex,
+        );
         const seg = pickInsertSegment(opts.repairSegments, pos, others);
         if (seg !== null) {
-          const shifted = {
-            ...cand,
-            id: `${cand.id}-sh${pass}`,
-            waypoints: cand.waypoints.map((w, i) => (i === nearest ? segMidVertex(seg) : w)),
-          };
+          const shifted = hitSpan
+            ? {
+                ...cand,
+                id: `${cand.id}-sh${pass}`,
+                waypoints: cand.waypoints.map((w, i) => {
+                  if (hitSpan.startIndex === hitSpan.endIndex) {
+                    // touch span — one waypoint, relocate to the new segment
+                    return i === hitSpan.startIndex ? segMidVertex(seg) : w;
+                  }
+                  if (i === hitSpan.startIndex) return traversalSpanOf(seg)[0];
+                  if (i === hitSpan.endIndex) return traversalSpanOf(seg)[1];
+                  return w;
+                }),
+                spans: (cand.spans ?? []).map((sp) =>
+                  sp === hitSpan ? { ...sp, segmentId: seg.id } : sp,
+                ),
+              }
+            : {
+                ...cand,
+                id: `${cand.id}-sh${pass}`,
+                waypoints: cand.waypoints.map((w, i) => (i === nearest ? segMidVertex(seg) : w)),
+              };
           try {
             const attempt = await assembleLoop(baseUrl, origin, shifted, costingOptions, opts);
             if (
@@ -469,16 +628,53 @@ export async function assembleLoopWithRepair(
       }
 
       // --- DROP (round 9) — the fallback when SHIFT has no target or no win ---
-      if (cand.waypoints.length < 3) break; // dropping below 2 waypoints = out-and-back
-      cand = {
-        ...cand,
-        id: `${cand.id}-rp${pass}`,
-        waypoints: cand.waypoints.filter((_, i) => i !== nearest),
-        // dropped index `nearest` is non-stop; shift stops above it down by one
-        stops: cand.stops.map((s) =>
-          s.waypointIndex > nearest ? { ...s, waypointIndex: s.waypointIndex - 1 } : s,
-        ),
-      };
+      if (hitSpan) {
+        // span-atomic drop: all of the span's waypoints + its record
+        const isTouch = hitSpan.startIndex === hitSpan.endIndex;
+        const removed = isTouch ? 1 : 2;
+        if (
+          cand.waypoints.length - removed < 2 ||
+          (cand.spans ?? []).length <= CHAIN_DROP_MIN_SPANS
+        ) {
+          break; // dropping the span would gut the chain — keep best
+        }
+        const [lo, hi] = [hitSpan.startIndex, hitSpan.endIndex].sort((a, b) => a - b) as [
+          number,
+          number,
+        ];
+        const shiftIdx = isTouch
+          ? (i: number): number => (i > lo ? i - 1 : i)
+          : (i: number): number => (i > hi ? i - 2 : i > lo ? i - 1 : i);
+        cand = {
+          ...cand,
+          id: `${cand.id}-rp${pass}`,
+          waypoints: cand.waypoints.filter((_, i) => i !== lo && i !== hi),
+          stops: cand.stops.map((st) => ({ ...st, waypointIndex: shiftIdx(st.waypointIndex) })),
+          spans: (cand.spans ?? [])
+            .filter((sp) => sp !== hitSpan)
+            .map((sp) => ({
+              ...sp,
+              startIndex: shiftIdx(sp.startIndex),
+              endIndex: shiftIdx(sp.endIndex),
+            })),
+        };
+      } else {
+        if (cand.waypoints.length < 3) break; // dropping below 2 waypoints = out-and-back
+        cand = {
+          ...cand,
+          id: `${cand.id}-rp${pass}`,
+          waypoints: cand.waypoints.filter((_, i) => i !== nearest),
+          // dropped index `nearest` is non-stop; shift stops above it down by one
+          stops: cand.stops.map((st) =>
+            st.waypointIndex > nearest ? { ...st, waypointIndex: st.waypointIndex - 1 } : st,
+          ),
+          spans: (cand.spans ?? []).map((sp) => ({
+            ...sp,
+            startIndex: sp.startIndex > nearest ? sp.startIndex - 1 : sp.startIndex,
+            endIndex: sp.endIndex > nearest ? sp.endIndex - 1 : sp.endIndex,
+          })),
+        };
+      }
       try {
         current = await assembleLoop(baseUrl, origin, cand, costingOptions, opts);
       } catch {
@@ -498,7 +694,7 @@ export async function assembleLoopWithRepair(
       (current.arterialRunM ?? 0) > ARTERIAL_RUN_TRIGGER_M &&
       current.arterialRunMid !== null &&
       opts.repairSegments !== undefined &&
-      cand.waypoints.length <= 6
+      cand.waypoints.length <= INSERT_MAX_WAYPOINTS
     ) {
       const seg = pickInsertSegment(opts.repairSegments, current.arterialRunMid, cand.waypoints);
       if (seg === null) break; // no reachable country material — honest stop
@@ -508,10 +704,15 @@ export async function assembleLoopWithRepair(
         ...cand,
         id: `${cand.id}-in${pass}`,
         waypoints: [...cand.waypoints.slice(0, slot), p, ...cand.waypoints.slice(slot)],
-        // new point occupies `slot`; shift stops at/after it up by one
+        // new point occupies `slot`; shift stops + spans at/after it up by one
         stops: cand.stops.map((s) =>
           s.waypointIndex >= slot ? { ...s, waypointIndex: s.waypointIndex + 1 } : s,
         ),
+        spans: (cand.spans ?? []).map((sp) => ({
+          ...sp,
+          startIndex: sp.startIndex >= slot ? sp.startIndex + 1 : sp.startIndex,
+          endIndex: sp.endIndex >= slot ? sp.endIndex + 1 : sp.endIndex,
+        })),
       };
       let attempt: AssembledLoop;
       try {

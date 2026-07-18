@@ -12,8 +12,10 @@
  * presets only, no sliders — the sections COMPOSE onto the one preset slot +
  * the frozen server-side vectors):
  *   - Drive style (Twisty | Simple)   → preset twisty/simple + twistiness_pref
- *   - Scenery (Prefer views)          → viewpoint stop + scenic tag, NEVER the
- *     preset slot ([GATE-S]: no numeric scenic scoring — the stop is the lever)
+ *   - Scenery (Prefer views)          → the scenic CHARACTER tag; the server's
+ *     R18-4 scenic bundle turns it into anti-urban routing (arterial bar 0.35)
+ *     + one nice-to-have viewpoint where the corpus has one. Never the preset
+ *     slot; [GATE-S] holds (no numeric scenic scoring anywhere)
  *   - On the route: avoid-highways / mostly-backroads / paved-only toggles +
  *     the stops builder (Coffee | Food | Gas × Anytime | Early | Midway | Late)
  *
@@ -141,10 +143,10 @@ export function buildPlanRequest(draft: PlanDraft): BuildResult {
   if (draft.preferViews) character.push('scenic');
 
   // --- stops: builder rows only ---
-  // NOTE (R16-fix): scenery no longer injects a viewpoint STOP. A sparse
-  // viewpoint dragged loops off-corridor and skipped the repair pass. Scenery
-  // becomes a country-road ROUTING preference in Thread B; a viewpoint stop is
-  // requested only when the brief explicitly says so ("with a viewpoint").
+  // NOTE (R16-fix -> R18-4): the app never injects a viewpoint STOP. The
+  // scenic tag reaches the server's scenic BUNDLE (anti-urban routing; it may
+  // add its own capped nice-to-have viewpoint server-side, guarded by the
+  // R17-A detour cap + stop-aware repair that the R16 injection lacked).
   const stops = stopRequestsOf(draft.stops);
 
   // --- avoid: send ONLY the toggles that are ON (an untouched toggle must

@@ -23,11 +23,33 @@ import {
 } from '../db/planner_reads';
 
 import { ringToGeoJsonPolygon, type Scope } from './scope';
+import { URBAN_CONTEXT_ON } from './urban';
 
 /** Candidate curvature θ (SPK-10; frozen at M4 [GATE-C]). */
 export const THETA_CURVY_DEFAULT = 0.6;
 export const SEGMENT_LIMIT_PER_RING = 300;
 export const SPOT_LIMIT_PER_RING = 100;
+/**
+ * R19 urban-context corpus filter (owner: "who is actually gonna wanna drive
+ * in the neighbourhood"): segments with more than this fraction of their
+ * length INSIDE built-up landuse are excluded at retrieval — measured 24 % of
+ * the top-300 around Mayfield × Kennedy were curvy SUBDIVISION COLLECTORS
+ * (tertiary/unclassified class, so the BD-21 class filter never saw them)
+ * competing at equal curviness with genuine country roads. 0.6 keeps
+ * boundary/edge roads (half fields, half town — legitimate connectors) and
+ * kills interior collectors. Filtered INSIDE the RPC, pre-limit (BD-21).
+ */
+export const URBAN_SEGMENT_MAX_SHARE = 0.6;
+/**
+ * Starvation refill (the house rule, proven 3×: HARD caps starve
+ * funnel-topology pools; preferences RANK). When the urban-filtered pool
+ * comes back thinner than this, the remaining seats refill with the best
+ * urban material — which segValue then ranks LAST (candidates.ts ×(1−0.7·u)),
+ * so town streets are last-resort material, never preferred. Measured: the
+ * hard filter alone cost 5 briefs their 4-presented bar (kept 3) and
+ * degraded duration targeting in thin areas.
+ */
+export const URBAN_REFILL_MIN_SEGMENTS = 150;
 
 /**
  * Road classes the planner never retrieves (owner round 3 / BD-21): residential
@@ -69,6 +91,9 @@ export interface CandidateSegment {
   highway: string;
   lengthM: number;
   curviness: number; // circum_curvature_per_km (C7 candidate metric)
+  /** R19: fraction of length inside built-up landuse (0 = country; optional
+   *  fail-open for synthetic/test material). */
+  urbanShare?: number;
   geometry: LineString;
 }
 
@@ -110,6 +135,7 @@ export async function retrieveAnchorPoints(
       polygonGeoJson: polygon,
       limit,
       excludeHighway: EXCLUDED_HIGHWAY_CLASSES,
+      maxUrbanShare: URBAN_CONTEXT_ON ? URBAN_SEGMENT_MAX_SHARE : 1.0, // R19
     });
     points.push(...rows);
   }
@@ -147,7 +173,24 @@ export async function retrieveCandidates(
       minCurviness: theta,
       limit: segmentLimit,
       excludeHighway: EXCLUDED_HIGHWAY_CLASSES,
+      maxUrbanShare: URBAN_CONTEXT_ON ? URBAN_SEGMENT_MAX_SHARE : 1.0, // R19
     });
+    if (URBAN_CONTEXT_ON && seg.length < URBAN_REFILL_MIN_SEGMENTS) {
+      // thin area: refill remaining seats with urban material (ranked last by
+      // the generators — see URBAN_REFILL_MIN_SEGMENTS)
+      const refill = await plannerFindCurvyRoads(db, {
+        polygonGeoJson: polygon,
+        minCurviness: theta,
+        limit: segmentLimit,
+        excludeHighway: EXCLUDED_HIGHWAY_CLASSES,
+        maxUrbanShare: 1.0,
+      });
+      const have = new Set(seg.map((r) => r.id));
+      for (const row of refill) {
+        if (seg.length >= segmentLimit) break;
+        if (!have.has(row.id)) seg.push(row);
+      }
+    }
     for (const row of seg) {
       segments.set(row.id, {
         id: row.id,
@@ -156,6 +199,7 @@ export async function retrieveCandidates(
         highway: row.highway,
         lengthM: Number(row.length_m),
         curviness: Number(row.curviness),
+        urbanShare: Number(row.urban_share),
         geometry: JSON.parse(row.geometry) as LineString,
       });
     }

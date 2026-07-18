@@ -87,9 +87,11 @@ export type Preset = z.infer<typeof PresetSchema>;
 export const WeightsSchema = z.record(z.string(), z.number());
 export type Weights = z.infer<typeof WeightsSchema>;
 
-/** "near X" / "avoid X" location constraints, resolved later to geometry (§3.4). */
+/** "near X" / "through X" / "avoid X" location constraints, resolved later to
+ *  geometry (§3.4; R18-4 adds 'through' — "through Forks of the Credit" is a
+ *  distinct intent: DRIVE it, not just pass nearby). */
 export const LocationConstraintSchema = z.object({
-  kind: z.enum(['near', 'avoid']),
+  kind: z.enum(['near', 'avoid', 'through']),
   text: z.string().min(1),
 });
 export type LocationConstraint = z.infer<typeof LocationConstraintSchema>;

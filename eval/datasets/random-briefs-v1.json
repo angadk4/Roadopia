@@ -1,0 +1,212 @@
+[
+  {
+    "brief": "120 minute backroads loop from Erin with a coffee stop",
+    "origin": {
+      "lat": 43.753799,
+      "lng": -80.039358
+    }
+  },
+  {
+    "brief": "120 minute twisty loop from Kitchener with a coffee stop",
+    "origin": {
+      "lat": 43.45556,
+      "lng": -80.488574
+    }
+  },
+  {
+    "brief": "180 minute scenic loop from Orangeville, no highways",
+    "origin": {
+      "lat": 43.946732,
+      "lng": -80.08843
+    }
+  },
+  {
+    "brief": "90 minute simple loop from Orangeville with a food stop, no highways",
+    "origin": {
+      "lat": 43.915582,
+      "lng": -80.113162
+    }
+  },
+  {
+    "brief": "150 minute twisty loop from Caledon East with a fuel stop, no highways",
+    "origin": {
+      "lat": 43.878464,
+      "lng": -79.896685
+    }
+  },
+  {
+    "brief": "60 minute loop from Kitchener",
+    "origin": {
+      "lat": 43.44584,
+      "lng": -80.502675
+    }
+  },
+  {
+    "brief": "120 minute backroads loop from Owen Sound with a coffee stop",
+    "origin": {
+      "lat": 44.573479,
+      "lng": -80.962146
+    }
+  },
+  {
+    "brief": "45 minute twisty loop from Goderich, no highways",
+    "origin": {
+      "lat": 43.759698,
+      "lng": -81.751766
+    }
+  },
+  {
+    "brief": "45 minute loop from Creemore with a food stop",
+    "origin": {
+      "lat": 44.309779,
+      "lng": -80.1306
+    }
+  },
+  {
+    "brief": "45 minute twisty loop from Cobourg with a coffee stop",
+    "origin": {
+      "lat": 43.968175,
+      "lng": -78.161371
+    }
+  },
+  {
+    "brief": "120 minute scenic loop from Orangeville with a food stop",
+    "origin": {
+      "lat": 43.900302,
+      "lng": -80.091993
+    }
+  },
+  {
+    "brief": "60 minute backroads loop from Belfountain with a fuel stop",
+    "origin": {
+      "lat": 43.825716,
+      "lng": -79.99871
+    }
+  },
+  {
+    "brief": "90 minute backroads loop from Grand Bend",
+    "origin": {
+      "lat": 43.325695,
+      "lng": -81.752268
+    }
+  },
+  {
+    "brief": "120 minute twisty loop from Cambridge",
+    "origin": {
+      "lat": 43.397638,
+      "lng": -80.328934
+    }
+  },
+  {
+    "brief": "45 minute backroads loop from London with a food stop",
+    "origin": {
+      "lat": 43.022622,
+      "lng": -81.284923
+    }
+  },
+  {
+    "brief": "90 minute backroads loop from Brantford with a food stop, no highways",
+    "origin": {
+      "lat": 43.127559,
+      "lng": -80.246286
+    }
+  },
+  {
+    "brief": "90 minute simple loop from St. Catharines with a food stop",
+    "origin": {
+      "lat": 43.119505,
+      "lng": -79.28084
+    }
+  },
+  {
+    "brief": "150 minute twisty loop from Belfountain with a coffee stop",
+    "origin": {
+      "lat": 43.80992,
+      "lng": -80.014707
+    }
+  },
+  {
+    "brief": "90 minute simple loop from St. Thomas with a fuel stop",
+    "origin": {
+      "lat": 42.743525,
+      "lng": -81.218769
+    }
+  },
+  {
+    "brief": "180 minute simple loop from Stratford with a coffee stop, no highways",
+    "origin": {
+      "lat": 43.357784,
+      "lng": -80.993125
+    }
+  },
+  {
+    "brief": "150 minute scenic loop from Cobourg with a coffee stop, no highways",
+    "origin": {
+      "lat": 43.924356,
+      "lng": -78.186445
+    }
+  },
+  {
+    "brief": "150 minute loop from St. Jacobs with a fuel stop",
+    "origin": {
+      "lat": 43.522267,
+      "lng": -80.595417
+    }
+  },
+  {
+    "brief": "60 minute scenic loop from Stratford with a coffee stop",
+    "origin": {
+      "lat": 43.334545,
+      "lng": -81.007415
+    }
+  },
+  {
+    "brief": "60 minute loop from Collingwood with a fuel stop",
+    "origin": {
+      "lat": 44.529951,
+      "lng": -80.185988
+    }
+  },
+  {
+    "brief": "120 minute loop from Brantford with a fuel stop",
+    "origin": {
+      "lat": 43.150352,
+      "lng": -80.264012
+    }
+  },
+  {
+    "brief": "90 minute loop from Belfountain with a food stop",
+    "origin": {
+      "lat": 43.77531,
+      "lng": -80.055106
+    }
+  },
+  {
+    "brief": "45 minute rural loop from Grand Bend",
+    "origin": {
+      "lat": 43.300964,
+      "lng": -81.755019
+    }
+  },
+  {
+    "brief": "60 minute twisty loop from Barrie with a coffee stop",
+    "origin": {
+      "lat": 44.405241,
+      "lng": -79.730001
+    }
+  },
+  {
+    "brief": "90 minute simple loop from Goderich with a coffee stop",
+    "origin": {
+      "lat": 43.737262,
+      "lng": -81.734888
+    }
+  },
+  {
+    "brief": "60 minute scenic loop from Orangeville with a food stop",
+    "origin": {
+      "lat": 43.912013,
+      "lng": -80.075334
+    }
+  }
+]

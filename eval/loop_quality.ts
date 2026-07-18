@@ -21,7 +21,15 @@
 import type { LineString } from '@shared/types';
 import { Client } from 'pg';
 
+import { bundleForRequest } from '../backend/src/planner/bundles';
 import { generateLoopCandidates, resizedSpeed } from '../backend/src/planner/candidates';
+import {
+  buildChainCandidates,
+  buildSpanPool,
+  CHAIN_MIN_SPANS,
+  chainMatrixLocations,
+} from '../backend/src/planner/chain';
+import { profileForRequest } from '../backend/src/planner/costing';
 import { measureCurvatureClassAware } from '../backend/src/planner/curvature';
 import {
   diversify,
@@ -35,24 +43,48 @@ import {
   RESIDENTIAL_SOFT_SHARE,
   RETRACE_RUN_SOFT_M,
 } from '../backend/src/planner/loop';
-import { pairOverlap } from '../backend/src/planner/overlap';
+import {
+  corridorDoublingRatio,
+  curvyShareOf,
+  loopiness,
+  pairOverlap,
+} from '../backend/src/planner/overlap';
 import { parseRules } from '../backend/src/planner/parse_rules';
 import { weightsForPreset } from '../backend/src/planner/presets';
-import { retrieveAnchorPoints, retrieveCandidates } from '../backend/src/planner/retrieve';
+import {
+  retrieveAnchorPoints,
+  retrieveCandidates,
+  type CandidateSegment,
+} from '../backend/src/planner/retrieve';
+import {
+  CHAIN_CANDIDATES_ON,
+  CHARACTER_BUNDLES_ON,
+  RESIZE_TRIGGER,
+  URBAN_CONTEXT_ON,
+} from '../backend/src/planner/run';
 import { buildScope } from '../backend/src/planner/scope';
 import {
-  DURATION_PRESENT_PENALTY,
+  ARTERIAL_PRESENT_PENALTY,
+  ARTERIAL_SHARE_SOFT,
+  dirtyPenaltyOf,
+  durationGradeOf,
+  fallbackOffenceUnits,
   mergeWeights,
+  PRESENT_TIER_DUROFF,
   scoreCandidate,
   uturnCount,
-  UTURN_PRESENT_PENALTY,
 } from '../backend/src/planner/score';
 import { resolveStopArrivals, stopCoverageOf, stopCoverScore } from '../backend/src/planner/stops';
+import { urbanIndexFor, urbanShareOf } from '../backend/src/planner/urban';
 import { DURATION_TOLERANCE_DEFAULT, validateCandidate } from '../backend/src/planner/validate';
+import { travelMatrix } from '../backend/src/valhalla/matrix';
 
 const DB_URL =
   process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 const VALHALLA = process.env['VALHALLA_URL'] ?? 'http://127.0.0.1:8002';
+/** R18-1 A/B switch: COSTING_PROFILES=legacy reruns the BD-21 baseline. */
+const COSTING_MODE =
+  process.env['COSTING_PROFILES'] === 'legacy' ? ('legacy' as const) : ('on' as const);
 
 /** The 15 fixed briefs (§SPK-15): origins × durations × characters, loops only. */
 const BRIEFS: string[] = [
@@ -140,6 +172,18 @@ interface BriefReport {
   bestResidentialRunM: number | null;
   /** Route countryness of the best, 0..1 (round 11; reported, no AC bar yet). */
   bestCountryScore: number | null;
+  // --- R18-0 essence metrics (report-only; gates arrive in later units) ---
+  /** Arterial (motorway/trunk/primary/secondary/ramp) share of the best, %. */
+  bestArterialPct: number | null;
+  bestUrbanPct: number | null;
+  /** Share of the best's steps on RETRIEVED curvy segments (forced-vs-free). */
+  bestCurvyShare: number | null;
+  /** Isoperimetric quotient of the best (thin out-and-back → ~0; circle → 1). */
+  bestLoopiness: number | null;
+  /** Directed corridor-doubling ratio (parallel-road out-and-back detector). */
+  bestCorridorDoubling: number | null;
+  /** Provisional graded offence units of the best (R18-2 formalizes). */
+  bestDirtyUnits: number | null;
   targetS: number;
   curviness: number | null;
   ms: number;
@@ -153,22 +197,64 @@ function pad(s: string | number, n: number): string {
   return String(s).padEnd(n);
 }
 
-async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
+export const URBAN_AC_MAX_PCT = 20;
+
+async function evaluateBrief(
+  db: Client,
+  brief: string,
+  originOverride?: { lat: number; lng: number },
+): Promise<BriefReport> {
   const t0 = performance.now();
   const notes: string[] = [];
-  const constraints = parseRules(brief);
+  const parsed = parseRules(brief);
+  const constraints = originOverride ? { ...parsed, origin: originOverride } : parsed;
   const origin = constraints.origin;
   if (origin === null || typeof origin === 'string') {
     throw new Error(`brief origin did not resolve: ${brief}`);
   }
   const durationS = constraints.duration_target_s ?? 5400;
-  const weights = mergeWeights(weightsForPreset(constraints.preset), constraints.weights);
+  // R18-4 bundle parity with run.ts: weights, arterial bar, duration
+  // tolerance, scenic's auto nice-to-have viewpoint
+  const bundle = CHARACTER_BUNDLES_ON ? bundleForRequest(constraints) : null;
+  const weights = mergeWeights(
+    bundle?.weights ?? weightsForPreset(constraints.preset),
+    constraints.weights,
+  );
+  const urbanShareBar = bundle?.urbanShareSoft ?? 0.2;
+  // R19 parity with run.ts. MEASUREMENT is unconditional (the A/B baseline
+  // needs urban-share-of-bests too); URBAN_CONTEXT_ON gates only CONSUMPTION
+  // (the presentation tier).
+  const urbanIndex = await urbanIndexFor(db, {
+    west: origin.lng - 0.65,
+    south: origin.lat - 0.65,
+    east: origin.lng + 0.65,
+    north: origin.lat + 0.65,
+  }).catch(() => null);
+  const durTolerance = bundle?.durationTolerance ?? DURATION_TOLERANCE_DEFAULT;
+  const requestStops =
+    bundle?.autoViewpointStop === true && !constraints.stops.some((x) => x.type === 'viewpoint')
+      ? [
+          ...constraints.stops,
+          {
+            type: 'viewpoint' as const,
+            count: 1,
+            importance: 'nice_to_have' as const,
+            at_fraction: null,
+          },
+        ]
+      : constraints.stops;
 
   // First pass at θ=0.6; if the presented set is thin, climb the ladder's first
   // rungs exactly as runPlanner would (τ ×1.3, θ ×0.67) and note the assist —
   // SPK-15 reports the PRESENTED experience, first-pass purity noted honestly.
   // One search pass: scope → retrieve → generate → assemble; returns the funnel.
-  const baseSpeed = constraints.avoid.highways ? 42 : 55;
+  const profile = profileForRequest(constraints, COSTING_MODE);
+  const baseSpeed = constraints.avoid.highways
+    ? profile.sizingSpeedNoHighwayKmh
+    : profile.sizingSpeedKmh;
+  // R18-0: union of every pass's retrieved curvy segments — the material the
+  // generator was OFFERED; curvyShare measures how much the best actually drives
+  const allSegments = new Map<string, CandidateSegment>();
   const searchPass = async (
     tauMult: number,
     theta?: number,
@@ -181,17 +267,38 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
       durationS: Math.round(durationS * tauMult),
     });
     const retrieved = await retrieveCandidates(db, scope, {
-      stopTypes: constraints.stops.map((s) => s.type),
+      stopTypes: requestStops.map((s) => s.type),
       ...(theta !== undefined ? { thetaCurvy: theta } : {}),
     });
+    for (const seg of retrieved.segments) allSegments.set(seg.id, seg);
     const anchorPoints = await retrieveAnchorPoints(db, scope);
-    const candidates = generateLoopCandidates(origin, retrieved.segments, retrieved.spots, {
-      stopRequests: constraints.stops, // R16-3: typed per-unit anchoring
+    let candidates = generateLoopCandidates(origin, retrieved.segments, retrieved.spots, {
+      stopRequests: requestStops, // R16-3: typed per-unit anchoring
       durationS,
       anchorPoints,
       avgSpeedKmh: avgSpeedKmh ?? baseSpeed,
       ...(idPrefix !== undefined ? { idPrefix } : {}),
     });
+    // R18-3 parity with run.ts: chained candidates for stop-free briefs
+    if (CHAIN_CANDIDATES_ON && constraints.stops.length === 0) {
+      const pool = buildSpanPool(origin, retrieved.segments, durationS, avgSpeedKmh ?? baseSpeed);
+      if (pool.length >= CHAIN_MIN_SPANS) {
+        try {
+          const matrix = await travelMatrix(VALHALLA, {
+            locations: chainMatrixLocations(origin, pool),
+            costingOptions: profile.options,
+          });
+          const chains = buildChainCandidates(origin, pool, matrix, {
+            durationS,
+            anchorPoints,
+            ...(idPrefix !== undefined ? { idPrefix } : {}),
+          });
+          candidates = [...chains, ...candidates];
+        } catch {
+          notes.push('chains skipped (matrix unavailable)');
+        }
+      }
+    }
     const attempts = await Promise.all(
       candidates.map(async (c) => {
         try {
@@ -201,6 +308,7 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
             origin,
             c,
             {
+              ...profile.options, // R18-1: fun-vs-fast connector costing (parity with run.ts)
               exclude_highways: constraints.avoid.highways,
               exclude_tolls: constraints.avoid.tolls,
               exclude_ferries: constraints.avoid.ferries,
@@ -245,7 +353,7 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
   for (let attempt = 1; attempt <= 2 && batchOk.length > 0; attempt++) {
     const durs = batchOk.map((a) => a.route.duration_s).sort((x, y) => x - y);
     const median = durs[Math.floor(durs.length / 2)]!;
-    if (Math.abs(median - durationS) / durationS <= 0.25) break;
+    if (Math.abs(median - durationS) / durationS <= RESIZE_TRIGGER) break;
     sizingV = resizedSpeed(sizingV, durationS, median);
     const rz = await searchPass(1, undefined, sizingV, `rz${attempt}-`);
     candidates = [...candidates, ...rz.candidates];
@@ -304,7 +412,7 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
         durationTargetS: constraints.duration_target_s,
         curviness: curv.curviness,
         twistinessPref: constraints.twistiness_pref,
-        stopCover: stopCoverScore(stopCoverageOf(constraints.stops, a.candidate.stops)),
+        stopCover: stopCoverScore(stopCoverageOf(requestStops, a.candidate.stops)),
         scenicSignal: 0,
         countryScore: a.countryScore, // round 11
       },
@@ -324,13 +432,44 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
     const durOff =
       constraints.duration_target_s !== null &&
       Math.abs(a.route.duration_s - constraints.duration_target_s) / constraints.duration_target_s >
-        DURATION_TOLERANCE_DEFAULT;
+        durTolerance;
+    // R18-1 third tier (parity with run.ts; R18-4 bundle-aware bar + gate)
+    const urbShare = urbanShareOf(urbanIndex, a.route.geometry, [origin]);
+    const contextHeavy = URBAN_CONTEXT_ON
+      ? urbShare !== null && urbShare > urbanShareBar
+      : (profile.id === 'fun' || profile.id === 'backroads') &&
+        a.arterialShare !== null &&
+        a.arterialShare > ARTERIAL_SHARE_SOFT;
+    // R18-2 parity with run.ts: graded dirtiness + within-tier duration grade
+    const units = fallbackOffenceUnits({
+      uturns: uturnCount(a.route),
+      microloops: a.microloops,
+      spursWide: a.spursWide,
+      selfOverlap: a.selfOverlap,
+      retraceRunM: a.retraceRunM,
+      residentialShare: a.residentialShare,
+      residentialRunM: a.residentialRunM,
+      traceNull: a.trace === null,
+    });
+    const durGrade = durationGradeOf(a.route.duration_s, durationS);
     const presentKey =
       breakdown.score -
-      (dirty ? UTURN_PRESENT_PENALTY : 0) -
-      (durOff ? DURATION_PRESENT_PENALTY : 0);
+      dirtyPenaltyOf(dirty, units) -
+      (durOff ? PRESENT_TIER_DUROFF : 0) -
+      (contextHeavy ? ARTERIAL_PRESENT_PENALTY : 0) -
+      durGrade;
     return { a, curv, breakdown, presentKey };
   });
+
+  // R18-3 adoption diagnostic: pool countryScore variance (rq11 measured
+  // ~0.007 — "every candidate rode the same arterials"; chains must raise it
+  // above 0.05 or adoption is refused per the pre-registered rule)
+  const ctryVals = scored.map((s) => s.a.countryScore).filter((v): v is number => v !== null);
+  if (ctryVals.length >= 2) {
+    const mean = ctryVals.reduce((a, b) => a + b, 0) / ctryVals.length;
+    const variance = ctryVals.reduce((a, b) => a + (b - mean) ** 2, 0) / ctryVals.length;
+    notes.push(`ctryVar ${variance.toFixed(4)}`);
+  }
 
   const { kept } = diversify(
     scored.map((s) => ({
@@ -345,14 +484,17 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
   let best: (typeof scored)[number] | null = null;
   for (const k of kept) {
     const s = (k as unknown as { payload: (typeof scored)[number] }).payload;
-    const verdict = validateCandidate({
-      route: s.a.route,
-      constraints,
-      closureM: s.a.closureM,
-      selfOverlap: s.a.selfOverlap,
-      stopCoverage: stopCoverageOf(constraints.stops, s.a.candidate.stops),
-      stops: resolveStopArrivals(s.a.candidate.stops, s.a.route),
-    });
+    const verdict = validateCandidate(
+      {
+        route: s.a.route,
+        constraints,
+        closureM: s.a.closureM,
+        selfOverlap: s.a.selfOverlap,
+        stopCoverage: stopCoverageOf(requestStops, s.a.candidate.stops),
+        stops: resolveStopArrivals(s.a.candidate.stops, s.a.route),
+      },
+      { durationTolerance: durTolerance },
+    ); // R18-4 bundle parity
     if (verdict.feasible) {
       feasible++;
       if (!best || s.presentKey > best.presentKey) best = s;
@@ -393,7 +535,37 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
   const bestMicroloops = best ? best.a.microloops : null;
   const bestResidentialRunM = best ? best.a.residentialRunM : null;
   const bestCountryScore = best ? best.a.countryScore : null;
+  // --- R18-0 essence metrics (report-only) ---
+  const bestArterialPct = best && best.a.arterialShare !== null ? best.a.arterialShare * 100 : null;
+  const bestUrbanPct = best
+    ? (() => {
+        const u = urbanShareOf(urbanIndex, best.a.route.geometry, [origin]);
+        return u === null ? null : u * 100;
+      })()
+    : null;
+  const bestCurvyShare = best
+    ? curvyShareOf(best.a.route.geometry, [...allSegments.values()])
+    : null;
+  const bestLoopiness = best ? loopiness(best.a.route.geometry) : null;
+  const bestCorridorDoubling = best ? corridorDoublingRatio(best.a.route.geometry, origin) : null;
+  const bestDirtyUnits = best
+    ? fallbackOffenceUnits({
+        uturns: uturnCount(best.a.route),
+        microloops: best.a.microloops,
+        spursWide: best.a.spursWide,
+        selfOverlap: best.a.selfOverlap,
+        retraceRunM: best.a.retraceRunM,
+        residentialShare: best.a.residentialShare,
+        residentialRunM: best.a.residentialRunM,
+        traceNull: best.a.trace === null,
+      })
+    : null;
+  // R19 honest-composite axis: a best that "passes" by driving town streets
+  // (urban > 20 %) is the disease, not a pass (owner 2026-07-18). Null share
+  // (index unavailable) is fail-open.
+  const urbanOk = bestUrbanPct === null || bestUrbanPct <= URBAN_AC_MAX_PCT;
   const pass =
+    urbanOk &&
     kept.length >= K_PRESENT_DEFAULT &&
     maxPairOverlap <= TAU_OVERLAP_DEFAULT &&
     feasible > 0 &&
@@ -429,6 +601,12 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
     bestMicroloops,
     bestResidentialRunM,
     bestCountryScore,
+    bestArterialPct,
+    bestUrbanPct,
+    bestCurvyShare,
+    bestLoopiness,
+    bestCorridorDoubling,
+    bestDirtyUnits,
     targetS: durationS,
     curviness: best ? best.curv.curviness : null,
     bestGeometry: best ? best.a.route.geometry : null,
@@ -438,17 +616,38 @@ async function evaluateBrief(db: Client, brief: string): Promise<BriefReport> {
   };
 }
 
+interface SuiteJob {
+  brief: string;
+  origin?: { lat: number; lng: number };
+}
+
+/** SUITE=random loads the committed seeded fixture (R18-0 formalization of the
+ *  40-route audit protocol); default = the fixed 48-brief SPK-15 corpus. */
+async function loadSuite(): Promise<{ name: string; jobs: SuiteJob[] }> {
+  if (process.env['SUITE'] === 'random') {
+    const { readFile } = await import('node:fs/promises');
+    const raw = await readFile(
+      new URL('./datasets/random-briefs-v1.json', import.meta.url),
+      'utf8',
+    );
+    const jobs = JSON.parse(raw) as SuiteJob[];
+    return { name: 'random', jobs };
+  }
+  return { name: 'fixed', jobs: BRIEFS.map((brief) => ({ brief })) };
+}
+
 async function main(): Promise<void> {
   const db = new Client({ connectionString: DB_URL });
   await db.connect();
 
+  const suite = await loadSuite();
   const reports: BriefReport[] = [];
-  for (const brief of BRIEFS) {
+  for (const { brief, origin: originOverride } of suite.jobs) {
     // one brief's failure must never kill the whole report (an eval harness
     // reports errors as data — found live when a 3 h brief 400'd the isochrone)
     let r: BriefReport;
     try {
-      r = await evaluateBrief(db, brief);
+      r = await evaluateBrief(db, brief, originOverride);
     } catch (err) {
       r = {
         brief,
@@ -468,6 +667,12 @@ async function main(): Promise<void> {
         bestMicroloops: null,
         bestResidentialRunM: null,
         bestCountryScore: null,
+        bestArterialPct: null,
+        bestUrbanPct: null,
+        bestCurvyShare: null,
+        bestLoopiness: null,
+        bestCorridorDoubling: null,
+        bestDirtyUnits: null,
         targetS: 0,
         curviness: null,
         ms: 0,
@@ -479,7 +684,7 @@ async function main(): Promise<void> {
     reports.push(r);
     // live progress — the full table still prints at the end
     console.log(
-      `[${reports.length}/${BRIEFS.length}] ${r.pass ? 'PASS' : 'fail'} ${Math.round(r.ms)}ms  ${brief}`,
+      `[${reports.length}/${suite.jobs.length}] ${r.pass ? 'PASS' : 'fail'} ${Math.round(r.ms)}ms  ${brief}`,
     );
   }
   await db.end();
@@ -544,6 +749,15 @@ async function main(): Promise<void> {
             microloops: r.bestMicroloops,
             curviness: r.curviness,
             meanSelfOverlap: r.meanSelfOverlap,
+            arterial_pct: r.bestArterialPct === null ? null : Math.round(r.bestArterialPct),
+            curvy_share:
+              r.bestCurvyShare === null ? null : Math.round(r.bestCurvyShare * 100) / 100,
+            loopiness: r.bestLoopiness === null ? null : Math.round(r.bestLoopiness * 100) / 100,
+            corridor_doubling:
+              r.bestCorridorDoubling === null
+                ? null
+                : Math.round(r.bestCorridorDoubling * 100) / 100,
+            dirty_units: r.bestDirtyUnits,
             stroke: r.pass ? '#1a9850' : '#d73027',
             'stroke-width': 3,
             'stroke-opacity': 0.9,
@@ -552,12 +766,14 @@ async function main(): Promise<void> {
         };
       }),
   };
+  const geojsonName =
+    suite.name === 'random' ? 'spk15-routes-random.geojson' : 'spk15-routes.geojson';
   await writeFile(
-    new URL('./spk15-routes.geojson', import.meta.url),
+    new URL(`./${geojsonName}`, import.meta.url),
     JSON.stringify(featureCollection),
     'utf8',
   );
-  console.log('\nwrote eval/spk15-routes.geojson — paste into geojson.io to inspect the loops');
+  console.log(`\nwrote eval/${geojsonName} — paste into geojson.io to inspect the loops`);
 
   console.log('=== SPK-15 loop-generation quality report ===\n');
   console.log(
@@ -572,6 +788,11 @@ async function main(): Promise<void> {
       pad('res%', 6) +
       pad('ctry', 6) +
       pad('µloop', 7) +
+      pad('art%', 6) +
+      pad('urb%', 6) +
+      pad('cvy%', 6) +
+      pad('lpi', 6) +
+      pad('corD', 6) +
       pad('ms', 7) +
       'verdict',
   );
@@ -594,6 +815,11 @@ async function main(): Promise<void> {
         pad(r.bestResidentialPct === null ? '—' : Math.round(r.bestResidentialPct), 6) +
         pad(r.bestCountryScore === null ? '—' : r.bestCountryScore.toFixed(2), 6) +
         pad(r.bestMicroloops === null ? '—' : r.bestMicroloops, 7) +
+        pad(r.bestArterialPct === null ? '—' : Math.round(r.bestArterialPct), 6) +
+        pad(r.bestUrbanPct === null ? '—' : Math.round(r.bestUrbanPct), 6) +
+        pad(r.bestCurvyShare === null ? '—' : Math.round(r.bestCurvyShare * 100), 6) +
+        pad(r.bestLoopiness === null ? '—' : r.bestLoopiness.toFixed(2), 6) +
+        pad(r.bestCorridorDoubling === null ? '—' : r.bestCorridorDoubling.toFixed(2), 6) +
         pad(Math.round(r.ms), 7) +
         (r.pass ? 'PASS' : `FAIL ${r.notes.join('; ')}`),
     );
@@ -611,9 +837,52 @@ async function main(): Promise<void> {
   console.log(`mean presented: ${meanKept.toFixed(1)} (target ≥ ${K_PRESENT_DEFAULT})`);
   console.log(`mean duration error of best: ${meanDurErr.toFixed(0)} %`);
   console.log(`mean wall time per brief: ${Math.round(meanMs)} ms`);
+
+  // --- R18-0 essence scoreboard (report-only; the rebuild's headline numbers) ---
+  const vals = (f: (r: BriefReport) => number | null): number[] =>
+    reports
+      .map(f)
+      .filter((v): v is number => v !== null)
+      .sort((a, b) => a - b);
+  const pct = (sorted: number[], q: number): number | null =>
+    sorted.length === 0
+      ? null
+      : sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]!;
+  const mean = (sorted: number[]): number | null =>
+    sorted.length === 0 ? null : sorted.reduce((a, b) => a + b, 0) / sorted.length;
+  const fmt = (v: number | null, digits = 2): string => (v === null ? '—' : v.toFixed(digits));
+
+  const noRoute = reports.filter((r) => r.bestGeometry === null).length;
+  const absErr = vals((r) => (r.durErrSignedPct === null ? null : Math.abs(r.durErrSignedPct)));
+  const art = vals((r) => r.bestArterialPct);
+  const cvy = vals((r) => r.bestCurvyShare);
+  const lpi = vals((r) => r.bestLoopiness);
+  const corD = vals((r) => r.bestCorridorDoubling);
+  const units = vals((r) => r.bestDirtyUnits);
+  console.log(`\n-- essence scoreboard (R18-0; suite=${suite.name}) --`);
+  console.log(`no-route briefs: ${noRoute}/${reports.length}`);
+  console.log(`|durErr| p50/p80: ${fmt(pct(absErr, 0.5), 0)} % / ${fmt(pct(absErr, 0.8), 0)} %`);
+  console.log(
+    `arterial share of bests: mean ${fmt(mean(art), 0)} % · p80 ${fmt(pct(art, 0.8), 0)} %`,
+  );
+  const urb = vals((r) => r.bestUrbanPct);
+  console.log(
+    `urban share of bests:    mean ${fmt(mean(urb), 0)} % · p80 ${fmt(pct(urb, 0.8), 0)} % (R19)`,
+  );
+  console.log(`curvy share of bests:    mean ${fmt(mean(cvy))} · p20 ${fmt(pct(cvy, 0.2))}`);
+  console.log(`loopiness of bests:      p20 ${fmt(pct(lpi, 0.2))}`);
+  console.log(`corridor doubling:       p80 ${fmt(pct(corD, 0.8))}`);
+  console.log(`dirty units of bests:    mean ${fmt(mean(units))} · max ${fmt(pct(units, 1.0))}`);
+
+  // determinism hash: byte-stable across identical runs (ms stripped)
+  const { createHash } = await import('node:crypto');
+  const hashable = reports.map((r) => ({ ...r, ms: 0 }));
+  const hash = createHash('sha256').update(JSON.stringify(hashable)).digest('hex').slice(0, 16);
+  console.log(`determinism hash: ${hash}`);
+
   console.log('\n-- SPK-15 AC --');
   console.log(
-    `≥ K_PRESENT distinct, overlap ≤ τ, low self-overlap, durErr ≤ 25 %, u-turn+spur+µloop-free best, retrace ≤ ${RETRACE_RUN_SOFT_M} m, residential ≤ ${RESIDENTIAL_SOFT_SHARE * 100} %, feasible: ` +
+    `≥ K_PRESENT distinct, overlap ≤ τ, low self-overlap, durErr ≤ 25 %, u-turn+spur+µloop-free best, retrace ≤ ${RETRACE_RUN_SOFT_M} m, residential ≤ ${RESIDENTIAL_SOFT_SHARE * 100} %, urban ≤ ${URBAN_AC_MAX_PCT} %, feasible: ` +
       `${passed === reports.length ? 'PASS (all briefs)' : `${passed}/${reports.length} briefs — inspect FAIL rows`}`,
   );
 }

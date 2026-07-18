@@ -51,6 +51,13 @@ export interface AutoCostingOptions {
   /** Seconds added at transitions between unlike-named roads (default 5) —
    *  discourages subdivision rat-runs (round 7). */
   maneuver_penalty?: number;
+  /** DISTANCE-optimal routing (R18-1, probed live 2026-07-16): removes the
+   *  speed advantage that makes arterials win every connector — measured
+   *  arterial share 99 %→5 % (Waterdown–Campbellville) and 81 %→34 %
+   *  (Larson–Belfountain) for ~+5 min per 23 km hop. NOTE: shortest BYPASSES
+   *  the soft use_* factors (probed: maneuver_penalty added nothing on top);
+   *  hard exclude_* filters still apply. */
+  shortest?: boolean;
 }
 
 export interface RouteThroughRequest {

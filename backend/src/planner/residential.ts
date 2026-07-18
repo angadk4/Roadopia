@@ -29,7 +29,11 @@ function haversineM(a: [number, number], b: [number, number]): number {
 }
 
 /** Point at cumulative distance d along the line (clamped). */
-function pointAt(coords: Array<[number, number]>, cum: number[], d: number): [number, number] {
+export function pointAt(
+  coords: Array<[number, number]>,
+  cum: number[],
+  d: number,
+): [number, number] {
   if (d <= 0) return coords[0]!;
   const total = cum[cum.length - 1]!;
   if (d >= total) return coords[coords.length - 1]!;
@@ -47,14 +51,21 @@ function pointAt(coords: Array<[number, number]>, cum: number[], d: number): [nu
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 }
 
+/** R18-3: A→B measurement needs grace at BOTH endpoints — accept one point
+ *  (the loop call sites, unchanged) or a set of grace points. */
+export type GracePoints = LatLng | readonly LatLng[];
+
+const graceLngLats = (g: GracePoints): Array<[number, number]> =>
+  (Array.isArray(g) ? (g as readonly LatLng[]) : [g as LatLng]).map((p) => [p.lng, p.lat]);
+
 /**
- * Share of matched route length on residential edges, outside the origin
- * grace radius. Returns 0 when everything sits inside the grace zone.
+ * Share of matched route length on residential edges, outside the grace
+ * radius of every grace point. Returns 0 when everything sits inside grace.
  */
 export function residentialShareOf(
   edges: TraceEdge[],
   geometry: LineString,
-  origin: LatLng,
+  origin: GracePoints,
   graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
 ): number {
   const coords = geometry.coordinates as Array<[number, number]>;
@@ -69,7 +80,7 @@ export function residentialShareOf(
   // trace edges follow the shape in order; scale trace positions onto the
   // geometry so midpoints can be located even when lengths drift slightly
   const scale = geomLen / traceLen;
-  const originLngLat: [number, number] = [origin.lng, origin.lat];
+  const grace = graceLngLats(origin);
 
   let outsideTotal = 0;
   let outsideResidential = 0;
@@ -77,7 +88,7 @@ export function residentialShareOf(
   for (const e of edges) {
     const mid = pointAt(coords, cum, (pos + e.lengthM / 2) * scale);
     pos += e.lengthM;
-    if (haversineM(mid, originLngLat) <= graceRadiusM) continue;
+    if (grace.some((g) => haversineM(mid, g) <= graceRadiusM)) continue;
     outsideTotal += e.lengthM;
     if (e.roadClass === 'residential') outsideResidential += e.lengthM;
   }
@@ -112,7 +123,7 @@ export function maxClassRunInfo(
   edges: TraceEdge[],
   geometry: LineString,
   classes: ReadonlySet<string>,
-  origin: LatLng,
+  origin: GracePoints,
   graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
 ): ResidentialRunInfo {
   const coords = geometry.coordinates as Array<[number, number]>;
@@ -125,7 +136,7 @@ export function maxClassRunInfo(
   const traceLen = edges.reduce((s, e) => s + e.lengthM, 0);
   if (geomLen === 0 || traceLen === 0) return { runM: 0, mid: null };
   const scale = geomLen / traceLen;
-  const originLngLat: [number, number] = [origin.lng, origin.lat];
+  const grace = graceLngLats(origin);
 
   let best = 0;
   let bestEndPos = 0;
@@ -136,7 +147,7 @@ export function maxClassRunInfo(
     const startPos = pos;
     const mid = pointAt(coords, cum, (startPos + e.lengthM / 2) * scale);
     pos += e.lengthM;
-    const graced = haversineM(mid, originLngLat) <= graceRadiusM;
+    const graced = grace.some((g) => haversineM(mid, g) <= graceRadiusM);
     if (!graced && classes.has(e.roadClass)) {
       run += gap + e.lengthM; // bridge the swallowed gap
       gap = 0;
@@ -163,7 +174,7 @@ const RESIDENTIAL_ONLY: ReadonlySet<string> = new Set(['residential']);
 export function maxResidentialRunInfo(
   edges: TraceEdge[],
   geometry: LineString,
-  origin: LatLng,
+  origin: GracePoints,
   graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
 ): ResidentialRunInfo {
   return maxClassRunInfo(edges, geometry, RESIDENTIAL_ONLY, origin, graceRadiusM);
@@ -173,7 +184,7 @@ export function maxResidentialRunInfo(
 export function maxResidentialRunM(
   edges: TraceEdge[],
   geometry: LineString,
-  origin: LatLng,
+  origin: GracePoints,
   graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
 ): number {
   return maxResidentialRunInfo(edges, geometry, origin, graceRadiusM).runM;
@@ -208,4 +219,36 @@ export function countryScoreOf(edges: TraceEdge[]): number | null {
   if (total === 0) return null;
   const meanFactor = weighted / total;
   return Math.max(0, Math.min(1, (meanFactor - 0.15) / 0.85));
+}
+
+/** Trace road classes counted as "boring main road" for the honesty metric
+ *  (R18-0). Motorway/trunk/primary/secondary + ramps/turn channels — the
+ *  classes the R18 audit measured dominating routes (58–88 % of bests). */
+const ARTERIAL_ROAD_CLASSES: ReadonlySet<string> = new Set([
+  'motorway',
+  'trunk',
+  'primary',
+  'secondary',
+]);
+
+/**
+ * Arterial share (R18-0 honesty metric): length-weighted fraction of the route
+ * on arterial-grade pavement. NO grace exemption (same rationale as
+ * countryScoreOf: leaving town on an arterial is real drive time). Null when
+ * the trace is empty/unavailable — unknown is never reported as 0 % arterial.
+ */
+export function arterialShareOf(edges: TraceEdge[]): number | null {
+  let total = 0;
+  let arterial = 0;
+  for (const e of edges) {
+    total += e.lengthM;
+    const isArterial =
+      ARTERIAL_ROAD_CLASSES.has(e.roadClass) ||
+      e.roadClass.endsWith('_link') ||
+      e.use === 'ramp' ||
+      e.use === 'turn_channel';
+    if (isArterial) arterial += e.lengthM;
+  }
+  if (total === 0) return null;
+  return arterial / total;
 }

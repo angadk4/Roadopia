@@ -1,0 +1,21 @@
+[1/12] ok           24.4km   26min curv=1.33 art=88% ctry=0.4 ut=0 894ms  Scenic drive to Niagara Falls from St. Catharines  [chained]
+[2/12] ok          105.2km  110min curv=1.27 art=90% ctry=0.32 ut=0 1507ms  drive from Hamilton to Guelph  [chained]
+[3/12] ok           79.3km   98min curv=1.63 art=59% ctry=0.53 ut=1 1486ms  twisty drive from Guelph to Orangeville  [chained]
+[4/12] ok             65km   66min curv=0.93 art=89% ctry=0.4 ut=0 793ms  backroads drive from Barrie to Collingwood  [chained]
+[5/12] ok           45.7km   42min curv=0.91 art=90% ctry=0.45 ut=0 1233ms  drive from Waterloo to Stratford  [chained]
+[6/12] ok           78.5km  109min curv=1.30 art=52% ctry=0.65 ut=0 756ms  scenic drive from Caledon East to Creemore  [chained]
+[7/12] error           —km    —min curv=— art=— ctry=— ut=— 0ms  drive from Peterborough to Bancroft  [a_to_b scope requires a destination]
+[8/12] ok           99.8km   95min curv=0.81 art=94% ctry=0.16 ut=0 1250ms  twisty drive from Hamilton to Simcoe  [chained]
+[9/12] ok            146km  131min curv=0.90 art=86% ctry=0.31 ut=0 1517ms  drive from London to Goderich  [chained]
+[10/12] ok           98.6km   90min curv=0.80 art=81% ctry=0.36 ut=0 845ms  drive from Oshawa to Peterborough with a coffee stop
+[11/12] ok          100.6km  105min curv=1.16 art=73% ctry=0.51 ut=0 1187ms  drive from Milton to Elora, no highways  [chained]
+[12/12] ok          109.7km  101min curv=0.82 art=79% ctry=0.35 ut=0 1410ms  backroads drive from Cobourg to Uxbridge  [chained]
+
+-- A→B corridor scoreboard (R18-3; first run = baseline) --
+routed (ok/relaxed): 11/12
+chain candidates generated: 10/12 briefs
+arterial share of bests: mean 80 %
+curviness of bests: mean 1.08
+u-turns in bests: 1 across 11 routes
+mean wall time: 1073 ms
+determinism hash: 33f2d470a324410a

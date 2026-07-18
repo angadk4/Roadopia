@@ -1,0 +1,307 @@
+<section class="wrap">
+  <header class="masthead">
+    <div class="title-row">
+      <h1>Route audit — <span id="anchorName">Mayfield × Kennedy</span></h1>
+      <p class="sub" id="briefLine">40 residential origins · default 90-min loop vs backroads</p>
+    </div>
+    <div class="scoreboard" id="scoreboard"></div>
+  </header>
+
+  <section class="readout" id="readout"><!--__READOUT__--></section>
+
+  <div class="controls">
+    <div class="legend" aria-label="road context legend">
+      <span class="key"><i class="sw a"></i>in town (any road)</span>
+      <span class="key"><i class="sw c"></i>country main road (fine)</span>
+      <span class="key"><i class="sw b"></i>country backroad</span>
+      <span class="key"><i class="sw r"></i>residential lane</span>
+      <span class="key"><i class="sw o"></i>other</span>
+      <span class="key"><i class="dot origin"></i>home (your pin)</span>
+    </div>
+    <div class="tools">
+      <div class="seg" id="modeSeg">
+        <button data-mode="default" class="on">Default loop</button>
+        <button data-mode="backroads">Backroads</button>
+      </div>
+      <label>Sort
+        <select id="sort">
+          <option value="art">most in-town first</option>
+          <option value="loop">worst loop shape first</option>
+          <option value="curv">least curvy first</option>
+          <option value="cluster">by area</option>
+        </select>
+      </label>
+      <label>Show
+        <select id="filter">
+          <option value="all">all 40</option>
+          <option value="mk">Mayfield × Kennedy</option>
+          <option value="reg">regional</option>
+          <option value="bad">flagged only</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</section>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <button class="close" id="modalClose" aria-label="close">✕</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --ink: #16191d; --muted: #5c6470;
+    --line: #e2e5ea; --line2: #eef0f3; --accent: #3a5bd9; --accentink: #fff;
+    --map-bg: #f8f9fb;
+    --a: #e5484d; --b: #2fa35b; --c: #2d9d9b; --r: #efa321; --o: #98a1ad; --origin: #3a5bd9;
+    --good: #2fa35b; --mixed: #efa321; --bad: #e5484d;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --panel: #171b21; --ink: #e8ebef; --muted: #9aa4b1;
+      --line: #262c34; --line2: #1e232a; --accent: #6d86f0; --accentink: #0f1216;
+      --map-bg: #12161b;
+      --a: #ff6b6f; --b: #52c47e; --c: #4fc2c0; --r: #f7b53f; --o: #7c8794; --origin: #6d86f0;
+      --good: #52c47e; --mixed: #f7b53f; --bad: #ff6b6f;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f5f7; --panel: #ffffff; --ink: #16191d; --muted: #5c6470;
+    --line: #e2e5ea; --line2: #eef0f3; --accent: #3a5bd9; --accentink: #fff;
+    --map-bg: #f8f9fb;
+    --a: #e5484d; --b: #2fa35b; --c: #2d9d9b; --r: #efa321; --o: #98a1ad; --origin: #3a5bd9;
+    --good: #2fa35b; --mixed: #efa321; --bad: #e5484d;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --panel: #171b21; --ink: #e8ebef; --muted: #9aa4b1;
+    --line: #262c34; --line2: #1e232a; --accent: #6d86f0; --accentink: #0f1216;
+    --map-bg: #12161b;
+    --a: #ff6b6f; --b: #52c47e; --c: #4fc2c0; --r: #f7b53f; --o: #7c8794; --origin: #6d86f0;
+    --good: #52c47e; --mixed: #f7b53f; --bad: #ff6b6f;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans);
+         line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 22px 20px 60px; }
+  .masthead { position: sticky; top: 0; z-index: 5; background: var(--bg);
+    padding: 6px 0 12px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+  .title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+  h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .sub { margin: 0; color: var(--muted); font-size: 13px; }
+  .scoreboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px; margin-top: 14px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; }
+  .stat .l { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em;
+    display: block; margin-bottom: 4px; }
+  .stat .cmp { display: flex; align-items: baseline; gap: 7px; font-family: var(--mono);
+    font-variant-numeric: tabular-nums; }
+  .stat .d { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+  .stat .arr { font-size: 11px; color: var(--muted); }
+  .stat .bk { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+  .stat .d.hi { color: var(--bad); } .stat .bk.lo { color: var(--good); }
+
+  .readout { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 10px; padding: 14px 16px 6px; margin-bottom: 16px; font-size: 13.5px; }
+  .readout:empty { display: none; }
+  .readout h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 8px; color: var(--muted); }
+  .readout p { margin: 0 0 8px; } .readout ul { margin: 6px 0 8px; padding-left: 18px; }
+  .readout li { margin: 4px 0; } .readout strong { color: var(--ink); }
+  .readout .tag { font-family: var(--mono); font-size: 12px; padding: 1px 5px; border-radius: 4px; background: var(--line2); }
+
+  .controls { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+  .key { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 16px; height: 4px; border-radius: 2px; display: inline-block; }
+  .sw.a { background: var(--a); } .sw.b { background: var(--b); } .sw.c { background: var(--c); } .sw.r { background: var(--r); } .sw.o { background: var(--o); }
+  .dot.origin { width: 9px; height: 9px; border-radius: 50%; background: var(--origin); box-shadow: 0 0 0 2px var(--panel); }
+  .tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .tools label { font-size: 12px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; }
+  select { font-family: var(--sans); font-size: 12.5px; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; }
+  .seg { display: inline-flex; background: var(--line2); border-radius: 8px; padding: 2px; }
+  .seg button { font-family: var(--sans); font-size: 12.5px; font-weight: 550; border: none; background: transparent;
+    color: var(--muted); padding: 5px 11px; border-radius: 6px; cursor: pointer; }
+  .seg button.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-left-width: 3px; border-radius: 10px;
+    overflow: hidden; cursor: pointer; transition: transform .08s ease, box-shadow .08s ease; }
+  .card:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,.10); }
+  .card.good { border-left-color: var(--good); } .card.mixed { border-left-color: var(--mixed); } .card.bad { border-left-color: var(--bad); }
+  .card svg { display: block; width: 100%; height: 150px; background: var(--map-bg); }
+  .cap { padding: 8px 10px 10px; }
+  .cap .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .cap .lbl { font-weight: 600; font-size: 12.5px; }
+  .cap .dur { font-family: var(--mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .cap .metrics { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 3px;
+    font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; gap: 2px 9px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+  .chip { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 5px; background: var(--line2);
+    color: var(--muted); font-family: var(--mono); }
+  .chip.bad { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
+  .chip.mixed { background: color-mix(in srgb, var(--mixed) 18%, transparent); color: var(--mixed); }
+  .chip.ok { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 20; padding: 20px; }
+  .modal[hidden] { display: none; }
+  .modal-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; max-width: 760px; width: 100%;
+    max-height: 90vh; overflow: auto; padding: 18px 20px; position: relative; }
+  .close { position: absolute; top: 12px; right: 12px; background: var(--line2); border: none; color: var(--ink);
+    width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .cmp2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+  .cmp2 h4 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .cmp2 svg { width: 100%; height: 240px; background: var(--map-bg); border-radius: 10px; }
+  .cmp2 .mm { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 6px;
+    font-variant-numeric: tabular-nums; line-height: 1.7; }
+  .modal-card h3 { margin: 0 6px 0 0; font-size: 17px; display: inline; }
+  .disc { font-size: 12.5px; color: var(--muted); margin-top: 8px; } .disc b { color: var(--ink); }
+  @media (max-width: 560px){ .cmp2 { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+</style>
+
+<script>
+  const DATASETS = /*__DATA__*/ null;
+  const CLASS_COLOR = { U: 'var(--a)', C: 'var(--c)', B: 'var(--b)', A: 'var(--a)', R: 'var(--r)', O: 'var(--o)' };
+  let mode = 'default';
+  const ds = () => DATASETS[mode];
+  const isRouted = r => r && r.coords && r.coords.length > 1;
+
+  function verdict(r){
+    if (!isRouted(r)) return 'bad';
+    if ((r.urbanPct>=35)||(r.uturns>0)||(r.loopiness<0.2)||(r.selfOverlap>0.25)||(r.corridorDoubling>0.35)) return 'bad';
+    if ((r.urbanPct>=18)||(r.selfOverlap>0.15)||(r.loopiness<0.35)||(r.corridorDoubling>0.2)) return 'mixed';
+    return 'good';
+  }
+  function urbColor(p){ return p>=35?'var(--bad)':p>=18?'var(--mixed)':'var(--good)'; }
+  function flags(r){
+    const f=[];
+    if(!isRouted(r)){ f.push(['bad',(r.status||'no route').toUpperCase()]); return f; }
+    f.push(['art',`${r.urbanPct}% in town`, urbColor(r.urbanPct)]);
+    if(r.introMin>=8) f.push(['mixed',`opens after ~${r.introMin}min`]);
+    if(r.uturns>0) f.push(['bad',`${r.uturns} U-turn${r.uturns>1?'s':''}`]);
+    if(r.selfOverlap>0.2) f.push(['bad','back-and-forth']);
+    else if(r.selfOverlap>0.12) f.push(['mixed','some overlap']);
+    if(r.corridorDoubling>0.3) f.push(['bad','doubles back']);
+    if(r.loopiness<0.2) f.push(['bad','barely a loop']);
+    if(r.status==='relaxed') f.push(['mixed','relaxed']);
+    if(f.length===1) f.push(['ok','country-clean']);
+    return f;
+  }
+
+  function project(coords,w,h,pad){
+    const latMid=coords.reduce((s,c)=>s+c[1],0)/coords.length, kx=Math.cos(latMid*Math.PI/180);
+    const P=coords.map(([lng,lat])=>[lng*kx,-lat]);
+    let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+    for(const[x,y]of P){minx=Math.min(minx,x);maxx=Math.max(maxx,x);miny=Math.min(miny,y);maxy=Math.max(maxy,y);}
+    const sw=maxx-minx||1e-6, sh=maxy-miny||1e-6, s=Math.min((w-2*pad)/sw,(h-2*pad)/sh);
+    return P.map(([x,y])=>[x*s+(w-s*sw)/2-s*minx, y*s+(h-s*sh)/2-s*miny]);
+  }
+  function pathEl(run,cls){
+    if(run.length<2) return '';
+    const d='M'+run.map(p=>p[0].toFixed(1)+' '+p[1].toFixed(1)).join('L');
+    return `<path d="${d}" fill="none" stroke="${CLASS_COLOR[cls]||CLASS_COLOR.O}" stroke-width="${cls==='A'?3:2.4}" stroke-linecap="round" stroke-linejoin="round" opacity="${cls==='O'?0.6:0.95}"/>`;
+  }
+  function routeSVG(r,w,h){
+    const pts=project(r.coords,w,h,12);
+    let paths='',run=[pts[0]],cls=r.classes[0]||'O';
+    for(let i=1;i<pts.length;i++){ const c=r.classes[i-1]||'O';
+      if(c===cls) run.push(pts[i]); else { paths+=pathEl(run,cls); run=[pts[i-1],pts[i]]; cls=c; } }
+    paths+=pathEl(run,cls);
+    const[ox,oy]=pts[0];
+    return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">${paths}`+
+      `<circle cx="${ox.toFixed(1)}" cy="${oy.toFixed(1)}" r="4.5" fill="var(--origin)" stroke="var(--panel)" stroke-width="2"/></svg>`;
+  }
+
+  const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+  const pct=(n,d)=>d?Math.round(100*n/d):0;
+  function agg(set){
+    const routed=set.routes.filter(isRouted);
+    return {
+      urb: Math.round(mean(routed.map(r=>r.urbanPct))),
+      urbHeavy: pct(routed.filter(r=>r.urbanPct>=35).length, routed.length),
+      art: Math.round(mean(routed.map(r=>r.arterialPct))),
+      curv: mean(routed.map(r=>r.curviness)).toFixed(2),
+      ctry: mean(routed.map(r=>r.countryScore)).toFixed(2),
+      good: set.routes.filter(r=>verdict(r)==='good').length,
+      bad: set.routes.filter(r=>verdict(r)==='bad').length,
+      noroute: set.routes.length - routed.length,
+    };
+  }
+  (function scoreboard(){
+    const D=agg(DATASETS.default), B=agg(DATASETS.backroads), el=document.getElementById('scoreboard');
+    const row=(l,d,b,hiIsBad=true)=>{
+      const dhi = hiIsBad ? (parseFloat(d)>=parseFloat(b)?'hi':'') : '';
+      const blo = hiIsBad ? (parseFloat(b)<parseFloat(d)?'lo':'') : '';
+      return `<div class="stat"><span class="l">${l}</span><div class="cmp"><span class="d ${dhi}">${d}</span><span class="arr">→</span><span class="bk ${blo}">${b}</span></div></div>`;
+    };
+    el.innerHTML =
+      row('avg % in town', D.urb+'%', B.urb+'%') +
+      row('town-heavy (≥35%)', D.urbHeavy+'%', B.urbHeavy+'%') +
+      row('avg main-road %', D.art+'%', B.art+'%') +
+      row('avg curviness', D.curv, B.curv, false) +
+      row('avg countryness', D.ctry, B.ctry, false) +
+      row('rated good', D.good, B.good, false) +
+      row('rated bad', D.bad, B.bad) +
+      `<div class="stat"><span class="l">origins · no-route</span><div class="cmp"><span class="d">40</span><span class="arr">·</span><span class="bk">${D.noroute}/${B.noroute}</span></div></div>`;
+    document.getElementById('anchorName').textContent = DATASETS.default.anchor.name;
+    document.getElementById('briefLine').textContent = `${DATASETS.default.count} residential origins · default 90-min loop vs backroads (same starts)`;
+  })();
+
+  const grid=document.getElementById('grid');
+  function metricLine(r){ return isRouted(r)? [`curv ${r.curviness}`,`art ${r.arterialPct}%`,`loop ${r.loopiness}`].join('   ') : (r.status||'no route'); }
+  function render(){
+    const sort=document.getElementById('sort').value, filt=document.getElementById('filter').value;
+    let rs=ds().routes.slice();
+    if(filt==='mk') rs=rs.filter(r=>r.cluster==='mayfield_kennedy');
+    else if(filt==='reg') rs=rs.filter(r=>r.cluster==='regional');
+    else if(filt==='bad') rs=rs.filter(r=>verdict(r)==='bad');
+    rs.sort((a,b)=>{
+      if(isRouted(a)!==isRouted(b)) return isRouted(a)?1:-1;
+      if(sort==='art') return (b.urbanPct??-1)-(a.urbanPct??-1);
+      if(sort==='loop') return (a.loopiness??9)-(b.loopiness??9);
+      if(sort==='curv') return (a.curviness??9)-(b.curviness??9);
+      return a.label.localeCompare(b.label);
+    });
+    grid.innerHTML='';
+    for(const r of rs){
+      const v=verdict(r), card=document.createElement('div'); card.className=`card ${v}`;
+      const svg=isRouted(r)?routeSVG(r,212,150):`<svg viewBox="0 0 212 150"><text x="106" y="78" text-anchor="middle" fill="var(--muted)" font-size="12">no route</text></svg>`;
+      const fl=flags(r).map(([k,t,col])=>`<span class="chip ${k}" ${col?`style="background:${col};color:#fff"`:''}>${t}</span>`).join('');
+      card.innerHTML=`${svg}<div class="cap"><div class="row1"><span class="lbl">${r.label}</span><span class="dur">${r.durationMin?r.durationMin+'min · '+r.distanceKm+'km':''}</span></div><div class="metrics">${metricLine(r)}</div><div class="chips">${fl}</div></div>`;
+      card.onclick=()=>openModal(r.label);
+      grid.appendChild(card);
+    }
+  }
+  document.getElementById('sort').onchange=render;
+  document.getElementById('filter').onchange=render;
+  document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{
+    mode=b.dataset.mode; document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.toggle('on',x===b)); render();
+  });
+  render();
+
+  const modal=document.getElementById('modal');
+  function panel(set,r){
+    if(!isRouted(r)) return `<div><h4>${set==='default'?'Default loop':'Backroads'}</h4><svg viewBox="0 0 300 240"><text x="150" y="120" text-anchor="middle" fill="var(--muted)" font-size="13">no route (${r?r.status:'—'})</text></svg></div>`;
+    const mm=[`${r.durationMin} min · ${r.distanceKm} km`,`in town ${r.urbanPct}%   main-road ${r.arterialPct}%`,`curviness ${r.curviness}   countryness ${r.countryScore}`,`opens after ${r.introMin??0} min   U-turns ${r.uturns}`].join('<br>');
+    return `<div><h4>${set==='default'?'Default loop (no character)':'Backroads'}</h4>${routeSVG(r,300,240)}<div class="mm">${mm}</div></div>`;
+  }
+  function openModal(label){
+    const dr=DATASETS.default.routes.find(x=>x.label===label), br=DATASETS.backroads.routes.find(x=>x.label===label);
+    const anyDisc=[...(dr&&dr.disclosures||[]),...(br&&br.disclosures||[])];
+    document.getElementById('modalBody').innerHTML=
+      `<h3>${label}</h3> <span class="dur" style="font-family:var(--mono);color:var(--muted)">${dr&&dr.cluster==='mayfield_kennedy'?'Mayfield × Kennedy':'regional'} · ${dr?dr.lat+', '+dr.lng:''}</span>`+
+      `<div class="cmp2">${panel('default',dr)}${panel('backroads',br)}</div>`+
+      (anyDisc.length?`<p class="disc"><b>Planner said:</b> ${[...new Set(anyDisc)].join(' · ')}</p>`:'');
+    modal.hidden=false;
+  }
+  document.getElementById('modalClose').onclick=()=>modal.hidden=true;
+  modal.onclick=e=>{ if(e.target===modal) modal.hidden=true; };
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') modal.hidden=true; });
+</script>

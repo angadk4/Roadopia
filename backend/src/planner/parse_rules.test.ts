@@ -163,3 +163,54 @@ describe('parseRules — §3.5 soft-tension handling (best-effort, never a quest
     expect(pc.ambiguous_terms.some((t) => /midpoint/.test(t))).toBe(true);
   });
 });
+
+describe('location intents + backroads mapping (R18-4)', () => {
+  it('extracts "through <road>" without corrupting the origin capture', () => {
+    const pc = parseRules('2 hour loop from Caledon East through Forks of the Credit');
+    expect(pc.origin).not.toBeNull(); // Caledon East, not "Caledon East through …"
+    expect(pc.location_constraints).toEqual([{ kind: 'through', text: 'Forks of the Credit' }]);
+  });
+
+  it('via/along → through; past → near; clause breaks + non-places respected', () => {
+    const pc = parseRules(
+      'drive from Hamilton to Guelph via River Road, past Rockwood, with a coffee stop near the end',
+    );
+    expect(pc.destination).not.toBeNull();
+    expect(pc.location_constraints).toEqual([
+      { kind: 'through', text: 'River Road' },
+      { kind: 'near', text: 'Rockwood' },
+    ]);
+    // "near the end" is stop timing, never a place
+    expect(pc.stops.some((s) => s.at_fraction === 0.75)).toBe(true);
+  });
+
+  it('"along the lake" stays character, not a location constraint', () => {
+    const pc = parseRules('90 minute loop from Grimsby along the lake');
+    expect(pc.location_constraints).toEqual([]);
+    expect(pc.character).toContain('coastal');
+  });
+
+  it('"backroads" phrasing now reaches the backroads preset (the R18-3 probe gap)', () => {
+    expect(parseRules('90 minute backroads loop from Bolton').preset).toBe('backroads');
+    expect(parseRules('I only want country roads, loop from Erin').preset).toBe('backroads');
+    // explicit minimal-turns ask still wins
+    expect(parseRules('simple backroads loop from Erin').preset).toBe('simple');
+  });
+});
+
+describe('generic scenery is never a location (R18-4; reqset gold agrees)', () => {
+  it.each([
+    '2.5 hr loop from Cayuga through the countryside',
+    '90 min from Uxbridge through the forest tracts',
+    'loop from Elmira past the Mennonite farms',
+    'Grimsby loop through the vineyards and orchards',
+  ])('%s → no location constraint', (brief) => {
+    expect(parseRules(brief).location_constraints).toEqual([]);
+  });
+
+  it('the origin capture no longer swallows "through …" tails', () => {
+    const pc = parseRules('2.5 hr loop from Cayuga through the countryside');
+    expect(pc.origin).not.toBeNull();
+    expect(typeof pc.origin === 'string' ? pc.origin : 'resolved').not.toContain('through');
+  });
+});

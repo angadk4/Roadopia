@@ -1,0 +1,20 @@
+
+=== DEV (45 briefs) ===
+  llm repeat 1/3 done — spent $0.1696
+  llm repeat 2/3 done — spent $0.3393
+  llm repeat 3/3 done — spent $0.5088
+
+=== VAL (22 briefs) ===
+  llm repeat 1/3 done — spent $0.5973
+  llm repeat 2/3 done — spent $0.6860
+  llm repeat 3/3 done — spent $0.7699
+
+=== ADV (17 briefs) ===
+  llm repeat 1/3 done — spent $0.8401
+  llm repeat 2/3 done — spent $0.9104
+  llm repeat 3/3 done — spent $0.9802
+
+wrote eval/reports/parse-ablation.md
+manifest: C:\Coding Projects\Roadopia\eval\runs\gate-a-parse-ablation\manifest.json
+total spend: $0.9802 of $2
+DECISION: ADOPT LLM parser

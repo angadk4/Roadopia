@@ -3,6 +3,7 @@ import { validateParsedConstraints } from '@shared/types';
 import { describe, expect, it } from 'vitest';
 
 import { compareRoutes, describeComparison, type ComparableRoute } from './compare';
+import { parseRules } from './parse_rules';
 import { mergeConstraints, parseFollowUp, refineConstraints } from './refine';
 
 /** M5-T06 — REF fixtures: merge semantics per Protocol §17.1; AC "hard-constraint
@@ -187,5 +188,25 @@ describe('route comparison (M5-T06, §17.3 computed deltas)', () => {
     expect(text).toContain('+14 km');
     expect(text).toContain("adds Devil's Punchbowl Lookout");
     expect(text).toMatch(/keeps \d+% of the original roads/);
+  });
+});
+
+describe('through-intent refinement (R18-4)', () => {
+  it('"actually go through Hockley Valley" merges a through-constraint', () => {
+    const delta = parseFollowUp('actually go through Hockley Valley please');
+    expect(delta.recognized).toBe(true);
+    expect(delta.throughLocations).toEqual(['Hockley Valley']);
+    const base = parseRules('2 hour loop from Orangeville');
+    const { merged, changes } = mergeConstraints(base, delta);
+    expect(merged.location_constraints).toContainEqual({
+      kind: 'through',
+      text: 'Hockley Valley',
+    });
+    expect(changes).toContain('through "Hockley Valley"');
+    // idempotent: merging again adds nothing
+    const again = mergeConstraints(merged, delta);
+    expect(
+      again.merged.location_constraints.filter((lc) => lc.text === 'Hockley Valley'),
+    ).toHaveLength(1);
   });
 });

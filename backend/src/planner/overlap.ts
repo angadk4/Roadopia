@@ -34,6 +34,7 @@ function edgeKeys(geometry: LineString, cellM: number): string[] {
     geometry.coordinates.map(([lon, lat]) => [lon, lat] as LonLat),
     OVERLAP_RESAMPLE_M,
   );
+  if (pts.length < 2) return []; // degenerate geometry — no edges (R18-0 guard)
   const keys: string[] = [];
   let prev = cellKey(pts[0]!, cellM);
   for (let i = 1; i < pts.length; i++) {
@@ -141,17 +142,17 @@ export const SPUR_MIN_RUN = 3;
  * grace radius. 0 = clean; each event is one "in-and-spin-back" the driver
  * would feel.
  */
-export function spurEvents(
+export function spurPositions(
   geometry: LineString,
   origin?: { lat: number; lng: number },
   graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
   windowSteps: number = SPUR_WINDOW_STEPS,
-): number {
+): LonLat[] {
   const pts = resample(
     geometry.coordinates.map(([lon, lat]) => [lon, lat] as LonLat),
     SPUR_RESAMPLE_M,
   );
-  if (pts.length < 3) return 0;
+  if (pts.length < 3) return [];
 
   const latM = 111_320;
   const lngM = 111_320 * Math.cos((43.2 * Math.PI) / 180);
@@ -163,7 +164,7 @@ export function spurEvents(
   };
 
   const lastSeen = new Map<string, number>();
-  let events = 0;
+  const positions: LonLat[] = [];
   let run = 0;
   let counted = false;
   let prevKey = cellKey(pts[0]!, SPUR_CELL_M);
@@ -180,7 +181,7 @@ export function spurEvents(
     if (isRepeat) {
       run++;
       if (run >= SPUR_MIN_RUN && !counted) {
-        events++;
+        positions.push(pts[i]!); // where the spur bit (R18-2 repair aim)
         counted = true; // one event per contiguous run
       }
     } else {
@@ -192,7 +193,17 @@ export function spurEvents(
     prevKey = curKey;
     prevGrace = curGrace;
   }
-  return events;
+  return positions;
+}
+
+/** Count of spur events — .length of spurPositions (behavior-identical). */
+export function spurEvents(
+  geometry: LineString,
+  origin?: { lat: number; lng: number },
+  graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
+  windowSteps: number = SPUR_WINDOW_STEPS,
+): number {
+  return spurPositions(geometry, origin, graceRadiusM, windowSteps).length;
 }
 
 /**
@@ -203,17 +214,23 @@ export function spurEvents(
  * under its cap (5 doubled km on an 80 km loop is only 6 %); the ratio cannot
  * see contiguity, this can.
  */
-export function maxRetraceRunM(
+export interface RetraceRunInfo {
+  runM: number;
+  /** Midpoint [lng, lat] of the longest doubled run — the repair aim (R18-2). */
+  mid: LonLat | null;
+}
+
+export function maxRetraceRunInfo(
   geometry: LineString,
   cellM: number = OVERLAP_CELL_M,
   origin?: { lat: number; lng: number },
   graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
-): number {
+): RetraceRunInfo {
   const pts = resample(
     geometry.coordinates.map(([lon, lat]) => [lon, lat] as LonLat),
     OVERLAP_RESAMPLE_M,
   );
-  if (pts.length < 2) return 0;
+  if (pts.length < 2) return { runM: 0, mid: null };
 
   const latM = 111_320;
   const lngM = 111_320 * Math.cos((43.2 * Math.PI) / 180);
@@ -224,7 +241,7 @@ export function maxRetraceRunM(
     return Math.hypot(dx, dy) <= graceRadiusM;
   };
 
-  const steps: Array<{ key: string; graced: boolean }> = [];
+  const steps: Array<{ key: string; graced: boolean; pt: LonLat }> = [];
   let prevKey = cellKey(pts[0]!, cellM);
   let prevGrace = inGrace(pts[0]!);
   for (let i = 1; i < pts.length; i++) {
@@ -234,6 +251,7 @@ export function maxRetraceRunM(
       steps.push({
         key: prevKey < curKey ? `${prevKey}|${curKey}` : `${curKey}|${prevKey}`,
         graced: prevGrace && curGrace,
+        pt: pts[i]!,
       });
       prevKey = curKey;
       prevGrace = curGrace;
@@ -243,16 +261,32 @@ export function maxRetraceRunM(
   for (const s of steps) counts.set(s.key, (counts.get(s.key) ?? 0) + 1);
 
   let best = 0;
+  let bestEnd = -1;
   let run = 0;
-  for (const s of steps) {
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i]!;
     if (!s.graced && counts.get(s.key)! > 1) {
       run++;
-      if (run > best) best = run;
+      if (run > best) {
+        best = run;
+        bestEnd = i;
+      }
     } else {
       run = 0;
     }
   }
-  return best * cellM;
+  const mid = bestEnd >= 0 ? steps[Math.max(0, bestEnd - Math.floor(best / 2))]!.pt : null;
+  return { runM: best * cellM, mid };
+}
+
+/** Longest contiguous doubled run in metres (see maxRetraceRunInfo). */
+export function maxRetraceRunM(
+  geometry: LineString,
+  cellM: number = OVERLAP_CELL_M,
+  origin?: { lat: number; lng: number },
+  graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
+): number {
+  return maxRetraceRunInfo(geometry, cellM, origin, graceRadiusM).runM;
 }
 
 /** Fraction of ρ1's edge-steps that also appear in ρ2 (asymmetric; use max for pairs). */
@@ -377,4 +411,231 @@ export function microloopEvents(
   graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
 ): number {
   return microloopPositions(geometry, origin, graceRadiusM).length;
+}
+
+// --- R18-0 essence metrics (report-only until gated in later units) ---------
+
+/**
+ * Curvy share (R18-0): fraction of the route's resampled points lying within
+ * CURVY_MATCH_RADIUS_M of the retrieved curvy-segment set — the roads we CHOSE.
+ * This is the audit's forced-vs-free number as a per-route metric: today's
+ * routes measure ~3-10 %; the chain generator (R18-3) exists to raise it.
+ *
+ * The predicate is EXACT point distance; the cell hash is only an accelerator
+ * (adversarial finding 2026-07-16: cell-EDGE matching was resample-phase-
+ * dependent — driving 98 % of a diagonal road could measure 0.33). Known,
+ * accepted floor: a route CROSSING a segment earns the few points inside the
+ * radius (~0.2 pp per crossing on an 80 km loop) — documented, not gated.
+ */
+export const CURVY_MATCH_RADIUS_M = 90;
+
+export function curvyShareOf(
+  geometry: LineString,
+  segments: ReadonlyArray<{ geometry: LineString }>,
+): number | null {
+  const routePts = resample(
+    geometry.coordinates.map(([lon, lat]) => [lon, lat] as LonLat),
+    OVERLAP_RESAMPLE_M,
+  );
+  if (routePts.length < 2) return null;
+  const latM = 111_320;
+  const lngM = 111_320 * Math.cos((43.2 * Math.PI) / 180);
+  // hash segment points at OVERLAP_CELL_M; ±1-cell reach covers the radius
+  // exactly because CURVY_MATCH_RADIUS_M < OVERLAP_CELL_M (guarantee, not tune)
+  const segCells = new Map<string, LonLat[]>();
+  for (const s of segments) {
+    const coords = s.geometry.coordinates;
+    if (coords.length < 2) continue; // degenerate DB geometry — skip, never throw
+    for (const p of resample(
+      coords.map(([lon, lat]) => [lon, lat] as LonLat),
+      OVERLAP_RESAMPLE_M,
+    )) {
+      const cx = Math.round((p[0] * lngM) / OVERLAP_CELL_M);
+      const cy = Math.round((p[1] * latM) / OVERLAP_CELL_M);
+      const key = `${cx}:${cy}`;
+      let list = segCells.get(key);
+      if (!list) {
+        list = [];
+        segCells.set(key, list);
+      }
+      list.push(p);
+    }
+  }
+  if (segCells.size === 0) return 0;
+
+  let onCurvy = 0;
+  for (const p of routePts) {
+    const cx = Math.round((p[0] * lngM) / OVERLAP_CELL_M);
+    const cy = Math.round((p[1] * latM) / OVERLAP_CELL_M);
+    let hit = false;
+    for (let ix = cx - 1; ix <= cx + 1 && !hit; ix++) {
+      for (let iy = cy - 1; iy <= cy + 1 && !hit; iy++) {
+        const list = segCells.get(`${ix}:${iy}`);
+        if (!list) continue;
+        for (const q of list) {
+          const dx = (p[0] - q[0]) * lngM;
+          const dy = (p[1] - q[1]) * latM;
+          if (dx * dx + dy * dy <= CURVY_MATCH_RADIUS_M * CURVY_MATCH_RADIUS_M) {
+            hit = true;
+            break;
+          }
+        }
+      }
+    }
+    if (hit) onCurvy++;
+  }
+  return onCurvy / routePts.length;
+}
+
+/**
+ * Loopiness (R18-0): isoperimetric quotient 4πA/P² of the CLOSED route polygon
+ * (first→last vertex closed). A perfect circle scores 1; a thin out-and-back —
+ * including the parallel-corridor variant every other detector misses —
+ * encloses ~no area and scores ~0. Blunt by design: the shape-level catchall
+ * for "doesn't look like a loop". Uses the module's fixed planar scaling.
+ *
+ * VALIDITY: loops only. On open A→B geometry the closing chord makes the
+ * number meaningless (a C-shaped arc reads like a real loop) — do not consume
+ * it outside closed-loop contexts. KNOWN CAVEAT (adversarial finding
+ * 2026-07-16): the signed shoelace lets a figure-8's opposite-winding lobes
+ * cancel — a legitimate pretzel loop can read ~0. Report-only + p20-aggregated,
+ * so a rare crossed best cannot move the scoreboard; revisit only if gating.
+ */
+export function loopiness(geometry: LineString): number | null {
+  const pts = resample(
+    geometry.coordinates.map(([lon, lat]) => [lon, lat] as LonLat),
+    OVERLAP_RESAMPLE_M,
+  );
+  if (pts.length < 3) return null;
+  const latM = 111_320;
+  const lngM = 111_320 * Math.cos((43.2 * Math.PI) / 180);
+  let area2 = 0; // shoelace ×2, planar metres
+  let perimeter = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i]!;
+    const b = pts[(i + 1) % pts.length]!; // wraps: closes first→last
+    area2 += a[0] * lngM * (b[1] * latM) - b[0] * lngM * (a[1] * latM);
+    perimeter += Math.hypot((b[0] - a[0]) * lngM, (b[1] - a[1]) * latM);
+  }
+  if (perimeter === 0) return null;
+  return (4 * Math.PI * Math.abs(area2 / 2)) / (perimeter * perimeter);
+}
+
+/**
+ * Directed corridor doubling (R18-0): out-on-X-back-on-parallel-Y detection.
+ * The 120 m undirected grid cannot see two arterials one block apart; this
+ * counts a step as doubled when an earlier step ran the OPPOSITE way (>135°
+ * bearing difference) within CORRIDOR_LATERAL_M **exact distance** at
+ * ≥ CORRIDOR_MIN_SEPARATION_M along-route separation. The hash grid is only
+ * an accelerator — the predicate is exact, so identical shapes measure
+ * identically regardless of grid phase (adversarial finding 2026-07-16: the
+ * cell-membership version scored the same 500 m-apart pair 0.909 or 0
+ * depending on where the grid fell).
+ *
+ * Known, accepted floors (report-only; thresholds calibrated on the corpus
+ * before any gating): a single legitimate shallow self-crossing flags a
+ * ~2·CORRIDOR_LATERAL_M band on both legs (~2-4 % of a long loop); a deep
+ * switchback stack (≥4 legs) can pair its outermost legs (~a few %). A real
+ * corridor out-and-back measures an order of magnitude above both. Origin
+ * grace applies as everywhere.
+ */
+export const CORRIDOR_LATERAL_M = 350;
+export const CORRIDOR_MIN_SEPARATION_M = 2_000;
+const CORRIDOR_OPPOSE_DEG = 135;
+/** Hash cell for the accelerator: > CORRIDOR_LATERAL_M so ±1-cell reach is a
+ *  guarantee ((cell/2 + lateral)/cell < 1.5), never a tuning knob. */
+const CORRIDOR_HASH_CELL_M = 400;
+
+export function corridorDoublingRatio(
+  geometry: LineString,
+  origin?: { lat: number; lng: number },
+  graceRadiusM: number = ORIGIN_GRACE_RADIUS_M,
+): number | null {
+  const pts = resample(
+    geometry.coordinates.map(([lon, lat]) => [lon, lat] as LonLat),
+    OVERLAP_RESAMPLE_M,
+  );
+  if (pts.length < 3) return null;
+  const latM = 111_320;
+  const lngM = 111_320 * Math.cos((43.2 * Math.PI) / 180);
+  const inGrace = (p: LonLat): boolean => {
+    if (!origin) return false;
+    const dx = (p[0] - origin.lng) * lngM;
+    const dy = (p[1] - origin.lat) * latM;
+    return Math.hypot(dx, dy) <= graceRadiusM;
+  };
+
+  interface Step {
+    x: number; // planar metres (midpoint)
+    y: number;
+    bearing: number; // degrees [0,360)
+    alongM: number;
+    graced: boolean;
+  }
+  // steps between consecutive resampled points (~OVERLAP_RESAMPLE_M each)
+  const byCell = new Map<string, Step[]>();
+  const steps: Step[] = [];
+  let alongM = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const dx = (b[0] - a[0]) * lngM;
+    const dy = (b[1] - a[1]) * latM;
+    const stepLen = Math.hypot(dx, dy);
+    alongM += stepLen;
+    if (stepLen === 0) continue;
+    const bearing = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+    const mid: LonLat = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const s: Step = {
+      x: mid[0] * lngM,
+      y: mid[1] * latM,
+      bearing,
+      alongM,
+      graced: inGrace(mid),
+    };
+    steps.push(s);
+    const key = `${Math.round(s.x / CORRIDOR_HASH_CELL_M)}:${Math.round(s.y / CORRIDOR_HASH_CELL_M)}`;
+    let list = byCell.get(key);
+    if (!list) {
+      list = [];
+      byCell.set(key, list);
+    }
+    list.push(s);
+  }
+  if (steps.length === 0) return null;
+
+  const opposes = (a: number, b: number): boolean => {
+    const d = Math.abs(a - b) % 360;
+    return Math.min(d, 360 - d) > CORRIDOR_OPPOSE_DEG;
+  };
+  const lateral2 = CORRIDOR_LATERAL_M * CORRIDOR_LATERAL_M;
+
+  let doubled = 0;
+  for (const s of steps) {
+    if (s.graced) continue;
+    const cx = Math.round(s.x / CORRIDOR_HASH_CELL_M);
+    const cy = Math.round(s.y / CORRIDOR_HASH_CELL_M);
+    let hit = false;
+    for (let ix = cx - 1; ix <= cx + 1 && !hit; ix++) {
+      for (let iy = cy - 1; iy <= cy + 1 && !hit; iy++) {
+        const list = byCell.get(`${ix}:${iy}`);
+        if (!list) continue;
+        for (const other of list) {
+          if (other === s || other.graced) continue;
+          const ddx = other.x - s.x;
+          const ddy = other.y - s.y;
+          if (
+            ddx * ddx + ddy * ddy <= lateral2 && // EXACT lateral distance
+            Math.abs(other.alongM - s.alongM) >= CORRIDOR_MIN_SEPARATION_M &&
+            opposes(other.bearing, s.bearing)
+          ) {
+            hit = true;
+            break;
+          }
+        }
+      }
+    }
+    if (hit) doubled++;
+  }
+  return doubled / steps.length;
 }

@@ -126,5 +126,8 @@ export function okPlannerResult(events: GenerationEvent[] = []): PlannerResult {
     alternates: [],
     stops: [],
     waypoints: [],
+    countryScore: null,
+    arterialShare: null,
+    urbanShare: null,
   };
 }

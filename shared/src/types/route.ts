@@ -160,6 +160,19 @@ export const RouteSchema = z.object({
   satisfied_constraints: z.array(ConstraintResultSchema).nullable().optional(),
   /** Real, timed stops (R16-3). Default [] keeps pre-R16 rows valid. */
   stops: z.array(RouteStopSchema).default([]),
+  /** MEASURED road-class honesty metrics (R18-1): length-weighted countryness
+   *  0..1 and arterial share 0..1 of the routed result. Nullable-optional —
+   *  null/absent = trace unavailable (unknown, never claimed). These are
+   *  road-CLASS measurements, NOT a scenic score (Hard rule C untouched). */
+  urban_share: z
+    .number()
+    .min(0)
+    .max(1)
+    .nullable()
+    .optional()
+    .describe('R19: measured urban-context share (0 = countryside) — honesty metric, not a score'),
+  country_score: z.number().min(0).max(1).nullable().optional(),
+  arterial_share: z.number().min(0).max(1).nullable().optional(),
   agent_explanation: z.string().nullable().optional(),
 });
 export type Route = z.infer<typeof RouteSchema>;

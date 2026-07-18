@@ -19,7 +19,11 @@ import type {
 } from '@shared/types';
 
 import { EPSILON_CLOSURE_M, SELF_OVERLAP_CAP } from './loop';
+import { AVOID_DISC_RADIUS_M, type ResolvedLocation } from './resolve_locations';
 import type { ResolvedStop, StopCoverage } from './stops';
+
+// re-exported so the row detail and the generation filter agree by construction
+export { AVOID_DISC_RADIUS_M };
 
 // frozen M4-T12 (was 0.1): p80 of the frozen config's |dur err| across DEV+VAL —
 // §21 "the band where most feasible routes land"; misses beyond it disclose.
@@ -32,6 +36,11 @@ export const DURATION_TOLERANCE_DEFAULT = 0.2;
 // vocabulary (0.25/0.5/0.75) makes neighbouring chips just-distinguishable at
 // this width. Soft (Tier 3): misses disclose the actual %, never fail the route.
 export const STOP_TIMING_TOLERANCE = 0.2;
+
+// R18-4 location-intent verdict bars (measured on routed geometry)
+export const VIA_MATCH_RADIUS_M = 30;
+export const VIA_COVERAGE_MIN = 0.6;
+export const NEAR_MAX_DIST_M = 2_000;
 
 // Single source of truth moved to shared at M7-T05 (the client constraints
 // panel renders these rows); re-exported so existing backend imports hold.
@@ -50,6 +59,10 @@ export interface ValidationInput {
   stops: ResolvedStop[];
   /** Tier-2 constraints the relaxation ladder has already relaxed (disclosed). */
   relaxedConstraints?: string[];
+  /** R18-4: resolved location intents — measured verdicts replace the blanket
+   *  relaxed rows when provided (run.ts passes them; older callers fall back
+   *  to the honest blanket). */
+  resolvedLocations?: readonly ResolvedLocation[];
 }
 
 export interface ValidationVerdict {
@@ -147,6 +160,142 @@ export function validateCandidate(
       tier: 2,
       status,
       detail: `${c.included}/${c.requested} requested ${c.type} stops included`,
+    });
+  }
+
+  // --- Tier 2: location intents (R18-4) — NEVER silently ignored. With
+  // resolutions provided, verdicts are MEASURED on the routed geometry:
+  //   via_<slug>        ≥ 60 % of the named road's vertices within 30 m of
+  //                     the route = the drive really drives it;
+  //   near_<slug>       route passes within 2 km of the place;
+  //   avoid_area_<slug> route stays outside the keep-away disc (v1 renders a
+  //                     miss as RELAXED with the measured distance — the
+  //                     dedicated ladder rung upgrades this to violated later).
+  // Unresolved/out-of-reach intents disclose honestly as relaxed. Callers
+  // without resolutions get the blanket honest rows.
+  const routeCoords = route.geometry.coordinates as Array<[number, number]>;
+  const mPerDegLat = 111_320;
+  const mPerDegLng = (lat: number): number => 111_320 * Math.cos((lat * Math.PI) / 180);
+  const minDistToRouteM = (lng: number, lat: number): number => {
+    const kx = mPerDegLng(lat);
+    let best = Infinity;
+    for (const [cLng, cLat] of routeCoords) {
+      const d = Math.hypot((cLng - lng) * kx, (cLat - lat) * mPerDegLat);
+      if (d < best) best = d;
+    }
+    return best;
+  };
+  if (input.resolvedLocations !== undefined) {
+    for (const r of input.resolvedLocations) {
+      if (!r.applied || r.resolution.kind === 'unresolved') {
+        results.push({
+          constraint: r.slug,
+          tier: 2,
+          status: 'relaxed',
+          detail: r.disclosure ?? `"${r.constraint.kind} ${r.constraint.text}" — not applied`,
+        });
+        continue;
+      }
+      if (r.constraint.kind === 'avoid') {
+        const p =
+          r.resolution.kind === 'town'
+            ? r.resolution.point
+            : (() => {
+                const c =
+                  r.resolution.kind === 'road'
+                    ? r.resolution.segment.geometry.coordinates[
+                        Math.floor(r.resolution.segment.geometry.coordinates.length / 2)
+                      ]!
+                    : [0, 0];
+                return { lat: c[1]!, lng: c[0]! };
+              })();
+        const dM = minDistToRouteM(p.lng, p.lat);
+        const clear = dM > AVOID_DISC_RADIUS_M;
+        results.push({
+          constraint: r.slug,
+          tier: 2,
+          status: clear ? 'satisfied' : 'relaxed',
+          detail: clear
+            ? `route stays ${(dM / 1000).toFixed(1)} km clear of ${r.constraint.text}`
+            : `route passes ${(dM / 1000).toFixed(1)} km from ${r.constraint.text} (asked to avoid; disc ${AVOID_DISC_RADIUS_M / 1000} km)`,
+        });
+        continue;
+      }
+      if (r.resolution.kind === 'road' && r.constraint.kind === 'near') {
+        // proximity intent about a road: measure distance, not traversal
+        const c =
+          r.resolution.segment.geometry.coordinates[
+            Math.floor(r.resolution.segment.geometry.coordinates.length / 2)
+          ]!;
+        const dM = minDistToRouteM(c[0]!, c[1]!);
+        const ok = dM <= NEAR_MAX_DIST_M;
+        results.push({
+          constraint: r.slug,
+          tier: 2,
+          status: ok ? 'satisfied' : 'relaxed',
+          detail: ok
+            ? `route passes ${(dM / 1000).toFixed(1)} km from ${r.resolution.segment.name}`
+            : `route stays ${(dM / 1000).toFixed(1)} km from ${r.resolution.segment.name} (bar ${NEAR_MAX_DIST_M / 1000} km)`,
+        });
+        continue;
+      }
+      if (r.resolution.kind === 'road') {
+        const verts = r.resolution.segment.geometry.coordinates as Array<[number, number]>;
+        let within = 0;
+        for (const [vLng, vLat] of verts) {
+          if (minDistToRouteM(vLng, vLat) <= VIA_MATCH_RADIUS_M) within += 1;
+        }
+        const coverage = verts.length > 0 ? within / verts.length : 0;
+        const ok = coverage >= VIA_COVERAGE_MIN;
+        results.push({
+          constraint: r.slug,
+          tier: 2,
+          status: ok ? 'satisfied' : 'relaxed',
+          detail: ok
+            ? `drives ${(coverage * 100).toFixed(0)} % of ${r.resolution.segment.name}`
+            : `only ${(coverage * 100).toFixed(0)} % of ${r.resolution.segment.name} is on the route (bar ${VIA_COVERAGE_MIN * 100} %)`,
+        });
+        continue;
+      }
+      // town near/through: proximity is the honest measure
+      const dM = minDistToRouteM(r.resolution.point.lng, r.resolution.point.lat);
+      const ok = dM <= NEAR_MAX_DIST_M;
+      results.push({
+        constraint: r.slug,
+        tier: 2,
+        status: ok ? 'satisfied' : 'relaxed',
+        detail: ok
+          ? `route passes ${(dM / 1000).toFixed(1)} km from ${r.constraint.text}`
+          : `route stays ${(dM / 1000).toFixed(1)} km from ${r.constraint.text} (bar ${NEAR_MAX_DIST_M / 1000} km)`,
+      });
+    }
+  } else {
+    for (const lc of constraints.location_constraints) {
+      const slug = lc.text
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      const prefix = lc.kind === 'through' ? 'via' : lc.kind === 'avoid' ? 'avoid_area' : 'near';
+      results.push({
+        constraint: `${prefix}_${slug}`,
+        tier: 2,
+        status: 'relaxed',
+        detail: `"${lc.kind} ${lc.text}" — location intent not yet wired to routing; it did not shape this drive`,
+      });
+    }
+  }
+
+  // --- Tier 3 (soft): distance target (R18-4 — consumed, measured, honest) ---
+  if (constraints.distance_target_m !== null) {
+    const err =
+      Math.abs(route.distance_m - constraints.distance_target_m) / constraints.distance_target_m;
+    results.push({
+      constraint: 'distance',
+      tier: 3,
+      status: err <= durationTolerance ? 'satisfied' : 'relaxed',
+      detail: `distance ${(route.distance_m / 1000).toFixed(1)} km vs target ${(
+        constraints.distance_target_m / 1000
+      ).toFixed(0)} km (${(err * 100).toFixed(0)} % err)`,
     });
   }
 

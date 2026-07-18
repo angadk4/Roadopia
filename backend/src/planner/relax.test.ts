@@ -72,11 +72,24 @@ describe('nextRelaxation ladder (M3-T12)', () => {
     expect(p3.dropNiceToHaveStops).toBe(true);
 
     // rung 4: hard relaxations ONE per attempt, most-explicit (highways) LAST
-    const relaxLabels = retries
-      .map((r) => (r as { params: { relaxedConstraints: string[] } }).params.relaxedConstraints)
-      .map((list) => list[list.length - 1])
-      .filter(Boolean);
+    // (collect labels only when the list GREW — the rung-5 retry repeats it)
+    const relaxLabels: string[] = [];
+    let prevLen = 0;
+    for (const r of retries) {
+      const list = (r as { params: { relaxedConstraints: string[] } }).params.relaxedConstraints;
+      if (list.length > prevLen) relaxLabels.push(list[list.length - 1]!);
+      prevLen = list.length;
+    }
     expect(relaxLabels).toEqual(['avoid_unpaved', 'avoid_toll', 'avoid_highway']);
+
+    // rung 5 (R18-2): assembly-relax is the LAST retry before redirect
+    const lastRetry = retries[retries.length - 1] as {
+      params: { assemblyRelax: boolean; disclosures: string[] };
+    };
+    expect(lastRetry.params.assemblyRelax).toBe(true);
+    expect(lastRetry.params.disclosures[lastRetry.params.disclosures.length - 1]).toMatch(
+      /loop-quality limits/,
+    );
 
     // final: redirect with the full disclosure trail
     expect(last.kind).toBe('redirect');
@@ -98,13 +111,32 @@ describe('nextRelaxation ladder (M3-T12)', () => {
     }
   });
 
-  it('no avoid set ⇒ rung 4 is skipped straight to redirect (truly impossible case)', () => {
+  it('no avoid set ⇒ rung 4 skipped; assembly-relax still runs before redirect (R18-2)', () => {
     const outcomes = climbAll(
       constraints({ avoid: { highways: false, tolls: false, ferries: false, unpaved: false } }),
     );
-    // widen, lower θ, soften = 3 retries, then redirect (no hard constraint to relax)
-    expect(outcomes.filter((o) => o.kind === 'retry')).toHaveLength(3);
+    // widen, lower θ, soften, assembly-relax = 4 retries, then redirect
+    const retries = outcomes.filter((o) => o.kind === 'retry');
+    expect(retries).toHaveLength(4);
+    expect((retries[3] as { params: { assemblyRelax: boolean } }).params.assemblyRelax).toBe(true);
     expect(outcomes[outcomes.length - 1]!.kind).toBe('redirect');
+  });
+
+  it('R18-2 fast-forward: a zero-assembled iteration at rung ≥ 2 jumps to assembly-relax', () => {
+    let params = initialParams(constraints());
+    // climb one rung normally (rung 1 → widen)
+    const first = nextRelaxation(params, { assembledCount: 5 });
+    expect(first.kind).toBe('retry');
+    if (first.kind !== 'retry') return;
+    params = first.params;
+    // pool died at Wall A → skip rungs 2-4 entirely
+    const jumped = nextRelaxation(params, { assembledCount: 0 });
+    expect(jumped.kind).toBe('retry');
+    if (jumped.kind === 'retry') {
+      expect(jumped.params.assemblyRelax).toBe(true);
+      // θ untouched — rungs 2-4 were bypassed, not silently applied
+      expect(jumped.params.thetaCurvy).toBe(params.thetaCurvy);
+    }
   });
 
   it('θ never drops below the floor; τ never exceeds 2×', () => {

@@ -2,7 +2,18 @@ import type { RouteThroughOutput } from '@shared/types';
 import { describe, expect, it } from 'vitest';
 
 import { weightsForPreset, PRESET_WEIGHTS } from './presets';
-import { curvFit, durFit, mergeWeights, scoreCandidate, DEFAULT_WEIGHTS } from './score';
+import {
+  ARTERIAL_PRESENT_PENALTY,
+  dirtyPenaltyOf,
+  DURATION_GRADE_MAX,
+  fallbackOffenceUnits,
+  PRESENT_TIER_DUROFF,
+  curvFit,
+  durFit,
+  mergeWeights,
+  scoreCandidate,
+  DEFAULT_WEIGHTS,
+} from './score';
 
 /**
  * M3-T10 — deterministic scoring: monotonic responsiveness (raising a weight moves
@@ -116,6 +127,61 @@ describe('presets (M3-T10 AC)', () => {
 
   it("R16-4: 'simple' is BYTE-IDENTICAL to chill's frozen vector (relabel, no new science)", () => {
     expect(weightsForPreset('simple')).toEqual(weightsForPreset('chill'));
+  });
+
+  it('R18-2 tier-order property: clean+on > clean+off > dirty+on > dirty+off for ALL grades', () => {
+    // presentKey = score − dirtyPenaltyOf − (durOff ? TIER_DUROFF : 0) −
+    // durGrade − arterial(2). This property FAILED under the historical 5/10
+    // encodings once the R18 grades stacked (score spread 1.35 + durGrade 2 +
+    // arterial 2 + dirty grade 4.5 ≈ 10 > 5) — the tier bases are now 100/200
+    // so no combination of within-tier grades can ever cross a tier boundary.
+    const SCORE_FLOOR = -0.5; // below any reachable scalar score
+    const worst = (dirty: boolean, durOff: boolean): number =>
+      SCORE_FLOOR -
+      dirtyPenaltyOf(dirty, 1000) - // grade caps at TIER_DIRTY + 4.5
+      (durOff ? PRESENT_TIER_DUROFF : 0) -
+      DURATION_GRADE_MAX -
+      ARTERIAL_PRESENT_PENALTY;
+    const bestOf = (dirty: boolean, durOff: boolean): number =>
+      1 -
+      dirtyPenaltyOf(dirty, 0) -
+      (durOff ? PRESENT_TIER_DUROFF : 0) -
+      (durOff ? DURATION_GRADE_MAX : 0); // off-target always carries the capped grade
+    expect(worst(false, false)).toBeGreaterThan(bestOf(false, true));
+    expect(worst(false, true)).toBeGreaterThan(bestOf(true, false));
+    expect(worst(true, false)).toBeGreaterThan(bestOf(true, true));
+  });
+
+  it('R18-2 fallbackOffenceUnits: graded, unknown-is-dirty, least-offence orders correctly', () => {
+    const base = {
+      uturns: 0,
+      microloops: 0,
+      spursWide: 0,
+      selfOverlap: 0.05,
+      retraceRunM: 0,
+      residentialShare: 0.02 as number | null,
+      residentialRunM: 100 as number | null,
+      traceNull: false,
+    };
+    expect(fallbackOffenceUnits(base)).toBe(0); // everything under soft caps
+    expect(fallbackOffenceUnits({ ...base, uturns: 1 })).toBe(1);
+    expect(
+      fallbackOffenceUnits({
+        ...base,
+        traceNull: true,
+        residentialShare: null,
+        residentialRunM: null,
+      }),
+    ).toBe(0.5);
+    // one u-turn < u-turn + spur + 2.2 km retrace (the BD-56 pass-through case)
+    const single = fallbackOffenceUnits({ ...base, uturns: 1 });
+    const multi = fallbackOffenceUnits({ ...base, uturns: 1, spursWide: 1, retraceRunM: 2200 });
+    expect(single).toBeLessThan(multi);
+    // dirtyPenaltyOf: graded within tier, capped below the next tier boundary
+    expect(dirtyPenaltyOf(false, 99)).toBe(0);
+    expect(dirtyPenaltyOf(true, 0)).toBe(200);
+    expect(dirtyPenaltyOf(true, 1)).toBe(201.5);
+    expect(dirtyPenaltyOf(true, 99)).toBe(204.5); // cap: TIER + 4.5
   });
 
   it('mergeWeights honours §30 keys only and ignores junk', () => {

@@ -52,8 +52,23 @@ export interface WaypointCandidate {
   /** Anchored stops — one entry per included spot, typed + index-tracked
    *  (R16-3; replaces the old type-blind single spotIds). */
   stops: CandidateStop[];
+  /** Chained traversal spans (R18-3) — segment identity per forced span so
+   *  repair can move/drop spans ATOMICALLY (never leave a dangling endpoint).
+   *  start/endIndex point into `waypoints`, maintained like stops[] indices.
+   *  Legacy candidates carry []. */
+  spans?: CandidateSpanRef[];
   /** Σ length·curviness of the backing cluster — the deterministic rank key. */
   clusterWeight: number;
+}
+
+/** One forced traversal span on a chain candidate (R18-3). */
+export interface CandidateSpanRef {
+  segmentId: string;
+  startIndex: number;
+  endIndex: number;
+  /** R18-4: a user-intent span ("through Forks of the Credit") — repair may
+   *  NEVER move or drop it; presentation may only disclose. */
+  pinned?: boolean;
 }
 
 /** One anchored stop on a candidate (R16-3). waypointIndex points into
@@ -117,7 +132,14 @@ export function countryClassFactor(highway: string): number {
 
 /** Deterministic rank value of a segment: curviness · length · class factor. */
 function segValue(seg: CandidateSegment): number {
-  return seg.curviness * seg.lengthM * countryClassFactor(seg.highway);
+  // R19: town-context material is LAST-RESORT (refilled only when the area is
+  // thin) — a curvy subdivision collector must never outrank a country road
+  return (
+    seg.curviness *
+    seg.lengthM *
+    countryClassFactor(seg.highway) *
+    (1 - 0.7 * (seg.urbanShare ?? 0))
+  );
 }
 
 /**
@@ -195,6 +217,51 @@ export function clusterSegments(
   return clusters;
 }
 
+/** Vertex nearest a cumulative-length fraction along the segment — a real
+ *  on-road point (owner round 2: off-road points snap badly). Module-scope +
+ *  exported since R18-3 (the chain generator and pinned spans reuse it). */
+export function vertexAt(seg: CandidateSegment, fraction: number): LatLng {
+  const coords = seg.geometry.coordinates;
+  let total = 0;
+  const cum: number[] = [0];
+  for (let i = 1; i < coords.length; i++) {
+    total += haversineMeters(coords[i - 1]! as [number, number], coords[i]! as [number, number]);
+    cum.push(total);
+  }
+  const target = total * fraction;
+  let bestIdx = 0;
+  let bestDelta = Infinity;
+  for (let i = 0; i < cum.length; i++) {
+    const d = Math.abs(cum[i]! - target);
+    if (d < bestDelta) {
+      bestDelta = d;
+      bestIdx = i;
+    }
+  }
+  const [lng, lat] = coords[bestIdx]!;
+  return { lat, lng };
+}
+
+/**
+ * Traversal span: INSET vertices (~12 % / 88 % along the road), NOT the tips
+ * (owner round 5: forcing the literal end vertex made routes drive to the tip
+ * and double back — the "enter and spin right back" spurs). The twisty middle
+ * is still fully driven; the ends flex to natural junctions.
+ */
+export const TRAVERSAL_INSET = 0.12;
+export function traversalSpanOf(seg: CandidateSegment): [LatLng, LatLng] {
+  return [vertexAt(seg, TRAVERSAL_INSET), vertexAt(seg, 1 - TRAVERSAL_INSET)];
+}
+
+/**
+ * Short segments get ONE touch at a tip. Mid-vertex touches were tried
+ * (round 5) and CAUSED the very retraces they aimed to prevent (self_overlap
+ * rejections exploded, pools collapsed 19→2). A tip touch just clips the corner.
+ */
+export function tipOf(seg: CandidateSegment): LatLng {
+  return vertexAt(seg, 0);
+}
+
 export interface GenerateOptions {
   nCandidates?: number;
   nSectors?: number;
@@ -221,6 +288,13 @@ export interface GenerateOptions {
   anchorPoints?: LatLng[];
   /** Candidate-id prefix — keeps ids collision-free when passes merge (resize). */
   idPrefix?: string;
+  /** R18-4 location intents — "through <road>": whole-road segments whose
+   *  traversal span is FORCED into every candidate (pinned span record;
+   *  repair-immune). */
+  pinnedSpans?: readonly CandidateSegment[];
+  /** R18-4 — "near <town>": points forced into every candidate's sweep
+   *  (caller anchor-snaps; never raw off-road centroids — round-2 lesson). */
+  pinnedPoints?: readonly LatLng[];
 }
 
 /**
@@ -446,51 +520,8 @@ export function generateLoopCandidates(
   // NOTE (SPK-15 run 14, tried + REVERTED): keying the return-anchor distance to
   // the duration budget forced every candidate onto the same far ring — curviness
   // collapsed ~35 % and self-overlap rejections exploded. Cluster-keyed anchors
-  // stay; long-budget-in-dense-area remains an M4 calibration item (multi-cluster
-  // chains are the promising lever, not far anchors).
-  /** Vertex nearest a cumulative-length fraction along the segment — a real
-   *  on-road point (owner round 2: off-road points snap badly). */
-  const vertexAt = (seg: CandidateSegment, fraction: number): LatLng => {
-    const coords = seg.geometry.coordinates;
-    let total = 0;
-    const cum: number[] = [0];
-    for (let i = 1; i < coords.length; i++) {
-      total += haversineMeters(coords[i - 1]! as [number, number], coords[i]! as [number, number]);
-      cum.push(total);
-    }
-    const target = total * fraction;
-    let bestIdx = 0;
-    let bestDelta = Infinity;
-    for (let i = 0; i < cum.length; i++) {
-      const d = Math.abs(cum[i]! - target);
-      if (d < bestDelta) {
-        bestDelta = d;
-        bestIdx = i;
-      }
-    }
-    const [lng, lat] = coords[bestIdx]!;
-    return { lat, lng };
-  };
-  /**
-   * Traversal span: INSET vertices (~12 % / 88 % along the road), NOT the tips
-   * (owner round 5: forcing the literal end vertex made routes drive to the
-   * tip and double back when the natural connector leaves earlier — the
-   * "enter and spin right back" spurs). The twisty middle is still fully
-   * driven; the ends flex to natural junctions.
-   */
-  const TRAVERSAL_INSET = 0.12;
-  const traversalSpanOf = (seg: CandidateSegment): [LatLng, LatLng] => [
-    vertexAt(seg, TRAVERSAL_INSET),
-    vertexAt(seg, 1 - TRAVERSAL_INSET),
-  ];
-  /**
-   * Short segments get ONE touch at a tip. Mid-vertex touches were tried
-   * (round 5) and CAUSED the very retraces they aimed to prevent: forcing the
-   * middle of a road whose through-path passes its tips = drive in to the
-   * midpoint and back out the same way (self_overlap rejections exploded,
-   * pools collapsed 19→2). A tip touch just clips the corner.
-   */
-  const tipOf = (seg: CandidateSegment): LatLng => vertexAt(seg, 0);
+  // stay; the multi-cluster-chains lever became R18-3's chain generator.
+  // (vertexAt/traversalSpanOf/tipOf were hoisted to module scope for chain.ts.)
 
   const makeCandidate = (
     id: string,
@@ -559,8 +590,22 @@ export function generateLoopCandidates(
     interface Tagged {
       p: LatLng;
       stop?: Omit<CandidateStop, 'waypointIndex'>;
+      /** R18-4 pinned-span membership ("through <road>"). */
+      pin?: { segmentId: string; role: 'entry' | 'exit' | 'point' };
     }
     const tagged: Tagged[] = wps.map((p) => ({ p }));
+    // R18-4 location intents: pinned roads join EVERY candidate as traversal
+    // spans (repair-immune, span-recorded); pinned town points join the sweep.
+    for (const seg of options.pinnedSpans ?? []) {
+      if (seg.lengthM >= TRAVERSE_MIN_M) {
+        const [pa, pb] = traversalSpanOf(seg);
+        tagged.push({ p: pa, pin: { segmentId: seg.id, role: 'entry' } });
+        tagged.push({ p: pb, pin: { segmentId: seg.id, role: 'exit' } });
+      } else {
+        tagged.push({ p: tipOf(seg), pin: { segmentId: seg.id, role: 'point' } });
+      }
+    }
+    for (const p of options.pinnedPoints ?? []) tagged.push({ p });
     for (const unit of anytime) {
       const sp = nearestOfType(unit.dbType, primary.centroid, used, maxStopDetourM);
       if (!sp) continue; // unfillable (or too far): coverage records the shortfall honestly
@@ -591,6 +636,29 @@ export function generateLoopCandidates(
     orderedTagged.forEach((t, i) => {
       if (t.stop) stops.push({ ...t.stop, waypointIndex: i });
     });
+    // pinned-span records (R18-4): indices into the ordered sweep, maintained
+    // through the fraction-stop insertions below exactly like stop indices
+    const spans: CandidateSpanRef[] = [];
+    {
+      const bySeg = new Map<string, { lo?: number; hi?: number }>();
+      orderedTagged.forEach((t, i) => {
+        if (!t.pin) return;
+        const rec = bySeg.get(t.pin.segmentId) ?? {};
+        if (t.pin.role === 'exit') rec.hi = i;
+        else rec.lo = i;
+        bySeg.set(t.pin.segmentId, rec);
+      });
+      for (const [segmentId, r] of bySeg) {
+        const a = r.lo ?? r.hi!;
+        const b = r.hi ?? r.lo!;
+        spans.push({
+          segmentId,
+          startIndex: Math.min(a, b),
+          endIndex: Math.max(a, b),
+          pinned: true,
+        });
+      }
+    }
 
     // fraction units: insert AFTER the sweep at sequence-position ≈ fraction.
     // Drive sequence = [origin, ...O, origin]: arrival at O[i] ≈ (i+1)/(n+1);
@@ -612,6 +680,10 @@ export function generateLoopCandidates(
       used.add(sp.id);
       orderedPts.splice(slot, 0, { lat: sp.lat, lng: sp.lng });
       for (const st of stops) if (st.waypointIndex >= slot) st.waypointIndex += 1;
+      for (const sp2 of spans) {
+        if (sp2.startIndex >= slot) sp2.startIndex += 1;
+        if (sp2.endIndex >= slot) sp2.endIndex += 1;
+      }
       stops.push({
         spotId: sp.id,
         name: sp.name,
@@ -630,6 +702,8 @@ export function generateLoopCandidates(
       returnSector,
       clusterId: primary.id,
       stops,
+      // legacy candidates stay shape-identical (spans omitted) when no pins
+      ...(spans.length > 0 ? { spans } : {}),
       clusterWeight: primary.weight + extraClusters.reduce((s, c) => s + c.weight, 0),
     };
   };
@@ -740,16 +814,52 @@ export function generateAtoBCandidates(
     const via = distM(origin, cluster.centroid) + distM(cluster.centroid, destination);
     if (via > directM * 2.2) continue;
 
+    // R18-3 parity: the candidate DRIVES the cluster's best road — traversal
+    // span oriented by corridor progress (entry = smaller progress, monotone)
+    // — instead of passing near an off-road cluster centroid (the audit's
+    // "A→B forces ONE off-road centroid, ~100 % fastest-path" finding). Short
+    // roads become single-point TOUCHES; both carry a span record so repair
+    // can act span-atomically.
+    const byValue = [...cluster.members].sort(
+      (a, b) =>
+        segValue(b.segment) - segValue(a.segment) || a.segment.id.localeCompare(b.segment.id),
+    );
+    const bestSeg = byValue[0]!.segment;
+    const fullSpan = bestSeg.lengthM >= 1_200; // mirrors TRAVERSE_MIN_M
+    const [pA, pB] = fullSpan
+      ? traversalSpanOf(bestSeg)
+      : ([tipOf(bestSeg), tipOf(bestSeg)] as [LatLng, LatLng]);
+    const spanPts: LatLng[] =
+      fullSpan && progress(pA) <= progress(pB) ? [pA, pB] : fullSpan ? [pB, pA] : [pA];
+    const spanMid: LatLng = fullSpan
+      ? { lat: (pA.lat + pB.lat) / 2, lng: (pA.lng + pB.lng) / 2 }
+      : pA;
+
     // R16-3: per-unit typed anchoring along the corridor. Anytime units take
     // the min-detour spot of their type; fraction units first narrow to spots
     // whose corridor progress best matches f (argmin |progress−f|), then
     // detour, then id. A `used` set keeps two units off the same spot.
-    interface TaggedWp {
-      p: LatLng;
+    // Units merge by PROGRESS; the span is one ATOMIC unit — a stop can sit
+    // before or after it, never between its entry and exit.
+    interface CorridorUnit {
+      pts: LatLng[];
       prog: number;
+      span?: { segmentId: string; pinned?: boolean };
       stop?: Omit<CandidateStop, 'waypointIndex'>;
     }
-    const wps: TaggedWp[] = [{ p: cluster.centroid, prog: progress(cluster.centroid) }];
+    const units: CorridorUnit[] = [
+      { pts: spanPts, prog: progress(spanMid), span: { segmentId: bestSeg.id } },
+    ];
+    // R18-4 location intents: pinned roads join as ATOMIC repair-immune span
+    // units; pinned town points as plain progress-ordered waypoints.
+    for (const seg of options.pinnedSpans ?? []) {
+      const full = seg.lengthM >= 1_200;
+      const [qA, qB] = full ? traversalSpanOf(seg) : ([tipOf(seg), tipOf(seg)] as [LatLng, LatLng]);
+      const pts = full ? (progress(qA) <= progress(qB) ? [qA, qB] : [qB, qA]) : [qA];
+      const mid: LatLng = full ? { lat: (qA.lat + qB.lat) / 2, lng: (qA.lng + qB.lng) / 2 } : qA;
+      units.push({ pts, prog: progress(mid), span: { segmentId: seg.id, pinned: true } });
+    }
+    for (const p of options.pinnedPoints ?? []) units.push({ pts: [p], prog: progress(p) });
     const used = new Set<string>();
     const detour = (p: LatLng) => distM(origin, p) + distM(p, destination) - directM;
     for (const r of options.stopRequests ?? []) {
@@ -769,8 +879,8 @@ export function generateAtoBCandidates(
           return detour(pa) - detour(pb) || a.id.localeCompare(b.id);
         })[0]!;
         used.add(best.id);
-        wps.push({
-          p: { lat: best.lat, lng: best.lng },
+        units.push({
+          pts: [{ lat: best.lat, lng: best.lng }],
           prog: progress({ lat: best.lat, lng: best.lng }),
           stop: {
             spotId: best.id,
@@ -782,20 +892,33 @@ export function generateAtoBCandidates(
         });
       }
     }
-    wps.sort((a, b) => a.prog - b.prog); // progress order (TSP only ≥4 — M3-T08)
+    units.sort((a, b) => a.prog - b.prog); // progress order (TSP skipped — spans)
+    const waypoints: LatLng[] = [];
     const stops: CandidateStop[] = [];
-    wps.forEach((w, i) => {
-      if (w.stop) stops.push({ ...w.stop, waypointIndex: i });
-    });
+    const spans: CandidateSpanRef[] = [];
+    for (const u of units) {
+      if (u.span) {
+        spans.push({
+          segmentId: u.span.segmentId,
+          startIndex: waypoints.length,
+          endIndex: waypoints.length + u.pts.length - 1,
+          ...(u.span.pinned ? { pinned: true } : {}),
+        });
+      } else if (u.stop) {
+        stops.push({ ...u.stop, waypointIndex: waypoints.length });
+      }
+      waypoints.push(...u.pts);
+    }
 
     candidates.push({
       id: `atob-c${cluster.id}`,
       kind: 'atob',
-      waypoints: wps.map((w) => w.p),
+      waypoints,
       sector: cluster.sector,
       returnSector: null,
       clusterId: cluster.id,
       stops,
+      spans,
       clusterWeight: cluster.weight,
     });
   }

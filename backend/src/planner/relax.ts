@@ -34,6 +34,9 @@ export interface SearchParams {
   rung: number;
   /** Nice-to-have stops may be dropped from rung 3 on. */
   dropNiceToHaveStops: boolean;
+  /** R18-2 rung 5: loop-quality assembly caps loosened (with disclosure) —
+   *  the last resort before redirect; run.ts maps it to RELAXED_ASSEMBLY_CAPS. */
+  assemblyRelax: boolean;
 }
 
 export function initialParams(constraints: ParsedConstraints, thetaCurvy = 0.6): SearchParams {
@@ -46,6 +49,7 @@ export function initialParams(constraints: ParsedConstraints, thetaCurvy = 0.6):
     disclosures: [],
     rung: 1,
     dropNiceToHaveStops: false,
+    assemblyRelax: false,
   };
 }
 
@@ -61,12 +65,24 @@ const AVOID_RELAX_ORDER: Array<[keyof ParsedConstraints['avoid'], string]> = [
   ['highways', 'avoid_highway'],
 ];
 
+/** Pool telemetry from the just-finished iteration (R18-2 fast-forward). */
+export interface LadderTelemetry {
+  /** Candidates that survived assembly this iteration. */
+  assembledCount?: number;
+}
+
 /**
  * Climb one rung. Rungs that do not apply to this request (e.g. no avoid set at
  * rung 4) fall through to the next rung in the SAME call — the ladder order is
  * strict but never wastes an attempt on a no-op.
+ *
+ * R18-2 FAST-FORWARD: when the finished iteration assembled ZERO candidates
+ * (pure Wall-A death — lakeshore grids, funnel towns) and at least one
+ * τ-widen has been tried, rungs 2-4 cannot help (they tune retrieval and
+ * validation, never the assembly caps that killed everything) — jump straight
+ * to the assembly-relax rung.
  */
-export function nextRelaxation(params: SearchParams): RelaxOutcome {
+export function nextRelaxation(params: SearchParams, telemetry?: LadderTelemetry): RelaxOutcome {
   const p: SearchParams = {
     ...params,
     avoid: { ...params.avoid },
@@ -74,7 +90,11 @@ export function nextRelaxation(params: SearchParams): RelaxOutcome {
     disclosures: [...params.disclosures],
   };
 
-  while (p.rung <= 4) {
+  if (telemetry?.assembledCount === 0 && p.rung >= 2 && !p.assemblyRelax) {
+    p.rung = 5;
+  }
+
+  while (p.rung <= 5) {
     switch (p.rung) {
       case 1: {
         p.rung = 2;
@@ -115,6 +135,17 @@ export function nextRelaxation(params: SearchParams): RelaxOutcome {
         }
         p.rung = 5;
         break;
+      }
+      case 5: {
+        p.rung = 6;
+        if (!p.assemblyRelax) {
+          p.assemblyRelax = true;
+          p.disclosures.push(
+            'loosened loop-quality limits — the roads here force some repeated pavement',
+          );
+          return { kind: 'retry', params: p };
+        }
+        break; // already relaxed — nothing left
       }
     }
   }

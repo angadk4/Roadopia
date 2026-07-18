@@ -1294,3 +1294,100 @@ to v10 (regression guard), 4 stop briefs improved (Fonthill FAIL→PASS, all mic
 AC 10→11; live multi-stop e2e green; backend 235 / app 121 / shared 23 / eval 26 green.
 No config_id bump (no scored-param change; the detour cap is generation-side, stop-free
 output unchanged). Owner ratification requested.
+
+**BD-59 — R18 "The Fun Rebuild": the audit verdict + the methodology decision — GENERATION
+AND COSTING OWN FUN, NOT RANKING (2026-07-16).** Owner directive after the 40-route audit
+("be hella critical; frozen decisions may be reopened"): the planner was boring-by-
+construction — candidates forced only 2-7 km of curvy road while ~90-97 % of route meters
+were Valhalla fastest-path connectors whose only class lever (use_highways) is a probed
+motorway/trunk-only step function; characters were mathematically inert re-ranks (pool
+variance ~0.007 vs preset deltas ~0.003; distinctness overlap 1.00, identical 10/10);
+"through Forks of the Credit" was parsed then consumed by NOTHING; 10/30 random briefs
+hard-failed with no fallback. The decisive probe: costing_options.auto.shortest=true
+collapses connector arterial share 99→5 % / 81→34 %. DECISIONS (each unit's full evidence
+in BUILD_LOG (h)-(l) + eval/params-frozen.json provenance rounds 18…18_4; config lineage
+frozen-m4t12-v10 → frozen-r18-v1…v4):
+(1) REOPENED BD-21 costing: shortest-profile connectors ADOPTED for backroads/twisty asks
+(R18-1: curv +41 %, AC held; legacy = byte-identical rollback). FUN-DEFAULT for
+characterless briefs REFUSED THREE TIMES by its pre-registered rule (R18-1 AC 7→4;
+R18-2 AC 19→13; R18-3 loop premise falsified) — stays off; the A→B probe (arterial
+80→71 %, curv +39 %, zero new failures) is recorded as POSITIVE evidence for a future
+default-bundle decision.
+(2) Never-empty + repair v2 + provable presentation tiers + duration fix ADOPTED (R18-2):
+AC 12→19/48 record, all 10 audit kill-towns returning routes, closure-vs-snap semantics
+bug fixed (Hockley class), tier bases made provably un-crossable after a property test
+caught the historical −5/−10 interleave flaw.
+(3) LOOP CHAINS (R18-3): built in full, then REFUSED by their own pre-registered
+falsifiable diagnostic (pool ctryVar 0.0004-0.0098 vs required >0.05; +1 pp curvyShare vs
++10 pp bar; 2× wall time) — BD-40 discipline held; rollback verified byte-identical.
+tripleClusters stays false forever; chain revival = a new pre-registered experiment on
+richer material. A→B SPAN PARITY ADOPTED (spans not centroids, corridor chains, TSP skip,
+always-trace with dual-endpoint grace, span-atomic repair; new standing eval
+eval/atob_quality.ts, first-run baseline, deterministic ×2).
+(4) LOCATION INTENTS REAL (R18-4): migration 0010 pg_trgm name lookup (SECURITY DEFINER,
+frozen deterministic order) + resolver with kind-aware precedence + reach honesty; pinned
+repair-immune traversal spans; 3 km avoid discs; MEASURED Tier-2 rows (via ≥60 % of road
+vertices within 30 m — live: "through Forks of the Credit" drives 100 %); unknown-name
+origins AND destinations now fail honestly by name. V1 DEVIATION (recorded): avoid-miss
+and via-miss render RELAXED, not violated — the dedicated ladder rung is the follow-up.
+(5) CHARACTER BUNDLES (R18-4, reopens BD-30's weights-only scope): arterial presentation
+bars per character (twisty 0.20/backroads 0.10/scenic 0.35/simple off), simple's tight
+clock, scenic's guarded nice-to-have viewpoint; aliases chill→simple,
+coffee_stop/avoid_highways→default. Distinctness: 1.00 → 0.25-0.36 overlap;
+curv(twisty)=1.45× curv(simple) (bar PASS); arterial simple-backroads gap 0.10 vs 0.15
+bar MISS (demotion cannot create material — re-judged at the R18-5 gate). [GATE-S] holds
+throughout: no scenic scoring anywhere.
+(6) HONEST-PARSING TRADE (owner ratification requested): "backroads"/"country roads"
+phrasing now reaches the backroads preset (parse-correct: reqset gold agrees; parse
+prompt v3 BD-28 re-run ADOPT re-confirmed, VAL 0.922 vs rules 0.859, $0.98). Cost: fixed
+AC 19→17 — isolation-proven to be ONLY the 4 newly-mapped briefs switching onto the
+adopted shortest profile, with large essence wins (Delhi arterial 76→46 %, Bolton curv
++74 %, St. Catharines FAIL→PASS) against marginal bar misses (pool self-overlap 0.16 vs
+0.15; durErr 26 % vs 25 %). Bars NOT weakened (rule J). REVERSAL LEVER: one line in
+parse_rules.ts if the owner refuses the trade.
+Standing: BD-39 (threshold tiers where scalar weights failed), BD-40 (pre-registered
+refusals hold), BD-42 tier semantics, [GATE-S]. Owner ratification requested for BD-59
+plus the carried BD-46…BD-58.
+
+**BD-60 — R19: ROAD CONTEXT, NOT ROAD CLASS — urban-context data layer + the honest
+composite (2026-07-18).** Owner corrections on the Mayfield×Kennedy audit: (1) "main roads
+are fine when surrounded by fields or forest, or as a good way to connect two nicer roads";
+(2) "half the green stuff is entering neighbourhoods — who wants to drive in the
+neighbourhood". Both are now MECHANISMS:
+DATA (R19-0): OSM landuse extraction (39,682 built polygons 2,947 km² / 12,675 rural,
+migration 0011 landuse_zones + planner_built_areas definer read); per-segment
+urban_share computed for all 133,865 curvy segments (buffer-0 inside-polygon ratio —
+boundary arterials measure ~0 by construction). GROUND-TRUTHED: Forks of the Credit 0.00,
+Hockley 0.00, Mississauga Rd 0.07; the diagnosed disease quantified — 24 % of the top-300
+curvy segments near Mayfield are SUBDIVISION COLLECTORS at curviness statistically equal
+to genuine country roads (the class filter never saw them).
+PLANNER (R19-1): retrieval excludes urban_share > 0.6 INSIDE the RPC (migration 0012;
+MK-area corpus mean urban 0.26→0.05, all seats refilled with country material) with a
+STARVATION REFILL below 150 segments (the house rule, proven 3×: hard caps starve pools —
+refilled town material ranks LAST via segValue ×(1−0.7·urban)); route-level urbanShareOf
+with the FLANK-PROBE predicate (urban = inside a built area OR built on BOTH ±120 m
+flanks — one-side-fields stays fine, the owner's sentence verbatim; buffer-0 alone
+measured a Brampton main-road slog 0.02 = plainly wrong, fixed) and ORIGIN GRACE 2.5 km
+(town-exit is not the route's fault — the ungraced bar cost fixed AC 16→10, diagnosed +
+fixed); presentation URBAN bars replace the R18-4 arterial bars (twisty 0.15 / backroads
+0.12 / scenic 0.10 / default 0.25 / simple off) — measured proof of the owner's point: a
+Caledon East loop at 90 % arterial is 0.04 urban and no longer demotes; honest
+"about N min through town before the drive opens up" disclosure (fires ≥ 8 min);
+urban_share on the wire; repair INSERT never picks urban segments.
+JUDGMENT TRAIL (three pre-registered steps, all recorded): v1 params REFUSED (urban bars
+ungraced + primary metric aimed at a population without the disease — fixed AC 16→10);
+grace+recalibration (AC still 10 — pool starvation diagnosed via row flips); refill+
+rank-last ADOPTED under the HONEST COMPOSITE: the old AC's off-run 16 contained FIVE
+passes whose bests were 24-30 % urban (the disease itself); with the urban ≤ 20 % axis
+added (the same re-basing every honesty axis has performed) — off 11 vs R19 11 (AC HELD),
+durErr p50 14→10 % (improved), curvyShare 0.09→0.10, ms 6.4 s, no-route 0. Disease
+population (Mayfield 40, the audit that started this): mean urban of defaults ≤ 11 %
+(bar 12), town-heavy 0/40, backroads arterial 75→59 % with curv 1.59.
+WATCH ITEM (named, not hidden): Mayfield default u-turns 6/40 (v1: 1/40) — thinner
+near-town corpus forces more turn-backs; the repair pass aiming at urbanRunInfo.mid is
+the identified follow-up. [GATE-S] BOUNDARY: urban-share is a QUALITY GATE like
+residential share (the owner has demanded anti-urban twice), NOT numeric scenic
+scoring — no scalar scenic weight exists anywhere; rural polygons are loaded but
+unconsumed pending [GATE-S]. Kill switch: URBAN_CONTEXT_ON=false restores R18-era
+behavior (retrieval + bars + disclosure together). Owner ratification requested
+(BD-46…BD-60).

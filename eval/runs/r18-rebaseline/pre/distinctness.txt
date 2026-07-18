@@ -1,0 +1,36 @@
+[1/10] Hamilton: twisty: curv 1.58 art 92% 61min | backroads: curv 1.58 art 92% 61min | scenic: curv 1.58 art 92% 61min | simple: curv 1.58 art 92% 61min
+[2/10] Caledon East: twisty: curv 1.06 art 88% 75min | backroads: curv 1.06 art 88% 75min | scenic: curv 1.06 art 88% 75min | simple: curv 1.06 art 88% 75min
+[3/10] Guelph: twisty: curv 0.83 art 83% 115min | backroads: curv 0.83 art 83% 115min | scenic: curv 0.83 art 83% 115min | simple: curv 0.83 art 83% 115min
+[4/10] Barrie: twisty: curv 0.79 art 89% 101min | backroads: curv 0.79 art 89% 101min | scenic: curv 0.79 art 89% 101min | simple: curv 0.79 art 89% 101min
+[5/10] Uxbridge: twisty: curv 0.50 art 95% 87min | backroads: curv 0.50 art 95% 87min | scenic: curv 0.50 art 95% 87min | simple: curv 0.50 art 95% 87min
+[6/10] St. Catharines: twisty: curv 1.02 art 91% 100min | backroads: curv 1.02 art 91% 100min | scenic: curv 1.02 art 91% 100min | simple: curv 1.02 art 91% 100min
+[7/10] Collingwood: twisty: curv 0.95 art 82% 97min | backroads: curv 0.95 art 82% 97min | scenic: curv 0.95 art 82% 97min | simple: curv 0.97 art 81% 92min
+[8/10] Stratford: twisty: curv 0.49 art 80% 124min | backroads: curv 0.49 art 80% 124min | scenic: curv 0.49 art 80% 124min | simple: curv 0.49 art 80% 124min
+[9/10] Peterborough: twisty: curv 1.18 art 80% 67min | backroads: curv 1.18 art 80% 67min | scenic: curv 1.18 art 80% 67min | simple: curv 1.18 art 80% 67min
+[10/10] London: twisty: curv 0.99 art 88% 91min | backroads: curv 0.99 art 88% 91min | scenic: curv 0.99 art 88% 91min | simple: curv 0.99 art 88% 91min
+
+-- pairwise overlap of bests (1.00 = identical route) --
+Hamilton         twisty~backroads: 1.00  twisty~scenic: 1.00  twisty~simple: 1.00  backroads~scenic: 1.00  backroads~simple: 1.00  scenic~simple: 1.00
+Caledon East     twisty~backroads: 1.00  twisty~scenic: 1.00  twisty~simple: 1.00  backroads~scenic: 1.00  backroads~simple: 1.00  scenic~simple: 1.00
+Guelph           twisty~backroads: 1.00  twisty~scenic: 1.00  twisty~simple: 1.00  backroads~scenic: 1.00  backroads~simple: 1.00  scenic~simple: 1.00
+Barrie           twisty~backroads: 1.00  twisty~scenic: 1.00  twisty~simple: 1.00  backroads~scenic: 1.00  backroads~simple: 1.00  scenic~simple: 1.00
+Uxbridge         twisty~backroads: 1.00  twisty~scenic: 1.00  twisty~simple: 1.00  backroads~scenic: 1.00  backroads~simple: 1.00  scenic~simple: 1.00
+St. Catharines   twisty~backroads: 1.00  twisty~scenic: 1.00  twisty~simple: 1.00  backroads~scenic: 1.00  backroads~simple: 1.00  scenic~simple: 1.00
+Collingwood      twisty~backroads: 1.00  twisty~scenic: 1.00  twisty~simple: 0.42  backroads~scenic: 1.00  backroads~simple: 0.42  scenic~simple: 0.42
+Stratford        twisty~backroads: 1.00  twisty~scenic: 1.00  twisty~simple: 1.00  backroads~scenic: 1.00  backroads~simple: 1.00  scenic~simple: 1.00
+Peterborough     twisty~backroads: 1.00  twisty~scenic: 1.00  twisty~simple: 1.00  backroads~scenic: 1.00  backroads~simple: 1.00  scenic~simple: 1.00
+London           twisty~backroads: 1.00  twisty~scenic: 1.00  twisty~simple: 1.00  backroads~scenic: 1.00  backroads~simple: 1.00  scenic~simple: 1.00
+
+-- distinctness summary --
+twisty~backroads     mean overlap 1.00  identical 10/10
+twisty~scenic        mean overlap 1.00  identical 10/10
+twisty~simple        mean overlap 0.94  identical 9/10
+backroads~scenic     mean overlap 1.00  identical 10/10
+backroads~simple     mean overlap 0.94  identical 9/10
+scenic~simple        mean overlap 0.94  identical 9/10
+
+-- per-character aggregates --
+twisty     mean curv 0.94  mean arterial 0.87  no-route 0/10
+backroads  mean curv 0.94  mean arterial 0.87  no-route 0/10
+scenic     mean curv 0.94  mean arterial 0.87  no-route 0/10
+simple     mean curv 0.94  mean arterial 0.87  no-route 0/10

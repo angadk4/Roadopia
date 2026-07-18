@@ -125,7 +125,7 @@ export const PARSE_JSON_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         required: ['kind', 'text'],
-        properties: { kind: { type: 'string', enum: ['near', 'avoid'] }, text: STR },
+        properties: { kind: { type: 'string', enum: ['near', 'avoid', 'through'] }, text: STR },
       },
     },
     ambiguous_terms: { type: 'array', items: STR },
@@ -164,9 +164,9 @@ RULES (the §3.4/§3.5 contract):
 - duration_target_s in SECONDS (e.g. "90 min" => 5400; "2 hours" => 7200); distance_target_m in metres. Ranges use the midpoint.
 - stops: only types the user asks for; importance "required" ONLY with must/need/has-to language, else "nice_to_have"; "grab a coffee"-style counts as one coffee stop. at_fraction places the stop WITHIN the drive: "early on"/"near the start" => 0.25, "halfway"/"midway"/"in the middle" => 0.5, "toward the end"/"late in the drive" => 0.75, no timing language => null. Scope the timing to ITS stop when the sentence is clear ("coffee early on, gas near the end").
 - avoid booleans are BLANKET bans only ("no highways", "avoid tolls", "no gravel" => unpaved:true + surface_pref:"paved"). A named road ("skip the 403", "avoid the QEW") is a location_constraints entry {kind:"avoid"}, NOT avoid.highways.
-- "near X"/"along Y" => location_constraints {kind:"near"}.
+- "through X"/"via X"/"along X" (drive-it intents: a named road or a place the route should TRAVERSE) => location_constraints {kind:"through"}. "near X"/"past X" (proximity intents) => {kind:"near"}. Generic water/scenery phrases ("along the lake") are character, not locations.
 - twistiness_pref: "twisty" ~0.7, "very twisty"/"twistiest" ~0.9, "gentle"/"nothing crazy" ~0.25, unstated null. scenic_pref similar for scenery emphasis. intensity: chill/moderate/spirited ONLY from engagement words, never speed.
-- preset: set only when one preset clearly dominates the brief, else null. "simple"/"easy"/"mostly straight"/"minimal turns" asks => "simple" (never "chill" — same character, "simple" is the canonical label).
+- preset: set only when one preset clearly dominates the brief, else null. "simple"/"easy"/"mostly straight"/"minimal turns" asks => "simple" (never "chill" — same character, "simple" is the canonical label). "backroads"/"back roads"/"country roads"/"only small roads" asks => "backroads" (the ask is road CLASS, not just a vibe tag).
 - Hedges and vibe words ("hour tops", "ish", "the back way") go in ambiguous_terms with your best reading applied.
 - confidence_overall: ~0.9+ crisp briefs, 0.5-0.7 hedged/ambiguous.
 - clarification.needed=true ONLY for (a) no origin at all, or (b) a shape contradiction (e.g. "loop from X to Y" — also record contradictions[{kind:"shape"}]). Everything else: best effort, needed=false.
@@ -176,7 +176,11 @@ RULES (the §3.4/§3.5 contract):
 
 export const PARSE_PROMPT: PromptTemplate = {
   id: 'parse',
-  version: 2, // R16-4: stops gained at_fraction; preset enum gained 'simple'
+  // v3 (R18-4): location_constraints gained kind 'through' (traversal intents
+  // now shape routing); backroads/country-roads phrasing maps to the
+  // backroads preset (parity with parse_rules — the R18-3 probe found the
+  // phrase reached only a display tag). Re-run the parse eval per BD-28.
+  version: 3,
   model: HAIKU,
   maxTokens: 1_500,
   system: PARSE_SYSTEM_PROMPT,

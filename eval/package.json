@@ -19,7 +19,9 @@
     "rq11": "tsx experiments/rq11_backroads.ts",
     "rq12": "tsx experiments/rq12_density.ts",
     "rq14": "tsx experiments/rq14_undershoot.ts",
-    "test-final": "tsx experiments/test_final.ts"
+    "test-final": "tsx experiments/test_final.ts",
+    "character-distinctness": "tsx character_distinctness.ts",
+    "atob-quality": "tsx atob_quality.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
