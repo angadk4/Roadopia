@@ -51,6 +51,9 @@ data/**
 !data/load_curvy.ts
 # tracked M4-T07 [GATE-S] scenic-layer loader (generated .geojsonl/.pbf stay ignored)
 !data/load_scenic.ts
+# tracked R19 land-use context loader + urban-share compute (generated .geojsonl/.pbf stay ignored)
+!data/load_landuse.ts
+!data/compute_urban_share.sql
 # tracked M2-T09 POI extractor (generated pois.geojsonl / pois.json stay ignored)
 !data/extract_pois.ts
 # tracked SPK-10 data package — source only (generated .geojsonl/.csv stay ignored)
@@ -80,3 +83,8 @@ npm-debug.log*
 Thumbs.db
 .idea/
 *.swp
+
+# in-repo scratch (agent uses the system temp scratchpad; never commit these)
+/scratchpad/
+# generated audit geojson (sibling eval/spk15-routes.geojson already ignored above)
+eval/spk15-routes-random.geojson
