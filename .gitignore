@@ -88,3 +88,10 @@ Thumbs.db
 /scratchpad/
 # generated audit geojson (sibling eval/spk15-routes.geojson already ignored above)
 eval/spk15-routes-random.geojson
+
+# stray ROOT-level Expo/EAS configs (the real ones live in app/ — an `eas` CLI
+# run from the repo root regenerates bare ones here WITHOUT the Node 24 pin,
+# which hijacks cloud builds back onto Node 20 and breaks pnpm. Always run
+# `eas build` from app/.)
+/eas.json
+/app.json
