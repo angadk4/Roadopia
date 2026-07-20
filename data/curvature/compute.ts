@@ -76,6 +76,23 @@ export function isJunctionGeometry(highway: string | undefined, tags: Tags): boo
   return false;
 }
 
+/**
+ * Whether a way is a CLOSED RING — StartPoint == EndPoint (cul-de-sac bulbs,
+ * traffic circles, loop lanes). A ring sweeps ~2π of heading over a short
+ * length, so C7 reads MAXIMAL and the planner mistakes it for "the twistiest
+ * road around" (R21-0: the owner's Kuehne+Nagel / Standish Court sighting).
+ * Mirrors PostGIS ST_IsClosed, which the retrieval RPC (migration 0013)
+ * already uses to filter the LIVE corpus; this guard keeps a future corpus
+ * REBUILD from re-emitting them. Exact equality matches OSM closed ways, which
+ * share the identical first/last node coordinate.
+ */
+export function isClosedRing(coords: readonly LonLat[]): boolean {
+  if (coords.length < 3) return false;
+  const a = coords[0]!;
+  const b = coords[coords.length - 1]!;
+  return a[0] === b[0] && a[1] === b[1];
+}
+
 const ZERO: Omit<CurvatureResult, 'lengthM'> = {
   headingChangePerKm: 0,
   circumCurvaturePerKm: 0,
@@ -97,7 +114,8 @@ export function computeCurvature(
   if (
     coords.length < 3 ||
     rawLen < params.minLengthM ||
-    isJunctionGeometry(highway, tags)
+    isJunctionGeometry(highway, tags) ||
+    isClosedRing(coords)
   ) {
     return { ...ZERO, lengthM: rawLen };
   }

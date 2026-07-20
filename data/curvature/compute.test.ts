@@ -8,7 +8,7 @@ import {
   turnAngleDeg,
   type LonLat,
 } from './geometry';
-import { computeCurvature, DEFAULT_PARAMS, isJunctionGeometry } from './compute';
+import { computeCurvature, DEFAULT_PARAMS, isClosedRing, isJunctionGeometry } from './compute';
 import { gridFalsePositiveRate, percentile, ranks, spearman } from './stats';
 
 const EARTH_RADIUS_M = 6_371_008.8;
@@ -133,6 +133,18 @@ describe('computeCurvature — synthetic shapes', () => {
   it('too-short and degenerate geometries are skipped', () => {
     expect(computeCurvature(straight(50, 10), DEFAULT_PARAMS).skipped).toBe(true);
     expect(computeCurvature([[0, 0]], DEFAULT_PARAMS).skipped).toBe(true);
+  });
+
+  it('a closed ring (cul-de-sac bulb / circle) is skipped (R21-0)', () => {
+    // a big loopy bulb (>minLengthM), then closed so last === first (ST_IsClosed)
+    const ring = arc(80, 300, 60);
+    ring.push(ring[0]!);
+    expect(isClosedRing(ring)).toBe(true);
+    expect(computeCurvature(ring, DEFAULT_PARAMS).skipped).toBe(true);
+    // an open twisty arc with the same radius is NOT a ring and scores real curvature
+    const open = arc(80, 300, 60);
+    expect(isClosedRing(open)).toBe(false);
+    expect(computeCurvature(open, DEFAULT_PARAMS).skipped).toBe(false);
   });
 
   it('junction geometry (roundabout / link) is excluded', () => {

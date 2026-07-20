@@ -1391,3 +1391,41 @@ scoring — no scalar scenic weight exists anywhere; rural polygons are loaded b
 unconsumed pending [GATE-S]. Kill switch: URBAN_CONTEXT_ON=false restores R18-era
 behavior (retrieval + bars + disclosure together). Owner ratification requested
 (BD-46…BD-60).
+
+**BD-61 — R21-0(a): CLOSED-RING corpus exclusion — the Kuehne+Nagel / Standish Court
+"random stop" fixed (2026-07-19).** Owner device sighting: a "random stop at Kuehne+Nagel"
+and the route "taking the highway and using Standish Court as a U-turn." ROOT CAUSE
+(engine-verified): "Standish Court" (id 17950) is a 561 m industrial cul-de-sac whose CLOSED
+BULB RING sweeps ~2π of heading over a short length → circum_curvature_per_km (C7) reads
+MAXIMAL (13.57), and its industrial parcels are mapped with gaps at the road so buffer-0
+urban_share = 0.00 — neither the BD-21 class filter nor the R19 urban filter caught it. The
+planner sought it as "the twistiest road around," drove out, and U-turned at the dead-end
+bulb; the reversal lands on the basemap's Kuehne+Nagel POI label and READS as a stop (the app
+draws no waypoint markers and does no reverse-geocode — innocent). Same class = the 80-route
+audit's issue #4 (and #14, Newmarket).
+FIX: migration 0013 adds `and not st_isclosed(cs.geom)` to planner_find_curvy_roads (the ONLY
+spatial read; plannerFindAnchorPoints routes through the same fn with p_min_curviness := 0, so
+BOTH the curvy-waypoint pool and the return-anchor pool are covered), filtered pre-limit (the
+BD-21 lesson). Defense-in-depth: an isClosedRing() guard added to the curvature corpus builder
+(data/curvature/compute.ts) + a unit test, so a future corpus REBUILD never re-emits rings.
+EXTENDS BD-18 (was: residential closed rings only → now ALL closed rings; owner-authorized).
+MEASURED (local corpus, 133,865 segments): 753 closed rings exist; only 26 were otherwise
+retrievable, ALL 115-664 m with curviness 6.17-46.2 — every one a cul-de-sac bulb or circle,
+zero legitimate through-drives. Retrieval pool 12,363→12,337 (−26, −0.2 %): no starvation.
+A/B (48-brief paired, migration 0012 vs 0013 — a pure definer-fn swap): ADOPT. no-route 0/48
+flat; AC 11→13; |durErr| p50/p80 10/21 %→10/17 %; dirty units mean/max 2.12/20.38→1.76/18.06;
+corridor-doubling p80 0.16→0.14; curvy-share p20 0.03→0.02 (the expected honest drop — fake
+ring curvature removed; mean flat 0.10). 16/48 briefs rerouted, ZERO PASS→FAIL. MECHANISM
+CONFIRMED: Orangeville twisty 16 U-turns → 0 (FAIL→PASS); Mississauga (nearest Standish) pool
+u-turn rejections 13→6; Kilbride forest FAIL→PASS. Determinism hash 4896092d2f5280b9 →
+fa91008c3d59dc9a (routes changed, all improvements or flat).
+SPLIT: R21-0(b) (dual-flank segment urban_share) DEFERRED to its own measured unit. Scoping
+found 361-850 of the 3,095 high-curvature retrievable segments are >0.7 / >0.5 built-surrounded
+(120 m buffer), but a buffer-coverage proxy CANNOT separate "both-flanks built" (filter) from
+the R19-preserved "edge main road along fields is fine" (keep) — the true dual-flank port needs
+its own before/after A/B. (a) alone fixes the reported bug; the route-level dual-flank measure
+(urban.ts, already live) handles urban context at presentation (urban share of bests mean 7 %/
+p80 11 %).
+No planner-param change (params-frozen.json unchanged; this is a corpus-state change).
+Rollback: re-run migration 0012 (recreates the fn without the st_isclosed clause). Hosted-Supabase
+deploy: apply 0013 (with 0010-0012). Config lineage: → frozen-r21-v0 (final freeze at R21-7).
