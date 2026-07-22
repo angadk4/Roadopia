@@ -1429,3 +1429,214 @@ p80 11 %).
 No planner-param change (params-frozen.json unchanged; this is a corpus-state change).
 Rollback: re-run migration 0012 (recreates the fn without the st_isclosed clause). Hosted-Supabase
 deploy: apply 0013 (with 0010-0012). Config lineage: → frozen-r21-v0 (final freeze at R21-7).
+
+**BD-62 — R21-1 loop-shape gate REFUSED: loopiness-primary demotion is COUNTERPRODUCTIVE for the
+twisty/backroads product (2026-07-20).** Folded loop-shape degeneracy (loopiness < 0.20 floor as
+primary; corridor-doubling > 0.30; the previously-inert 0.15-0.30 self-overlap units) into the
+EXISTING dirty presentation tier behind SHAPE_QUALITY_ON — no new lexicographic tier, so BD-42 is
+preserved by construction (dirtyPenaltyOf caps at TIER_DIRTY+GRADE_CAP = 204.5; score.test tier-order
+property intact, 13/13). OFF proved byte-identical (determinism hash fa91008c3d59dc9a; 295 backend
+tests green).
+A/B (48-brief fixed, OFF = R21-0(a) baseline vs ON): loopiness p20 0.12→0.19 (bar ≥ +0.10 → MISSED at
++0.07); corridor-doubling p80 0.14→0.11 (PASS); no-route 0/48 flat; durErr p80 17→16 %; dirty units
+mean 1.76→1.95; AC 13→12 (bar: no regression → MISSED). Exactly ONE verdict flip (Guelph twisty).
+3-SKEPTIC ADVERSARIAL REVIEW (each told to refute; 2 of 3 refuted): (1) "false-pass exposure" REFUTED
+— the demoted Guelph route was the TWISTIER/more-rural/lower-urban one (curv 1.32 vs 1.01, country
+0.51 vs 0.39, urban 11 vs 22 %, self-overlap 0.03), a thin low-area loop, NOT an out-and-back; (2)
+"efficacy real" UPHELD but narrow — causal (no RNG), directional, yet +0.07 at 0.19 is the ceiling a
+0.20 demote-floor can reach and the true degenerate tail (0.03-0.09) is unmoved ("a generation problem
+attacked with a presentation tool"); (3) "adopting is disciplined" REFUTED — two pre-registered bars
+missed with a byte-identical, kill-switched, cost-free baseline → adopting-with-a-narrative is the
+motivated-reasoning BD-40 exists to prevent.
+DECISIVE NEW EVIDENCE: loopiness-as-primary is not merely under-powered but COUNTERPRODUCTIVE. A
+presentation demote can only RESHUFFLE existing candidates; in sparse briefs the only real-shaped
+loops are round-and-boring, so demoting thin-but-twisty loops trades away the CORE essence the brief
+asked for — Belfountain *twisty* curv 1.92→0.00, Smithville *rural* country 0.52→0.26, Guelph *twisty*
+surfaced a 22 %-urban loop (fails the urban≤20 % AC) over a curv-1.32/56 %-arterial one.
+VERDICT: REFUSE (BD-40). The shape problem (audit #3 Southfields sliver epidemic, #5 Port Hope, #9
+showcase corridor-doubling) is a GENERATION problem — real loops must be GENERATED in sparse areas,
+not manufactured by re-ranking — and R21-0(a) already improved corridor-doubling p80 0.16→0.14 for
+free via corpus cleanup. FOLLOW-UP (a NEW pre-registration, not this unit): a narrower gate on
+corridor-doubling + self-overlap ONLY (loopiness excluded — those two target unambiguous degenerates
+and do not harm essence). Machinery kept flag-off, byte-identical (the CHAIN_CANDIDATES_ON /
+loop-chains refused-machinery precedent). SHAPE_QUALITY_ON=false.
+Also fixed here (an R21-0(a) consequence caught by running the full backend suite): curvature.test.ts's
+recompute-reproduces-stored sample now excludes closed rings (`not st_isclosed(geom)`) — the isClosedRing
+guard added in R21-0(a) zeroes rings the DB still stores at their old high curvature, so the invariant
+holds only for the valid non-ring material the planner actually retrieves.
+
+**BD-63 — R21-2: planner fun-default REFUSED (4th time); APP default → Backroads ADOPTED
+(owner-directed "make the default drive fun") (2026-07-20).** Two parts:
+(a) PLANNER fun-default — FUN_DEFAULT_ADOPTED flips the characterless-brief profile to raw `shortest`.
+4TH pre-registered judgment, now with the R21-0(a) corpus cleanup + R19 urban_share live (the guards
+the first 3 refusals lacked). A/B (48-brief fixed, OFF=false = R21-0(a) baseline hash fa91008c3d59dc9a
+vs ON=true hash 3f7ec87c30fb9080): arterial mean 73→65 % (bar ↓ ≥ 15 pp → MISSED at −8), AC 13→8 (−5:
+six DEFAULT briefs failed — Fonthill, Kilbride, Port Perry, Peterborough, Brantford, London; one gained,
+Erin), dirty units mean 1.76→3.49 (nearly DOUBLED), urban p80 11→16 %, durErr p80 17→20 %, no-route
+0/48 flat. The same residential/urban-bleed + repair-class-offence failure as all 3 prior refusals — R19
++ corpus cleanup did NOT rescue it: raw `shortest` on characterless briefs (no backroads bundle to gate
+class-mix) generates dirty cross-country routes. REFUSE (BD-40, 4th consecutive). FUN_DEFAULT_ADOPTED=false.
+(b) APP default → Backroads (owner-approved fallback, ships regardless of a) — ADOPTED. A new
+DEFAULT_DRAFT (= EMPTY_DRAFT + mostlyBackroads:true) seeds the Plan screen (PlanStack.tsx); EMPTY_DRAFT
+stays the true nothing-selected baseline (its composition tests are unchanged). A plain "generate" now
+composes preset=backroads → the ALREADY-ADOPTED backroads profile+bundle (R18-1/BD-59: curv 1.10→1.55,
+AC held), NOT raw shortest on the default bundle. That is exactly WHY (b) works where (a) fails: identical
+`shortest` costing, but backroads carries the tuned bundle (retrieval θ, arterial ≤ 0.10 gate, tie-break
+weights) that gates the class-mix. So the default USER experience is fun; only a raw characterless API
+call stays fast. Verified: app tsc clean, plan_draft 17/17 (new DEFAULT_DRAFT→backroads test; EMPTY_DRAFT
+still composes no preset). Integrated verification deferred to R21-7: the re-audit's DEFAULT pass now runs
+AS backroads, confirming broad-backroads stays clean across all origins (if it doesn't, that surfaces to
+the owner). Rollback: DEFAULT_DRAFT → EMPTY_DRAFT seed in PlanStack.
+
+**BD-64 — R21-5: best-material floor ADOPTED at FLOOR=1 — but the "lottery" was already fixed by
+R21-0(a); the real win is duration/pool-coverage (2026-07-20).** The duration BAND in
+candidates.ts drops a cluster whose predicted loop-duration is outside [0.75, 1.5]·T; predictedS
+uses ORIGIN-DEPENDENT distanceM while cluster `weight` (Σ segValue) is ORIGIN-INVARIANT, so the
+premier cluster survives for a near origin yet drops for a farther neighbour. Fix
+(BEST_MATERIAL_FLOOR, additive + deterministic, 0 = byte-identical): always admit the top-N
+clusters by weight, exempt from the band drop; duration is still controlled downstream
+(weight × durationFitFactor rank → duration-prefilter → resize).
+LOTTERY ALREADY CLOSED: a neighbour-consistency probe (Southfields-10, ±~1 km around the community
+centre, brief "90 minute loop") shows FLOOR=0 IDENTICAL to FLOOR=1 — 10/10 neighbours get a real
+drive (curv 1.06-1.48) at BOTH floors. R21-0(a)'s closed-ring cleanup already resolved audit #7 for
+these origins (the band already admits their best cluster). So R21-5 is NOT the lottery fix it was
+scoped as (that shipped in R21-0(a)); its benefit is elsewhere. (Brampton 4/10 GOOD at both floors —
+a genuine material limit for deep-urban neighbourhoods, not a lottery.)
+REAL BENEFIT (48-brief A/B, OFF = fa91008c3d59dc9a vs FLOOR=1 = dffef6162494e102): AC 13→17 (+4),
+4 FAIL→PASS / 0 PASS→FAIL — Kitchener durErr −34 %→−11 % (band was dropping the on-target cluster),
+Stratford presented 1→4 and Goderich 3→4 (pool-starvation fix, met the ≥4-distinct AC), Milton
+on-target (−27 %→+19 %, marginal — a thinner shape, still passes). no-route 0/48 flat, durErr p80
+17 % flat, dirty ~flat, urban p80 11→15 % (Milton-driven, under the 20 % AC).
+LATENCY TUNING: FLOOR=2 gave AC 13→18 (+5) but +58 % wall-time (candidate × multi-cluster-chaining
+blowup) — pushing the canonical e2e brief to 25.3 s, OVER the 25 s budget (best_so_far, backend
+suite red). FLOOR=1 keeps 4 of the 5 AC gains at +34 % (6549→8749 ms mean), planner-e2e 5/5 green
+under budget. Sized at 1 for the quality/latency balance — a hard latency constraint (SPK-19 / the
+25 s budget), not tuning-to-pass a quality bar. ADOPT FLOOR=1. Determinism dffef6162494e102 (no
+RNG); backend 295/295, prettier clean. Config freeze deferred to R21-7 (frozen-r21-v1). Rollback:
+BEST_MATERIAL_FLOOR=0 (byte-identical).
+
+**BD-65 — R21-4: honesty coverage ADOPTED — u-turn / duration-miss / sliver disclosures on the
+presented best (2026-07-20).** The audit found the planner SILENT about caveats a presented route
+carries: u-turns on 8/80 routes undisclosed (#11), 9/80 duration misses > 15 % unsaid (#13), thin
+out-and-backs sold as "loops" (#3/#5). Added three INFORMATIONAL disclosures to the winner path
+(run.ts) — placed AFTER the status decision, so an otherwise-clean route stays 'ok' and route
+SELECTION is unchanged: (1) any presented best with uturns > 0 says so; (2) |durErr| > RESIZE_TRIGGER
+(0.15, aligned — if resize couldn't close the gap, disclose it) → "about N min — a bit under/over the
+M you asked"; (3) a loop with loopiness < LOOPINESS_DISCLOSE_FLOOR (0.10 — CONSERVATIVE and
+disclose-only, well below the REFUSED R21-1 0.20 demote-floor, so only clear slivers fire and
+loopiness is never ACTED on) → "more of an out-and-back than a loop". Residential-lane disclosure
+deferred (already covered by the > 5 % demotion + the urban-intro note; would need residentialRunM
+threaded onto `best`). VERIFIED (6-origin probe): Newmarket (audit #14) now fires all three
+(u-turn + −38 % dur + loopiness 0.06); Cobourg −21 % → duration only; Owen Sound u-turn + durErr −10 %
+→ u-turn only (correctly quiet on the sub-15 % miss); Grand Bend clean → silent. 100 % coverage on the
+triggering conditions, 0 false positives; Cobourg/Orangeville keep status='ok' (notes don't downgrade).
+Additive, no route change, backend 295/295, prettier clean. Supersedes R21-1's never-firing (flag-off)
+degenerate presentation note; the rest of the R21-1 machinery stays flag-off.
+
+**BD-66 — R21-6 return-corridor u-turn fix REFUSED: the u-turns are STRUCTURAL, insensitive to the
+return anchor (2026-07-20).** Audit #11 (8/80 u-turns) + the 2026-07-18 diagnosis (far-apex reversals
+from arterial-locked homes, good roads 16-27 km out). Current state (post R21-0(a)+R21-5): 15/48
+briefs carry a u-turn (65 total), CONCENTRATED in road-sparse peninsula/funnel towns — Owen Sound 15,
+Collingwood 11, Cobourg 10, Creemore 8 — where doubling back is largely unavoidable geography. The
+generator ALREADY tries multiple return-sector variants (rounds 1 + 3) and repair fixes what it can;
+the residuals are the structurally-hard cases. Third lever tried (after the reverted "unfilter return
+anchors" → net-zero + urban-worse, and "duration-keyed anchor distance" → curviness collapse):
+RETURN_ANCHOR_DISTANCE_FRACTION 0.6→0.8 (a rounder, more symmetric loop). A/B (48-brief vs the current
+FLOOR=1 baseline): **u-turns IDENTICAL — 15/48 briefs, 65 total** — the anchor distance is INERT for
+u-turns. Side effects: loopiness p20 0.12→0.19 and corridor-doubling p80 0.16→0.11 (rounder loops — the
+shape win R21-1 chased, here via GENERATION not demotion) BUT durErr p80 17→19 %, dirty 1.81→1.88, AC
+flat 17. REFUSE (fails the u-turn goal + a small duration regression). Reverted to 0.6 (byte-identical).
+The u-turns are geography, not an anchor-placement bug; R21-4's u-turn DISCLOSURE (shipped) is the honest
+mitigation. A genuine reduction would need multi-lobe / grand-tour restructuring for far-reach origins
+(the plan's sketched "grand tours" — a larger separate effort). BREADCRUMB: the rounder-loops finding
+(loopiness lifted via return-anchor GENERATION, no demotion) is the promising lever for the deferred
+R21-1 shape follow-up — shape is fixed by generating rounder loops, not by demoting thin ones.
+
+**BD-67 — R21-3 twisty efficacy: the core issue is LARGELY FIXED by R21-0(a); the "not much twist"
+disclosure REFUSED as dishonest-risk (2026-07-20).** Measure-first (paired default vs twisty over the
+20 region towns, post R21-0(a)+R21-5): twisty is now BETTER than default in 14/20 towns (Hamilton
+0.99→1.35, Newmarket 0.62→1.71, Milton 0.77→1.60, Peterborough 0.59→1.54) — R21-0(a) removed the
+closed-ring poison that was INFLATING some defaults (Hamilton default 1.58→0.99), so asking "twisty" now
+reliably helps wherever twist exists. The audit's #1 "twisty worse in 6/20" is down to small-magnitude
+flat-town cases: the 6 residual (Cobourg 1.14→0.75, Uxbridge 0.70→0.57, Orangeville, Stratford, Simcoe,
+Fergus) are flat farm towns where BOTH drives are honestly mediocre (0.57-1.14); twisty mean 1.03,
+10/20 ≥ 1.0.
+DISCLOSURE REFUSED: a "the roads around here don't offer much twist — this is the curviest loop they
+support" note (fires when a twisty ask yields curviness < 1.0) was built + probed, but it CONFLATES
+flat-roads with planner-underperformance and can state a FALSEHOOD — it fired for Belfountain
+(escarpment country by Forks of the Credit, where the 48-brief suite yields twisty curviness 1.92) whose
+roads DO offer twist but whose 90-min loop from that exact origin came out gentle. A causal "the roads
+lack twist" claim cannot be honestly attributed from the result curviness alone (Hard rule: never claim
+false). Reverted byte-identical to R21-4; backend 295/295, tsc/prettier clean.
+RANKING FLOOR (never-worse-than-default) DEFERRED: needs a 2nd default-costed planner pass (~2× latency)
+to shave ~0.1 off 6 flat towns where neither drive is good — not worth it. Residual flat-town mediocrity
+is a structural limit (flat farm country genuinely lacks twist), honestly left as-is; a real lift is
+generation-side (richer twisty retrieval in sparse areas) — future work.
+
+**BD-68 — R21-0(b): DUAL-FLANK segment urban_share ADOPTED — the parcel-gap blindness fix
+(2026-07-20).** Buffer-0 urban_share (R19) measures only the fraction of a segment INSIDE built
+polygons; OSM industrial/business-park parcels are mapped with GAPS at the road, so curvy urban
+collectors read ~0.00 and slip the R19 retrieval filter (the general class of the Standish blindness —
+0013 catches only its closed-ring form). Built a faithful PostGIS port of urban.ts isUrbanContext
+(dualflank_urban_share, migration 0014: a point is urban if INSIDE built OR both ±120 m perpendicular
+flanks are built; segment share = fraction of ~60 m-spaced points). VALIDATED — ground-truth CLEAN:
+Forks of the Credit / Hockley Road (rural secondary) stay 0.00; Hockley Ave/Path/Place (subdivision)
+0.88-1.00; the function scores Standish's geometry 0.89 vs buffer-0 0.00 (Standish itself stays
+ring-excluded by 0013). RECLASSIFICATION: of 3,095 high-curv retrievable segments, 314 that buffer-0
+rated < 0.2 are built-surrounded (> 0.6) — a 22-sample is ALL genuine urban/industrial roads
+(Mississauga city-centre, Argentia/Palladium/High-Tech/Bass-Pro-Mills industrial, Oxford/Bathurst/
+Lawrence arterials), ZERO rural. Retrievable pool 12,337 → 10,514 (−1,823, −15 %).
+A/B (48-brief, buffer-0 vs dual-flank, both FLOOR=1): no-route 0/48 FLAT (the −15 % pool did NOT starve
+— removed material was collectors, not drives); dirty units mean 1.81 → 1.38, max 18.06 → 11.77 (routes
+MUCH cleaner — urban collectors as waypoints force u-turns/overlap/residential); urban p80 15 → 13 %,
+arterial 74 → 72 %, curvy p20 0.02 → 0.04. Cost: AC 17 → 16 (Port Perry + Stratford lose the
+≥4-distinct bar — but the dropped "options" were fake urban collectors, an honest reduction; Smithville
+gained), mean presented 3.4 → 3.2, durErr p50 10 → 12 %. ADOPT: substantial route-cleanliness + the
+general blindness fix (Standish-class + the Newmarket #14 collectors) outweigh a small coverage/duration
+cost — for a "special drive", cleaner beats one extra fake option; distinct from R21-1 (which DEGRADED
+essence), here quality IMPROVES. backend 295/295, db 30/30, determinism e9f6cac9786e27d6. Deploy: apply
+migrations 0010-0014 + landuse load + dual-flank urban_share compute at hosted Supabase. Rollback:
+re-run the buffer-0 form of data/compute_urban_share.sql. Config freeze at R21-7 (frozen-r21-v1).
+
+**BD-69 — R22-1 "twisty = a curvier notch" via a higher retrieval θ: REFUTED as INERT (2026-07-20).**
+The post-R21 audit's headline issue: a Twisty ask returns a byte-identical route to the Backroads
+default on 67/70 origins. Exploration pinned the shared knob as the fixed retrieval THETA_CURVY = 0.6,
+so the plan (owner chose "a curvier notch") gave the twisty bundle a higher θ (0.85) to retrieve a
+curvier pool. A/B (48-brief, θ 0.6 vs 0.85, R22-1 code both sides): **0 of 12 twisty briefs changed —
+byte-identical (both hash 129ab3f744330649).** MECHANISM (DB-verified): `planner_find_curvy_roads`
+returns the top `SEGMENT_LIMIT_PER_RING = 300` segments ORDERED BY curviness DESC — in a rich scope
+(Hamilton-area: 582 segments ≥ 0.6, 498 ≥ 0.85) the **300th-curviest already sits at curviness 1.87**,
+so the effective floor is ~1.87 and raising θ from 0.6 to 0.85 (or anywhere below ~1.87) removes
+NOTHING; in sparse scopes a higher θ would only STARVE. So a retrieval-floor lift cannot make twisty
+curvier — the curviest material is already returned first. REFUSE; θ code reverted byte-identical
+(bundles.ts/run.ts/loop_quality.ts back to frozen-r21-v1; backend tsc clean).
+IMPLICATION: twisty ≡ backroads is NOT a retrieval-floor gap — both retrieve the same curviest-300 AND
+the generator picks the same best cluster/roads (bundles only re-rank post-geometry, the R18-4-proven
+inert path). A genuine "curvier notch" needs a GENERATION lever (force a twisty ask to DRIVE more of
+the curvy roads it already retrieves, or prefer the single curviest cluster) — bigger than a θ knob and
+carrying the u-turn/undershoot failure modes that got triples/chains refused (round 5, BD-40). The
+choice of lever (or accepting twisty ≈ backroads as the same honest "good roads" intent) is escalated
+to the owner. Env note: a machine reboot between R21 and R22 shifted the deterministic baseline
+e9f6cac9786e27d6 → 129ab3f744330649 (Valhalla/DB restart); the hash is STABLE within the session
+(OFF=ON), so post-reboot A/Bs remain valid.
+
+**BD-70 — R22-1b: "Twisty" differentiated by a CURVATURE-EMPHASIZED cluster/road ranking — ADOPTED
+(2026-07-20).** After the θ-floor notch was refuted (BD-69), the owner chose "prefer the twistiest
+roads." A `curvyRank` flag on GenerateOptions (OFF = default weight ranking, byte-identical) carries a
+twisty-only generation lever; two variants measured:
+(1) MAX single-road curviness (rank clusters by their twistiest road) — REFUTED: mean twisty curviness
+0.74→0.70 (DOWN), introduced u-turns (Waterdown 2.99→1.97 + u-turn; Collingwood), and flattened the
+canonical brief (Hamilton twisty-with-coffee curviness → 0, e2e red). It optimizes a single road's
+twistiness, but the audit metric is the route's length-weighted MEAN — a twisty road amid flat
+connectors LOWERS the mean.
+(2) CURVATURE-EMPHASIZED weight (rank clusters + the driven road by Σ curviness²·length·class, vs the
+default Σ curviness·length) — ADOPTED. Keeps curvy-KM (curvy CONTENT) but tilts toward curvier roads.
+A/B (48-brief twisty briefs, curvyRank OFF = frozen-r21-v1 vs ON): mean twisty curviness 0.74→0.81
+(+0.07), 2 up / 0 down (Guelph 1.07→1.32, Stratford flat 0→0.52), no-route 0/48, AC 16→17, e2e 5/5,
+backend 295/295. MODEST BY CONSTRUCTION: retrieval is already curviest-first (BD-69) and the default
+already balances curviness×length, so a curvature tilt has a bounded ceiling — it helps where curvier
+material exists to prefer (Guelph, Stratford) and is correctly inert where the material is fixed
+(Hamilton flat). One marginal new u-turn (Collingwood, already a u-turn brief). TWISTY_CURVY_RANK=true
+(run.ts) gates it; OFF byte-identical. TRAVERSE_MIN_M hoisted to module scope (candidates.ts). The
+twisty-vs-backroads gap (audit-v5 showed them identical on 67/70) is re-confirmed at R22-5's re-audit.
+Config → frozen-r22-v1a. Rollback: TWISTY_CURVY_RANK=false.

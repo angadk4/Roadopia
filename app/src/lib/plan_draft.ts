@@ -78,6 +78,20 @@ export const EMPTY_DRAFT: PlanDraft = {
   stops: [],
 };
 
+/**
+ * The INITIAL draft the Plan screen opens with (R21-2, owner-directed "make the
+ * default drive fun"). Same as EMPTY_DRAFT but with Mostly-backroads ON, so a
+ * plain "generate" already composes the backroads preset (the already-adopted
+ * shortest-costing profile) instead of a boring arterial cruise — the audit's
+ * #6 "plain default = arterial region-wide". EMPTY_DRAFT stays the true
+ * nothing-selected baseline (the composition tests assert it produces no
+ * preset); the user can still switch off Mostly-backroads or pick Simple.
+ */
+export const DEFAULT_DRAFT: PlanDraft = {
+  ...EMPTY_DRAFT,
+  routeOptions: { ...EMPTY_DRAFT.routeOptions, mostlyBackroads: true },
+};
+
 /** Early/Midway/Late chips → drive fractions (anytime = no aim). */
 export const WHEN_TO_FRACTION: Record<StopWhen, StopFraction | null> = {
   anytime: null,

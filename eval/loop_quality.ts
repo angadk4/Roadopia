@@ -42,6 +42,7 @@ import {
   RESIDENTIAL_RUN_SOFT_M,
   RESIDENTIAL_SOFT_SHARE,
   RETRACE_RUN_SOFT_M,
+  SELF_OVERLAP_CAP,
 } from '../backend/src/planner/loop';
 import {
   corridorDoublingRatio,
@@ -60,15 +61,19 @@ import {
   CHAIN_CANDIDATES_ON,
   CHARACTER_BUNDLES_ON,
   RESIZE_TRIGGER,
+  TWISTY_CURVY_RANK,
+  SHAPE_QUALITY_ON,
   URBAN_CONTEXT_ON,
 } from '../backend/src/planner/run';
 import { buildScope } from '../backend/src/planner/scope';
 import {
   ARTERIAL_PRESENT_PENALTY,
   ARTERIAL_SHARE_SOFT,
+  CORRIDOR_DOUBLING_SOFT,
   dirtyPenaltyOf,
   durationGradeOf,
   fallbackOffenceUnits,
+  LOOPINESS_SOFT_FLOOR,
   mergeWeights,
   PRESENT_TIER_DUROFF,
   scoreCandidate,
@@ -278,6 +283,7 @@ async function evaluateBrief(
       anchorPoints,
       avgSpeedKmh: avgSpeedKmh ?? baseSpeed,
       ...(idPrefix !== undefined ? { idPrefix } : {}),
+      curvyRank: TWISTY_CURVY_RANK && bundle?.id === 'twisty', // R22-1b parity
     });
     // R18-3 parity with run.ts: chained candidates for stop-free briefs
     if (CHAIN_CANDIDATES_ON && constraints.stops.length === 0) {
@@ -421,13 +427,19 @@ async function evaluateBrief(
     // presentation key: any u-turn, wide-window spur (block spins), notable
     // there-and-back, or residential exposure ranks below every clean route
     // (rounds 2–7)
+    // R21-1 parity with run.ts (BRIEFS are all loops → isLoop implicit)
+    const shapeLoopiness = SHAPE_QUALITY_ON ? loopiness(a.route.geometry) : null;
+    const shapeCorridor = SHAPE_QUALITY_ON ? corridorDoublingRatio(a.route.geometry, origin) : null;
     const dirty =
       uturnCount(a.route) > 0 ||
       a.spursWide > 0 ||
       a.retraceRunM > RETRACE_RUN_SOFT_M ||
       (a.residentialShare ?? 0) > RESIDENTIAL_SOFT_SHARE ||
       (a.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M ||
-      a.microloops > 0;
+      a.microloops > 0 ||
+      (shapeLoopiness !== null && shapeLoopiness < LOOPINESS_SOFT_FLOOR) ||
+      (shapeCorridor !== null && shapeCorridor > CORRIDOR_DOUBLING_SOFT) ||
+      (SHAPE_QUALITY_ON && a.selfOverlap > SELF_OVERLAP_CAP);
     // round 14: on-target outranks shorter within the same quality tier
     const durOff =
       constraints.duration_target_s !== null &&
@@ -450,6 +462,8 @@ async function evaluateBrief(
       residentialShare: a.residentialShare,
       residentialRunM: a.residentialRunM,
       traceNull: a.trace === null,
+      loopiness: shapeLoopiness, // R21-1 (null → 0)
+      corridorDoubling: shapeCorridor,
     });
     const durGrade = durationGradeOf(a.route.duration_s, durationS);
     const presentKey =
@@ -558,6 +572,8 @@ async function evaluateBrief(
         residentialShare: best.a.residentialShare,
         residentialRunM: best.a.residentialRunM,
         traceNull: best.a.trace === null,
+        loopiness: SHAPE_QUALITY_ON ? bestLoopiness : null, // R21-1 parity
+        corridorDoubling: SHAPE_QUALITY_ON ? bestCorridorDoubling : null,
       })
     : null;
   // R19 honest-composite axis: a best that "passes" by driving town streets

@@ -228,9 +228,13 @@ describe('measureCurvature — hand-label agreement (DB, self-skipping)', () => 
   it('re-measuring stored geometry reproduces stored curviness (same engine)', async (ctx) => {
     if (!db) return ctx.skip();
     const rows = await db.query<{ name: string; curv: number; geometry: string }>(
+      // R21-0(a): closed rings (cul-de-sac bulbs) are excluded from the corpus
+      // at retrieval and now re-measure to 0 (compute.ts isClosedRing guard) —
+      // the recompute-reproduces-stored invariant holds only for the valid,
+      // non-ring material the planner actually retrieves.
       `select name, circum_curvature_per_km as curv, st_asgeojson(geom) as geometry
        from curvy_segments
-       where length_m > 500
+       where length_m > 500 and not st_isclosed(geom)
        order by circum_curvature_per_km desc
        limit 12`,
     );

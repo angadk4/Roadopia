@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { MAX_BRIEF_CHARS } from '../api';
-import { buildPlanRequest, EMPTY_DRAFT, type PlanDraft } from '../plan_draft';
+import { buildPlanRequest, DEFAULT_DRAFT, EMPTY_DRAFT, type PlanDraft } from '../plan_draft';
 
 const ORIGIN = { source: 'current' as const, point: { lat: 43.26, lng: -79.87 } };
 
@@ -81,6 +81,14 @@ describe('buildPlanRequest — R16-5 section composition (the preset-slot rules)
       expect('character' in out.request).toBe(false);
       expect('stops' in out.request).toBe(false);
     }
+  });
+
+  it('R21-2: the app DEFAULT_DRAFT opens on Backroads (plain generate is fun, not a cruise)', () => {
+    const out = buildPlanRequest({ ...DEFAULT_DRAFT, brief: 'b', origin: ORIGIN });
+    expect(out.ok && out.request.preset).toBe('backroads');
+    // EMPTY_DRAFT stays the true nothing-selected baseline (composes no preset)
+    const empty = buildPlanRequest({ ...EMPTY_DRAFT, brief: 'b', origin: ORIGIN });
+    expect(empty.ok && 'preset' in empty.request).toBe(false);
   });
 
   it('backroads takes the preset slot over Twisty; the 0.9 pref rides along', () => {

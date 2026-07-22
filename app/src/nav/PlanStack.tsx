@@ -7,7 +7,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useMemo, useState, type ReactElement } from 'react';
 
-import { EMPTY_DRAFT, PlanDraftContext, type PlanDraft } from '../lib/plan_draft';
+import { DEFAULT_DRAFT, PlanDraftContext, type PlanDraft } from '../lib/plan_draft';
 import PickPointScreen from '../screens/PickPointScreen';
 import PlanScreen from '../screens/PlanScreen';
 import ProgressScreen from '../screens/ProgressScreen';
@@ -28,7 +28,7 @@ const Stack = createNativeStackNavigator<PlanStackParamList>();
 
 export default function PlanStack(): ReactElement {
   const { colors } = useTheme();
-  const [draft, setDraftState] = useState<PlanDraft>(EMPTY_DRAFT);
+  const [draft, setDraftState] = useState<PlanDraft>(DEFAULT_DRAFT);
   const store = useMemo(
     () => ({
       draft,

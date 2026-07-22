@@ -1,6 +1,6 @@
 {
-  "config_id": "frozen-r19-v1",
-  "frozen_at": "2026-07-18",
+  "config_id": "frozen-r21-v1",
+  "frozen_at": "2026-07-20",
   "discipline": "\u00a721: tuned on DEV only, validated on VAL; any later change = new config id + fresh VAL pass",
   "params": {
     "ALPHA_LOOP": 0.45,
@@ -68,7 +68,7 @@
       "mode": "on (rollback: legacy)",
       "backroads": "ADOPTED \u2014 shortest:true, use_living_streets:0 (twisty/backroads presets or pref>=0.7)",
       "simple": "fastest-path (legacy options) \u2014 fewer turns is the ask",
-      "fun_default": "REFUSED pending R18-2 (FUN_DEFAULT_ADOPTED=false): A/B AC 7->4 + 1 no-route on the characterless subset (residential bleed + repair-class offences)",
+      "fun_default": "REFUSED 4× (FUN_DEFAULT_ADOPTED=false); R21-2 (BD-63): with corpus cleanup + R19 urban live, AC 13->8, dirty 1.76->3.49, arterial only -8pp. The default USER experience is fun instead via the APP defaulting to Backroads (DEFAULT_DRAFT.mostlyBackroads=true → the adopted backroads bundle) — raw shortest on characterless briefs stays refused",
       "SHORTEST_SIZING_SPEED_KMH": 50,
       "SHORTEST_SIZING_SPEED_NO_HIGHWAY_KMH": 38
     },
@@ -120,7 +120,14 @@
     "URBAN_OPEN_MAX_SHARE": 0.25,
     "URBAN_AC_MAX_PCT": 20,
     "urban_bars": "twisty 0.15 | backroads 0.12 | scenic 0.10 | default 0.25 | simple off \u2014 post-grace urban share; REPLACE the R18-4 arterial bars (BD-60: arterial-through-fields is fine)",
-    "segValue_urban_factor": "\u00d7(1 \u2212 0.7\u00b7urban_share) \u2014 refilled town material ranks last"
+    "segValue_urban_factor": "\u00d7(1 \u2212 0.7\u00b7urban_share) \u2014 refilled town material ranks last",
+    "BEST_MATERIAL_FLOOR": 1,
+    "closed_ring_exclusion": "R21-0(a), migration 0013: retrieval excludes ST_IsClosed segments (cul-de-sac bulbs/circles) \u2014 fixes the Kuehne+Nagel/Standish U-turn (extends BD-18 to ALL closed rings); compute.ts isClosedRing guard for rebuilds",
+    "urban_share_measure": "R21-0(b), migration 0014: DUAL-FLANK (inside-built OR both \u00b1120m flanks built) on the retrievable class, replacing buffer-0 \u2014 kills the industrial parcel-gap collector blindness; pool 12,337\u219210,514",
+    "SHAPE_QUALITY_ON": false,
+    "RETURN_ANCHOR_DISTANCE_FRACTION": 0.6,
+    "LOOPINESS_DISCLOSE_FLOOR": 0.1,
+    "r21_disclosures": "R21-4: presented best discloses u-turns, |durErr|>0.15, and loopiness<0.10 out-and-backs (informational, after status decision \u2014 no selection change)"
   },
   "provenance": {
     "gates": ["BD-26 C", "BD-28 A", "BD-29 F", "BD-30 W", "BD-31 R", "BD-32 S"],
@@ -160,6 +167,12 @@
     "round19": {
       "date": "2026-07-18",
       "verdict": "ADOPTED under the honest composite (urban \u2264 20 % axis added): off 11 vs on 11 AC (five off-passes were 24-30 %-urban cheats), durErr p50 14\u219210 %, Mayfield disease cured (mean urban 11 %, town-heavy 0/40, backroads curv 1.59/art 59 %). Full three-step judgment trail + watch item (Mayfield u-turns 6/40) in BD-60."
+    },
+    "r21": {
+      "date": "2026-07-20",
+      "program": "Quality Overhaul (owner-directed after the 80-route audit + the Kuehne+Nagel 'random stop'). 9 units, adopt-or-refuse per pre-registered A/B. ADOPT: R21-0(a) closed-ring exclusion (BD-61, migration 0013 \u2014 fixes the K+N/Standish U-turn; AC 11\u219213, dirty 2.12\u21921.76), R21-2(b) app-default Backroads (BD-63 \u2014 the default drive is now fun via the adopted backroads bundle), R21-5 best-material floor FLOOR=1 (BD-64 \u2014 AC 13\u219217, 0 regressions; lottery was already fixed by R21-0a), R21-4 honesty disclosures (BD-65 \u2014 u-turn/duration/sliver, 100% coverage), R21-0(b) dual-flank urban_share (BD-68, migration 0014 \u2014 kills the parcel-gap collector blindness; dirty 1.81\u21921.38, no starvation). REFUSE: R21-1 loop-shape gate (BD-62 \u2014 loopiness demotion counterproductive, 3-skeptic verified), R21-2(a) planner fun-default (BD-63 \u2014 4th refusal), R21-6 return-corridor (BD-66 \u2014 u-turns structural, anchor-inert), R21-3 twist-disclosure (BD-67 \u2014 dishonest-risk; core already fixed by R21-0a: twisty now BETTER than default in 14/20 towns).",
+      "integrated_48brief": "final integrated state (all adopts live, FLOOR=1 + dual-flank): AC 16/48, no-route 0/48, dirty units mean 1.38 (from 2.12 at the R21 start), urban mean 7%/p80 13%, arterial mean 72%, curvy p20 0.04, determinism hash e9f6cac9786e27d6.",
+      "deploy": "hosted Supabase needs migrations 0010-0014 + landuse load + dual-flank urban_share compute."
     }
   }
 }

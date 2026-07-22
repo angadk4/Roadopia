@@ -102,6 +102,19 @@ export type CostingMode = 'on' | 'legacy';
  * Next re-judgment: after R18-3 (chained multi-span candidates) — chains put
  * shortest connectors between NEARBY spans (2-5 km hops), a different regime
  * than 17 km cross-country shortest connectors.
+ *
+ * R21-2 (2026-07-20) — 4TH judgment, owner-directed ("make the default drive
+ * fun"), REFUSED again (BD-63). A/B (48-brief, OFF=false vs ON=true, with the
+ * R21-0(a) corpus cleanup + R19 urban_share live): arterial mean 73→65 % (bar
+ * ↓ ≥ 15 pp → MISSED at −8), AC 13→8 (−5), dirty units mean 1.76→3.49 (nearly
+ * doubled), urban p80 11→16 % (the same residential/urban bleed that refused it
+ * 3× before), durErr p80 17→20 %. Raw `shortest` on CHARACTERLESS briefs (no
+ * backroads bundle to gate it) generates dirty cross-country routes — R19 +
+ * corpus cleanup did NOT rescue it. The owner's "default drive is fun" ships
+ * instead via the APP defaulting its draft to Backroads (R21-2b), which routes
+ * plain generates through the ADOPTED backroads profile+bundle (R18-1: curv
+ * 1.10→1.55, AC held) rather than raw shortest on the default bundle. So the
+ * default USER experience is fun; only a raw characterless API call stays fast.
  */
 export const FUN_DEFAULT_ADOPTED = false;
 

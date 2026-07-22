@@ -55,7 +55,9 @@ import {
   RESIDENTIAL_RUN_SOFT_M,
   RESIDENTIAL_SOFT_SHARE,
   RETRACE_RUN_SOFT_M,
+  SELF_OVERLAP_CAP,
 } from './loop';
+import { corridorDoublingRatio, loopiness } from './overlap';
 import { weightsForPreset } from './presets';
 import { initialParams, nextRelaxation, type SearchParams } from './relax';
 import { AVOID_DISC_RADIUS_M, resolveLocations, type ResolvedLocation } from './resolve_locations';
@@ -64,9 +66,11 @@ import { buildScope } from './scope';
 import {
   ARTERIAL_PRESENT_PENALTY,
   ARTERIAL_SHARE_SOFT,
+  CORRIDOR_DOUBLING_SOFT,
   dirtyPenaltyOf,
   durationGradeOf,
   fallbackOffenceUnits,
+  LOOPINESS_SOFT_FLOOR,
   mergeWeights,
   PRESENT_TIER_DUROFF,
   scoreCandidate,
@@ -91,6 +95,52 @@ export const ITERATION_CAP = 5;
 /** R18-2: resize fires at a 15 % median miss (was 25 % — the 10-20 % zone sat
  *  in a dead band between this trigger and the 20 % presentation demotion). */
 export const RESIZE_TRIGGER = 0.15;
+/**
+ * R21-4 honesty coverage: a presented best that misses the asked time by more
+ * than this (aligned with RESIZE_TRIGGER — if resize couldn't close it, say so)
+ * discloses it. And a loop whose isoperimetric loopiness is below the DISCLOSE
+ * floor is called an out-and-back honestly — a CONSERVATIVE 0.10 (vs the refused
+ * R21-1 0.20 demote-floor) so only clear slivers fire, and disclose-only (never
+ * a ranking change — R21-1 proved loopiness is the wrong lever to ACT on).
+ */
+export const LOOPINESS_DISCLOSE_FLOOR = 0.1;
+/**
+ * R21-1 loop-shape quality kill switch. OFF → both shape metrics pass as null
+ * everywhere (the dirty clauses read false, fallbackOffenceUnits adds 0) →
+ * byte-identical to pre-R21-1. ON → degenerate loop shapes demote WITHIN the
+ * existing dirty tier: thin out-and-back slivers (loopiness < floor), corridor
+ * doubling (drive one road out, shadow it back), and the previously-INERT
+ * 0.15-0.30 self-overlap units (fallbackOffenceUnits scored them but the dirty
+ * boolean never flipped on selfOverlap, so they were dead). Never gates
+ * assembly — a degenerate route stays feasible, still sets `best`, still breaks
+ * the ladder — so it cannot loosen the relax ladder or starve the pool. BD-42
+ * tier order is preserved by construction (dirtyPenaltyOf caps at 204.5).
+ *
+ * REFUSED (R21-1, 2026-07-20, BD-62) per the pre-registered A/B + a 3-skeptic
+ * adversarial review. On the 48-brief fixed suite vs the byte-identical OFF
+ * baseline (hash fa91008c3d59dc9a): loopiness p20 0.12→0.19 (bar ≥ +0.10 —
+ * MISSED at +0.07, the 0.20 floor can only lift sub-floor slivers TOWARD 0.20,
+ * so "clears 0.30" is unreachable by a presentation tool — it's a GENERATION
+ * problem); AC 13→12 (bar: no regression — MISSED). Decisively, loopiness-as-
+ * primary is COUNTERPRODUCTIVE for the twisty/backroads product: in sparse
+ * areas the only real-shaped loops are round-and-boring, so demoting thin-but-
+ * twisty loops trades away the CORE essence — Belfountain twisty curv 1.92→0.00,
+ * Smithville rural country 0.52→0.26, Guelph twisty surfaced a 22 %-urban loop
+ * over a curv-1.32/56 %-arterial one. The corridor-doubling + self-overlap sub-
+ * signals target UNAMBIGUOUS degenerates and could seed a narrower future
+ * experiment (loopiness excluded), but that is a NEW pre-registration, not this.
+ * Machinery kept flag-off (byte-identical, the CHAIN_CANDIDATES_ON precedent).
+ */
+export const SHAPE_QUALITY_ON = false;
+/**
+ * R22-1b — the "Twisty" generation lever ("prefer the twistiest roads"). A
+ * twisty ask ranks candidate clusters + the road it drives by CURVINESS instead
+ * of weight (curviness × length), so it hunts the twistiest road that still fits
+ * the budget rather than the most backroad-km. OFF → twisty generates exactly
+ * like the default (byte-identical). Replaces the REFUTED retrieval-θ notch
+ * (BD-69: retrieval is already curviest-first, so a θ floor was inert).
+ */
+export const TWISTY_CURVY_RANK = true;
 /**
  * R18-3 LOOP chain generator flag — REFUSED per the pre-registered adoption
  * rule (2026-07-16, 48-brief fixed A/B vs R18-2, BD-40 discipline):
@@ -529,6 +579,10 @@ export async function runPlanner(
         residentialShare: r.residentialShare,
         residentialRunM: r.residentialRunM,
         traceNull: r.trace === null,
+        // R21-1: least-degenerate sliver wins the never-empty fallback too
+        loopiness: SHAPE_QUALITY_ON && isLoop ? loopiness(r.route.geometry) : null,
+        corridorDoubling:
+          SHAPE_QUALITY_ON && isLoop ? corridorDoublingRatio(r.route.geometry, origin) : null,
       });
       const curviness = measureCurvatureClassAware(r.route.geometry, r.trace).curviness;
       const better =
@@ -574,6 +628,15 @@ export async function runPlanner(
     }
     if ((row.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M) {
       bits.push('passes through a neighbourhood stretch');
+    }
+    if (SHAPE_QUALITY_ON && isLoop) {
+      const lp = loopiness(row.route.geometry);
+      const cd = corridorDoublingRatio(row.route.geometry, origin);
+      if (lp !== null && lp < LOOPINESS_SOFT_FLOOR) {
+        bits.push('is more of an out-and-back than a loop');
+      } else if (cd !== null && cd > CORRIDOR_DOUBLING_SOFT) {
+        bits.push('doubles back along the same corridor');
+      }
     }
     if (bits.length === 0) bits.push(`carries ${units.toFixed(1)} quality flaws`);
     params.disclosures.push(
@@ -698,6 +761,7 @@ export async function runPlanner(
           avgSpeedKmh: sizingSpeed,
           pinnedSpans, // R18-4 'through <road>' — forced, repair-immune
           pinnedPoints, // R18-4 'near <town>' — anchor-snapped sweep points
+          curvyRank: TWISTY_CURVY_RANK && bundle?.id === 'twisty', // R22-1b
         })
       : generateAtoBCandidates(origin, destination!, retrieved.segments, retrieved.spots, {
           stopRequests: effectiveStops,
@@ -868,6 +932,7 @@ export async function runPlanner(
           idPrefix: `rz${attempt}-`,
           pinnedSpans, // pins survive the resize regeneration too
           pinnedPoints,
+          curvyRank: TWISTY_CURVY_RANK && bundle?.id === 'twisty', // R22-1b
         });
         const resizedBatch = splitBatch(await routeAll(resized));
         trackDirtyBest(resizedBatch.rejected);
@@ -909,6 +974,12 @@ export async function runPlanner(
         },
         baseWeights,
       );
+      // R21-1 loop-shape degeneracy (loops only; null when OFF / not a loop →
+      // every downstream use is a no-op). Loopiness is the grid-free primary
+      // signal; corridor doubling the secondary.
+      const shapeLoopiness = SHAPE_QUALITY_ON && isLoop ? loopiness(r.route.geometry) : null;
+      const shapeCorridor =
+        SHAPE_QUALITY_ON && isLoop ? corridorDoublingRatio(r.route.geometry, origin) : null;
       // presentation key: any u-turn, wide-window spur (block spins), or
       // notable there-and-back ranks below every clean route (rounds 2–6) —
       // last-resort material, never preferred content
@@ -918,7 +989,12 @@ export async function runPlanner(
         r.retraceRunM > RETRACE_RUN_SOFT_M ||
         (r.residentialShare ?? 0) > RESIDENTIAL_SOFT_SHARE || // round 7
         (r.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M || // round 8b
-        r.microloops > 0; // round 8
+        r.microloops > 0 || // round 8
+        // R21-1: degenerate loop shape + the previously-inert 0.15-0.30 self-
+        // overlap units (all null/off → false → byte-identical no-op)
+        (shapeLoopiness !== null && shapeLoopiness < LOOPINESS_SOFT_FLOOR) ||
+        (shapeCorridor !== null && shapeCorridor > CORRIDOR_DOUBLING_SOFT) ||
+        (SHAPE_QUALITY_ON && isLoop && r.selfOverlap > SELF_OVERLAP_CAP);
       // round 14: an on-target route outranks a shorter one of the same
       // quality tier (2nd lexicographic tier, below quality)
       const durOff =
@@ -956,6 +1032,8 @@ export async function runPlanner(
         residentialShare: r.residentialShare,
         residentialRunM: r.residentialRunM,
         traceNull: r.trace === null,
+        loopiness: shapeLoopiness, // R21-1 (null → 0)
+        corridorDoubling: shapeCorridor,
       });
       // R18-2 within-tier duration grade: closes the 10-20 % dead band without
       // touching the BD-42 tier order (grade max 2 < 5 < 10).
@@ -1130,6 +1208,38 @@ export async function runPlanner(
       if (introMin >= 8) {
         result.disclosures.push(
           `about ${introMin} min through town/main streets before the drive opens up — the nearest countryside is a reach from this start`,
+        );
+      }
+    }
+  }
+  // R21-4 honesty coverage: disclose the caveats a presented best carries, so
+  // the driver isn't surprised (audit #11 undisclosed u-turns, #13 silent
+  // duration tails, #3/#5 slivers). Informational only — added AFTER the status
+  // decision above, so an otherwise-clean route keeps status 'ok' and never
+  // silently flips to 'relaxed'; and they change no route selection.
+  if (result.route !== null) {
+    const ut = uturnCount(result.route);
+    if (ut > 0) {
+      result.disclosures.push(
+        `includes ${ut} u-turn${ut > 1 ? 's' : ''} — the roads here need a turnaround to link the good stretches`,
+      );
+    }
+    const target = constraints.duration_target_s;
+    if (target !== null && target > 0) {
+      const err = (result.route.duration_s - target) / target;
+      if (Math.abs(err) > RESIZE_TRIGGER) {
+        result.disclosures.push(
+          `about ${Math.round(result.route.duration_s / 60)} min — a bit ${
+            err < 0 ? 'under' : 'over'
+          } the ${Math.round(target / 60)} you asked; the roads here don’t form a cleaner loop at that exact length`,
+        );
+      }
+    }
+    if (isLoop) {
+      const lp = loopiness(result.route.geometry);
+      if (lp !== null && lp < LOOPINESS_DISCLOSE_FLOOR) {
+        result.disclosures.push(
+          'this is more of an out-and-back than a loop — the roads here don’t form a tighter circuit',
         );
       }
     }

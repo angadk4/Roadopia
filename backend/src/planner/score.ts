@@ -148,11 +148,38 @@ export interface OffenceInput {
   residentialShare: number | null;
   residentialRunM: number | null;
   traceNull: boolean;
+  /** R21-1 shape degeneracy (loops only). null/undefined → contributes 0 (a
+   *  byte-identical no-op when SHAPE_QUALITY_ON is off / on non-loops); optional
+   *  so existing callers and score.test.ts compile unchanged. */
+  loopiness?: number | null;
+  corridorDoubling?: number | null;
 }
 
 export const RETRACE_UNIT_SOFT_M = 1_200; // mirrors RETRACE_RUN_SOFT_M (no import cycle)
 export const RESIDENTIAL_UNIT_SOFT_SHARE = 0.05;
 export const RESIDENTIAL_UNIT_SOFT_RUN_M = 500;
+
+// --- R21-1: loop-shape degeneracy units (folded into the DIRTY tier) --------
+// The audit found thin "loops" (out-and-backs), showcase routes that drive one
+// road out and shadow it back (corridor doubling), and 0.15-0.30 self-overlap
+// pavement repeats — all report-only until now. Folding them into the existing
+// dirty machinery (not a new lexicographic tier) keeps BD-42 provable BY
+// CONSTRUCTION: dirtyPenaltyOf caps at TIER_DIRTY + DIRTY_GRADE_CAP = 204.5
+// regardless of unit magnitude, and score.test.ts already tests the dirty tier
+// at dirtyPenaltyOf(dirty, 1000) — so no tier-order re-proof is needed. Graded
+// (not step) so a mildly-off loop demotes less than a pure sliver; a sliver
+// weighs < 1.0 unit → ranks BELOW every clean route but ABOVE a u-turn (1.0).
+/** Below this isoperimetric loopiness (4πA/P²) a "loop" is a thin out-and-back.
+ *  Good rural loops sit 0.4-0.6; degenerate slivers read < 0.10. 0.20 leaves
+ *  the 0.2-0.4 grey zone unpenalized — fail-safe toward NOT demoting borderline
+ *  loops. */
+export const LOOPINESS_SOFT_FLOOR = 0.2;
+/** Above this directed corridor-doubling ratio a loop shadows one road out and
+ *  back. Documented accepted floors (shallow crossings, switchback stacks) sit
+ *  below 0.30; real out-and-back doubling measures well above. */
+export const CORRIDOR_DOUBLING_SOFT = 0.3;
+export const SHAPE_UNIT_LOOPINESS = 1.0; // units at loopiness 0 (< a u-turn's 1.0)
+export const SHAPE_UNIT_CORRIDOR = 2.0; // units per unit of corridor over soft
 
 export function fallbackOffenceUnits(d: OffenceInput): number {
   let units = 0;
@@ -166,6 +193,17 @@ export function fallbackOffenceUnits(d: OffenceInput): number {
   }
   if (d.residentialRunM !== null) {
     units += Math.max(0, d.residentialRunM - RESIDENTIAL_UNIT_SOFT_RUN_M) / 500;
+  }
+  // R21-1 shape degeneracy — loopiness is the primary signal (grid-free, catches
+  // the parallel-corridor / near-origin doubling the grid detectors miss);
+  // corridor doubling is a secondary contributor. null/undefined → 0 (no-op).
+  if (d.loopiness != null) {
+    units +=
+      SHAPE_UNIT_LOOPINESS *
+      Math.max(0, (LOOPINESS_SOFT_FLOOR - d.loopiness) / LOOPINESS_SOFT_FLOOR);
+  }
+  if (d.corridorDoubling != null) {
+    units += SHAPE_UNIT_CORRIDOR * Math.max(0, d.corridorDoubling - CORRIDOR_DOUBLING_SOFT);
   }
   if (d.traceNull) units += 0.5;
   return Math.round(units * 100) / 100;

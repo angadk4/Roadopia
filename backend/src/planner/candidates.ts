@@ -280,6 +280,12 @@ export interface GenerateOptions {
    *  three country corridors pin the loop and less connector length is left
    *  to the router's arterial preference. rq12 A/B decides the default. */
   tripleClusters?: boolean;
+  /** R22-1b — the TWISTY generation lever ("prefer the twistiest roads"): rank
+   *  clusters + the within-cluster driven road by CURVINESS instead of weight
+   *  (curviness × length). The default seeks the most backroad-km; twisty seeks
+   *  the twistiest road that still fits the budget. undefined/false → weight
+   *  (byte-identical to the default generator). */
+  curvyRank?: boolean;
   /**
    * Return-anchor pool: road points of ANY curviness (SPK-15 run 7 — ordinary
    * parallel roads fix band-topology retrace). Falls back to curvy-segment
@@ -310,6 +316,33 @@ export interface GenerateOptions {
  * M4 calibrates properly.
  */
 export const LOOP_LENGTH_FACTOR = 4.8;
+
+/**
+ * R21-5 best-material floor (the "same-subdivision lottery" fix). The duration
+ * BAND drops a cluster whose predicted loop duration falls outside [0.75, 1.5]·T
+ * — but predictedS uses `distanceM`, which is ORIGIN-DEPENDENT, while a cluster's
+ * `weight` (Σ segValue) is ORIGIN-INVARIANT. So the region's premier driving
+ * area survives the band for a nearby origin (everyone there converges on it —
+ * CORRECT) yet gets dropped for a ~1 km-farther neighbour, who then falls back
+ * to suburbia — the audit's #7 "1 km apart = opposite drives". Fix: ALWAYS admit
+ * the top-N clusters by weight as candidates, exempt from the band drop, so the
+ * best material is on the menu for every origin (consistency, not variety —
+ * owner's call). Duration is still controlled downstream: the re-admitted far
+ * cluster is ranked by weight×durationFitFactor, then duration-prefiltered and
+ * resized, so it only WINS where it genuinely fits. 0 = off (byte-identical).
+ * Sized at 1 (not 2): the single premier cluster is the lottery fix, and +2
+ * cost +58 % wall-time (candidate×chaining blowup) — pushing the canonical
+ * e2e brief over the 25 s budget. 1 keeps the AC gain at ~half the latency.
+ */
+export const BEST_MATERIAL_FLOOR = 1;
+
+/**
+ * Minimum segment length to DRIVE end-to-end (traversal span). Shorter roads
+ * get a single-tip touch — forcing both ends of a short spur demands a turn-back
+ * (u-turn geometry, owner round 2/4). Hoisted to module scope (R22-1b) so the
+ * twisty cluster ranker prefers twisty roads that are long enough to traverse.
+ */
+export const TRAVERSE_MIN_M = 1_200;
 
 function durationFitFactor(clusterDistM: number, durationS?: number, avgSpeedKmh = 55): number {
   if (!durationS) return 1;
@@ -361,6 +394,16 @@ export function generateLoopCandidates(
 
   const clusters = clusterSegments(infos, kClusters);
 
+  // R22-1b twisty lever: a CURVATURE-EMPHASIZED weight — Σ curviness²·length·class
+  // vs the default Σ curviness·length·class. Keeps curvy-KM (the loop needs curvy
+  // CONTENT, not one twisty road amid flat connectors — the mistake pure
+  // max-curviness made: it dropped the route MEAN and spawned u-turns) but tilts
+  // toward CURVIER roads over merely-longer ones. Off → weight, byte-identical.
+  // Duration still governs via durationFitFactor below.
+  const clusterEmph = (c: Cluster): number =>
+    c.members.reduce((s, m) => s + m.segment.curviness * segValue(m.segment), 0);
+  const rankVal = (c: Cluster): number => (options.curvyRank === true ? clusterEmph(c) : c.weight);
+
   // HARD duration-plausibility filter (owner round 3 / BD-21): the old
   // weight×fit RANKING could not control durations — round 1 emits one
   // candidate per cluster regardless of rank, and cluster weights are
@@ -382,19 +425,27 @@ export function generateLoopCandidates(
       const p = predictedS(c);
       return p >= 0.75 * targetS && p <= 1.5 * targetS;
     });
-    usable =
+    const banded =
       inBand.length >= 3
         ? inBand
         : [...clusters]
             .sort((a, b) => predictedErr(a) - predictedErr(b) || a.id - b.id)
             .slice(0, 3);
+    // R21-5: always keep the region's best MATERIAL on the menu (weight is
+    // origin-invariant), so a farther-out neighbour isn't dropped from the
+    // premier cluster the band admits for a closer one. 0 → byte-identical.
+    const topByWeight = [...clusters]
+      .sort((a, b) => rankVal(b) - rankVal(a) || a.id - b.id)
+      .slice(0, BEST_MATERIAL_FLOOR);
+    const seen = new Set(banded.map((c) => c.id));
+    usable = [...banded, ...topByWeight.filter((c) => !seen.has(c.id))];
   }
 
   // rank clusters: duration-sized weight desc (SPK-15: cluster distance must fit
   // the budget), then id — round-robin across sectors so the presented set spans
   // ≥3 sectors even when one sector dominates (§9 diversity)
   const sized = (c: Cluster) =>
-    c.weight * durationFitFactor(c.distanceM, options.durationS, options.avgSpeedKmh);
+    rankVal(c) * durationFitFactor(c.distanceM, options.durationS, options.avgSpeedKmh);
   const bySector = new Map<number, Cluster[]>();
   for (const c of usable.sort((a, b) => sized(b) - sized(a) || a.id - b.id)) {
     const list = bySector.get(c.sector) ?? [];
@@ -533,6 +584,14 @@ export function generateLoopCandidates(
     // route must DRIVE the twisty road, not pass near its midpoint. A second
     // strong member (≥800 m away) adds one more on-road traversal point.
     const byValue = [...primary.members].sort((a, b) => {
+      if (options.curvyRank === true) {
+        // R22-1b twisty: drive the curviest·longest road (curvature-emphasized —
+        // curviness²·length keeps a traversable road preferred over a short spur).
+        return (
+          b.segment.curviness * segValue(b.segment) - a.segment.curviness * segValue(a.segment) ||
+          a.segment.id.localeCompare(b.segment.id)
+        );
+      }
       return segValue(b.segment) - segValue(a.segment) || a.segment.id.localeCompare(b.segment.id);
     });
     const best = byValue[0]!;
@@ -541,8 +600,7 @@ export function generateLoopCandidates(
     // demands a turn-back against the sweep (u-turn geometry, owner round 2).
     // Threshold 1.5→1.2 km (round 4): more forced curvy-road km per loop — the
     // anti-"square" lever, since connectors are straight concession grid.
-    const TRAVERSE_MIN_M = 1_200;
-    const traverseBest = best.segment.lengthM >= TRAVERSE_MIN_M;
+    const traverseBest = best.segment.lengthM >= TRAVERSE_MIN_M; // module const (R22-1b)
     const second = byValue.find((m) => distM(m.centroid, best.centroid) > 800);
 
     const anchor = pickAnchor(
