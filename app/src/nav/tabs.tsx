@@ -16,9 +16,10 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { ComponentType, ReactElement } from 'react';
 
 import MapHome from '../screens/MapHome';
-import { CreateScreen, SavedScreen } from '../screens/placeholders';
+import { SavedScreen } from '../screens/placeholders';
 import { HIT_TARGET, useTheme } from '../theme';
 
+import DiscoverStack from './DiscoverStack';
 import PlanStack from './PlanStack';
 import { TAB_SPEC, type TabSpec } from './tab_spec';
 
@@ -26,8 +27,8 @@ export type RootTabParamList = Record<TabSpec['name'], undefined>;
 
 const SCREENS: Record<TabSpec['name'], ComponentType> = {
   Map: MapHome,
+  Discover: DiscoverStack,
   Plan: PlanStack,
-  Create: CreateScreen,
   Saved: SavedScreen,
 };
 

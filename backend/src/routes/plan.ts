@@ -19,6 +19,7 @@
 
 import {
   CharacterTagSchema,
+  LocationConstraintSchema,
   ParsedConstraintsSchema,
   PresetSchema,
   StopRequestSchema,
@@ -28,6 +29,7 @@ import type {
   CharacterTag,
   GenerationEvent,
   LatLng,
+  LocationConstraint,
   ParsedConstraints,
   Preset,
   Route,
@@ -48,6 +50,7 @@ import { logGeneration, toDbStatus } from '../db/generation_log';
 import { errorBody } from '../lib/errors';
 import type { RateLimiter } from '../lib/rate_limit';
 import type { RegionBoundary } from '../lib/region';
+import { buildOutAndBack } from '../planner/out_and_back';
 import { refineConstraints } from '../planner/refine';
 import { runPlanner, type PlannerResult } from '../planner/run';
 
@@ -72,6 +75,7 @@ export interface PlanEndpointDeps {
   parseFn?: typeof parseBrief;
   explainFn?: typeof explainRoute;
   logFn?: typeof logGeneration;
+  outAndBackFn?: typeof buildOutAndBack;
 }
 
 interface PlanBody {
@@ -99,11 +103,29 @@ interface PlanBody {
   character?: CharacterTag[];
   /** Twistiness preference 0..1 (Drive style selection). */
   twistiness_pref?: number;
+  /** R23 discovery tap: structured 'through <road>' pins, each with an optional
+   *  near_point disambiguation hint. REPLACES parsed location constraints;
+   *  re-validated in-handler (Hard rule K). */
+  location_constraints?: unknown;
+  /** R23 discovery tap: the computed loop budget (s), bounded [2700, 9000]
+   *  server-side (Hard rule K — the client's number is never trusted).
+   *  Overrides the parsed/brief duration. */
+  duration_target_s?: number;
+  /** R23 discovery tap: a FAR drive builds a direct OUT-AND-BACK instead of the
+   *  loop planner (its loop would balloon). Carries the road's endpoints + name;
+   *  region-checked (Hard rule K). When present, replaces the whole plan run. */
+  out_and_back?: { entry: LatLng; exit: LatLng; name: string };
 }
 
 /** Stops-builder rows cap (sanity bound, Hard rule K). */
 export const MAX_STOP_ROWS = 6;
 const StopOverridesSchema = z.array(StopRequestSchema).max(MAX_STOP_ROWS);
+/** Structured 'through <road>' pins from the discovery tap (R23) — re-validated
+ *  in-handler (Hard rule K). Small cap: a tap sends one; allow a few. */
+export const MAX_LOCATION_OVERRIDES = 4;
+const LocationConstraintsOverridesSchema = z
+  .array(LocationConstraintSchema)
+  .max(MAX_LOCATION_OVERRIDES);
 
 const LATLNG_SCHEMA = {
   type: 'object',
@@ -249,6 +271,7 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
   const parseFn = deps.parseFn ?? parseBrief;
   const explainFn = deps.explainFn ?? explainRoute;
   const logFn = deps.logFn ?? logGeneration;
+  const outAndBackFn = deps.outAndBackFn ?? buildOutAndBack;
 
   app.post<{ Body: PlanBody }>(
     '/plan',
@@ -259,7 +282,9 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
           required: ['brief'],
           additionalProperties: false,
           properties: {
-            brief: { type: 'string', minLength: 1, maxLength: MAX_BRIEF_CHARS },
+            // R24-U12: the brief is optional content (places + time); a
+            // buttons-only plan sends '' — minLength 0 accepts it.
+            brief: { type: 'string', minLength: 0, maxLength: MAX_BRIEF_CHARS },
             origin: LATLNG_SCHEMA,
             destination: LATLNG_SCHEMA,
             shape: { type: 'string', enum: ['loop', 'a_to_b'] },
@@ -298,6 +323,33 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
               items: { type: 'string', enum: [...CharacterTagSchema.options] },
             },
             twistiness_pref: { type: 'number', minimum: 0, maximum: 1 },
+            location_constraints: {
+              type: 'array',
+              maxItems: MAX_LOCATION_OVERRIDES,
+              items: {
+                type: 'object',
+                required: ['kind', 'text'],
+                additionalProperties: false,
+                properties: {
+                  // the tap pins by traversal only ('through'); near/avoid stay
+                  // brief-parsed. Tighter enum = safer (Hard rule K).
+                  kind: { type: 'string', enum: ['through'] },
+                  text: { type: 'string', minLength: 1, maxLength: 120 },
+                  near_point: LATLNG_SCHEMA,
+                },
+              },
+            },
+            duration_target_s: { type: 'integer', minimum: 2700, maximum: 9000 },
+            out_and_back: {
+              type: 'object',
+              required: ['entry', 'exit', 'name'],
+              additionalProperties: false,
+              properties: {
+                entry: LATLNG_SCHEMA,
+                exit: LATLNG_SCHEMA,
+                name: { type: 'string', minLength: 1, maxLength: 120 },
+              },
+            },
           },
         },
       },
@@ -362,6 +414,9 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
         avoid: avoidOverrides,
         character: characterOverrides,
         twistiness_pref: twistinessOverride,
+        location_constraints: rawLocationConstraints,
+        duration_target_s: durationTargetOverride,
+        out_and_back: outAndBack,
       } = request.body;
 
       // structured stop rows re-validate through the SHARED zod schema before
@@ -376,6 +431,29 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
           return;
         }
         stopOverrides = parsed.data;
+      }
+
+      // R23 discovery tap: structured 'through <road>' pins re-validate through
+      // the SHARED zod schema before use (Hard rule K); they REPLACE the
+      // brief-parsed location constraints in the merge below.
+      let locationOverrides: LocationConstraint[] | null = null;
+      if (rawLocationConstraints !== undefined) {
+        const parsed = LocationConstraintsOverridesSchema.safeParse(rawLocationConstraints);
+        if (!parsed.success) {
+          void reply
+            .status(400)
+            .send(errorBody('bad_request', 'The location pins were not recognizable.', request.id));
+          return;
+        }
+        locationOverrides = parsed.data;
+      }
+
+      // R23 out-and-back tap needs a start point (buildOutAndBack routes from it)
+      if (outAndBack && !origin) {
+        void reply
+          .status(400)
+          .send(errorBody('bad_request', 'A drive needs a start point.', request.id));
+        return;
       }
 
       // refinement round-trip (M7-T07): both fields or neither; the previous
@@ -418,7 +496,12 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
       const refineCoords = [refineBase?.origin, refineBase?.destination].filter(
         (v): v is LatLng => v !== null && v !== undefined && typeof v === 'object',
       );
-      for (const p of [origin, destination, ...refineCoords]) {
+      // near_point hints are coords arriving in the body → region-check too (K)
+      const nearPointCoords = (locationOverrides ?? [])
+        .map((c) => c.near_point)
+        .filter((v): v is LatLng => v !== undefined);
+      const oabCoords = outAndBack ? [outAndBack.entry, outAndBack.exit] : [];
+      for (const p of [origin, destination, ...refineCoords, ...nearPointCoords, ...oabCoords]) {
         if (p && !deps.region.contains(p)) {
           void reply
             .status(400)
@@ -560,6 +643,16 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
         if (twistinessOverride !== undefined) {
           constraints = { ...constraints, twistiness_pref: twistinessOverride };
         }
+        // R23 discovery tap: the structured 'through' pin REPLACES parsed
+        // location constraints (the tap knows the exact road + near_point); the
+        // computed loop budget overrides the parsed duration. Both absent for a
+        // normal Plan request → constraints unchanged (BD-40 byte-identical).
+        if (locationOverrides !== null) {
+          constraints = { ...constraints, location_constraints: locationOverrides };
+        }
+        if (durationTargetOverride !== undefined) {
+          constraints = { ...constraints, duration_target_s: durationTargetOverride };
+        }
         sse({
           type: 'step',
           step: 'parse',
@@ -571,14 +664,17 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
 
         if (aborter.signal.aborted) return; // disconnected during parse
 
-        result = await planFn(constraints, {
-          db: deps.db,
-          valhallaUrl: deps.valhallaUrl,
-          onEvent: (e) => {
-            if (e.type !== 'done') sse(e); // done is ours, after explanation
-          },
-          signal: aborter.signal,
-        });
+        result =
+          outAndBack && origin
+            ? await outAndBackFn(origin, outAndBack, { valhallaUrl: deps.valhallaUrl })
+            : await planFn(constraints, {
+                db: deps.db,
+                valhallaUrl: deps.valhallaUrl,
+                onEvent: (e) => {
+                  if (e.type !== 'done') sse(e); // done is ours, after explanation
+                },
+                signal: aborter.signal,
+              });
 
         if (result.status === 'clarify') {
           sse({

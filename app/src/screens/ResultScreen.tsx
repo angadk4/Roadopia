@@ -15,6 +15,7 @@ import ReasoningView from '../components/ReasoningView';
 import RefinePanel from '../components/RefinePanel';
 import RouteCompare from '../components/RouteCompare';
 import RouteDetail from '../components/RouteDetail';
+import { parseChips } from '../lib/parse_summary';
 import type { Explanation, TimelineEntry } from '../lib/plan_run';
 import type { DoneStatus } from '../lib/plan_stream';
 import {
@@ -133,6 +134,26 @@ export default function ResultScreen(props: ResultScreenProps): ReactElement {
           </Text>
         )}
         {viewingBest && <ReasoningView timeline={params.timeline ?? []} />}
+        {viewingBest && params.constraints && parseChips(params.constraints).length > 0 && (
+          <View style={styles.understood}>
+            <Text style={[styles.understoodLabel, { color: colors.textMuted }]}>
+              Here's what I understood
+            </Text>
+            <View style={styles.chipRow}>
+              {parseChips(params.constraints).map((chip) => (
+                <View
+                  key={chip}
+                  style={[
+                    styles.chip,
+                    { borderColor: colors.border, backgroundColor: colors.surface },
+                  ]}
+                >
+                  <Text style={[styles.chipText, { color: colors.text }]}>{chip}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
         {params.constraints && (
           <RefinePanel
             onSend={(followUp) =>
@@ -174,6 +195,16 @@ const styles = StyleSheet.create({
   honest: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md },
   honestText: { ...font.body, lineHeight: 20 },
   altNote: { ...font.caption, lineHeight: 16 },
+  understood: { gap: spacing.sm },
+  understoodLabel: { ...font.caption },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  chipText: { ...font.caption },
   again: {
     minHeight: HIT_TARGET,
     borderWidth: 1.5,

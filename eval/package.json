@@ -5,6 +5,7 @@
   "scripts": {
     "test": "vitest run",
     "loop-quality": "tsx loop_quality.ts",
+    "discover-quality": "tsx discover_quality.ts",
     "baselines": "tsx run_baselines.ts",
     "gate-c": "tsx experiments/gate_c.ts",
     "gate-a": "tsx experiments/gate_a.ts",

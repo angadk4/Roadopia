@@ -93,6 +93,13 @@ export type Weights = z.infer<typeof WeightsSchema>;
 export const LocationConstraintSchema = z.object({
   kind: z.enum(['near', 'avoid', 'through']),
   text: z.string().min(1),
+  /** R23 (discovery tap): an optional disambiguation hint — when two roads
+   *  share a name, resolve the one NEAREST this point (the tapped drive's
+   *  entry) rather than the longest namesake. Server-set only; the parsers
+   *  never emit it, so omitting it is byte-identical to pre-R23 and leaves the
+   *  LLM emitting no geography (Hard rule A). Optional (not defaulted) so
+   *  validated parser output gains no extra key. */
+  near_point: LatLngSchema.optional(),
 });
 export type LocationConstraint = z.infer<typeof LocationConstraintSchema>;
 

@@ -1640,3 +1640,150 @@ material exists to prefer (Guelph, Stratford) and is correctly inert where the m
 (run.ts) gates it; OFF byte-identical. TRAVERSE_MIN_M hoisted to module scope (candidates.ts). The
 twisty-vs-backroads gap (audit-v5 showed them identical on 67/70) is re-confirmed at R22-5's re-audit.
 Config → frozen-r22-v1a. Rollback: TWISTY_CURVY_RANK=false.
+
+**BD-71 — R23 "Great Drives Near You": the owner reframe (2026-07-22).** After audit-v6 (70 random
+origins) showed R22-1's Twisty is a coin-flip and 30% of default loops come back flat, the owner directed
+a concept change (three decisions): (1) DISCOVERY reframe — a new Discover tab surfacing the region's best
+roads reachable from you, AUTO-RANKED from the corpus (not a loop-from-home generator); (2) COLLAPSE
+Twisty/Backroads/Simple → one 2-stop Direct/Scenic-backroads control; (3) AI MINIMAL — buttons own their
+knobs, the prompt fills places+vibes. This RESOLVES the BD-69/BD-70 escalation ("which twisty lever?" →
+the owner chose to DROP the twisty tier entirely and add discovery). Designed + adversarially hardened by
+six subagents (three explorers, one backend design pass, two critics). Sub-decisions BD-72..76.
+
+**BD-72 — Discovery mode (discoverDrives + POST /discover + tap; 2026-07-22).** Auto-ranked from the ~10k
+curvy corpus, NO curated table. Pipeline (backend/src/planner/discover.ts): getIsochrone(60-min reach) →
+retrieveCandidates(segmentLimit 5000) → mergeRoadPieces (whole roads) → value rank (curviness SATURATED
+at 3.0 · length · classFactor · (1−0.7·urban)) → bearing-sector spread (8 sectors, quota 3, 1500 m dedup,
+cap 24 = the matrix budget) → ONE travelMatrix (real drive-times, BACKROADS costing) → menuScore =
+value·(1−0.5·min(1, toStart/reach)) → 4000 m menu spread → 8-12. **Shape split (owner: loops nearby,
+out-and-back far):** a far road's LOOP balloons unpredictably (Kimberley→10th Line 294-309 min, unfixable
+by any duration param — the loop generator won't retrace), so near (≤20 min out) = a loop via runPlanner
+(through-pin + computed budget); far = a DIRECT out-and-back (out_and_back.ts: routeThrough
+origin→entry→exit→origin, ~2·out+road, predictable). NearbyDrive.kind carries it. discover_quality
+baseline 7/7 origins (full spread curvy menus, on-road 92-100%, det Y); golden-fixture determinism
+(discover.test.ts 8/8). Byte-identical off = endpoint unregistered → 404. The deep retrieve (5000) +
+saturation resolve the urban-adjacent starving WITHOUT per-sector tiling (tiling = documented fallback).
+Params frozen in eval/params-frozen.json (frozen-r23-v1). No LLM, two bounded Valhalla calls (Hard rule F);
+LLM emits no geography (Hard rule A).
+
+**BD-73 — 2-stop drive-control collapse (2026-07-22).** Twisty/Backroads/Simple + the Mostly-backroads
+toggle → ONE 2-stop control: Direct (=simple) / Scenic backroads (=backroads, default). App-side ONLY
+(plan_draft.ts + PlanScreen.tsx); Direct keeps the old Simple's twistiness_pref 0.15. The backend `twisty`
+preset is RETAINED in PresetSchema for parity (a typed "twisty" brief still parses; with R22-1 off it
+behaves ≈ backroads via the BACKROADS costing profile) — **do NOT remove it.** BD-30 preserved (discrete
+chips, sliders still deferred). PlanDraft is in-memory (PlanStack useState) — no persisted-'twisty'
+migration needed. App suite 129/129.
+
+**BD-74 — R22-1 twisty curvy-rank ROLLED BACK / BD-70 REVERSED (2026-07-22).** TWISTY_CURVY_RANK=false
+(run.ts). Audit-v6 (random origins) showed the lever is a coin-flip (+8 / −7; Terra Cotta 1.18→0.00), and
+the owner collapsed the twisty tier, so no twisty ask remains. Same-session 48-brief A/B: **ON hash
+fbec02d22906a45a (17/48 AC) vs OFF hash 129ab3f744330649 (16/48 AC)** — the flag moved the fixed bench
+(marginally better, why BD-70 adopted it) but the random-origin audit exposed the coin-flip. OFF is the
+pre-R22-1 baseline (rankVal → c.weight; byte-identical BY CONSTRUCTION). Plumbing left dormant (BD-40
+re-runnability, the CHAIN_CANDIDATES_ON precedent). Config frozen-r22-v1a → **frozen-r23-v1**.
+
+**BD-75 — AI-minimal: app-copy relabel ONLY (2026-07-22).** No backend parse change → **no BD-28 bump.**
+The "90-minute twisty loop" example was the APP placeholder (PlanScreen.tsx), not PARSE_SYSTEM_PROMPT.
+Relabelled the Plan brief to places+vibes ("Add places or a vibe"; placeholder "…through the Forks of the
+Credit, ending near Elora — quiet and scenic"). Precedence (buttons win, prompt fills gaps) already lived
+in plan.ts:501-562 — no code change; tests: a button preset overrides the parsed preset; an untouched
+avoid toggle never clears a brief-parsed avoid. parse_prompt_version stays 3; the backend parser is
+byte-identical.
+
+**BD-76 — R23 re-audit (audit-v7) + program verification (2026-07-22).** audit-v7 on the SAME seeded 70
+origins as v6 (continuity). Arm 1 = the shipped Backroads default loop; Arm 2 = the Discover menu + the
+top drive tapped and routed. **Result: every origin (70/70) gets a FULL Discover menu (mean 11.9 drives,
+70/70 ≥ 8, 0 empty); top-3 curviness 2.56 vs the Backroads-default mean 1.00; the tapped drive is driven
+at 97% mean on-road (66/70 ≥ 80%); 12% of top drives are loops, the rest honest out-and-backs.** The
+reframe's headline: origins whose Backroads default came back FLAT (Mansfield/Cookstown/Warkworth/Acton/
+Colborne/several Brampton at curviness 0) now surface a full menu of genuinely-curvy reachable roads —
+the v6 flat-country gap, closed. Owner artifact (before/after):
+https://claude.ai/code/artifact/57ab6f14-aa9b-4552-b6ab-400970a1d4ba. **Program totals:** 14 units,
+backend 316/316, app 129/129, whole-repo tsc clean, loop-quality byte-identical (129ab3f744330649),
+discover_quality baseline 7/7. Config frozen-r23-v1. [HUMAN] remaining: device pass; ratify BD-71..76;
+run the one-line commits; migrations 0010-0014 at hosted deploy (discovery adds none).
+
+**BD-77 — R24 "The Perfection Pass" owner decisions (2026-07-22).** Owner-directed after audit-v8
+(40 loops + 15 A→B + 10 Discover) + 3 expert analyses. Six owner calls drove the 18-unit program:
+(1) Discover becomes the PRIMARY/home tab, Plan-loops stay; (2) Discover menu curated · pre-built ·
+consistent; (3) out-and-back for ALL Discover drives (loops only in Plan); (4) Discover home map-first;
+(5) loop planner = full rebuild attempt (adopt-or-refuse); (6) AI recast to places & time + a visible
+parse; plus rename "Scenic backroads" → "Fun & Explorative". Discipline unchanged: every lever
+flag-gated byte-identical OFF + pre-registered A/B (BD-40); LLM emits no geography; /discover stays
+browsing-class. Config → frozen-r24-v1.
+
+**BD-78 — De-switchback loops: significant_turns_per_km + curvature saturation (R24-U1, ADOPTED τ_ref=8).**
+The loop generator ranked road MATERIAL on RAW circum-curvature, chasing tight subdivision/park
+switchbacks (the owner's "weaving into neighbourhoods for pointless curves, wayyy too many turns"). Fix:
+`effectiveCurviness = min(curviness, 3.0) · flowFactor`, `flowFactor = clamp(τ_ref/max(τ, τ_ref), 0.3, 1)`
+from `significant_turns_per_km` — computed + stored since migration 0001 but DROPPED at planner_reads:48
+(now surfaced through CurvySegmentRow → CandidateSegment → mergeRoadPieces length-weighting). Re-prices
+segValue/clusterEmph/byValue (candidates.ts), pickInsertSegment (loop.ts), span-pool + corridor value
+(chain.ts). Corpus-calibrated (good drives ≈ 3 turns/km, p80 ≈ 6; switchbacks curv>4 ≈ 13-21). **τ_ref=8
+ADOPTED over 6** by the 48-brief A/B: τ_ref=6 over-penalized fine 6-8 turns/km roads (urban UP vs
+baseline); τ_ref=8 keeps flowing roads at full value and still discounts real switchbacks to ~0.38-0.62.
+Result vs OFF: AC 16→20, |durErr| p50 11→9%, urban p80 13→10% (mean below baseline), curvy 0.10→0.11,
+microloops 4→3, corridor-doubling p80 0.16→0.11. OFF (CURV_SATURATION=off) byte-identical
+129ab3f744330649; ON 521c0078a123abee. Residual: self-overlap rose on a few briefs (soft, under cap —
+the anti-retrace that the refused loop rebuild would have addressed).
+
+**BD-79 — Discover: out-and-back-only · curated · pre-built · map-first · classics · repetition fix
+(R24-U3..U11, ADOPTED).** Reshaped per BD-77. (a) OUT-AND-BACK for every Discover drive (dropped the
+R23 near-loop/far-oab `kind` split): pre-buildable, predictable, uniform; a pre-built loop would run the
+money-spending planner behind an unauthenticated browse endpoint (forbidden). (b) Curated 5-6 (was 8-12),
+SECTOR_QUOTA 3→2, auto pool ≤16. (c) PRE-BUILT: each menu drive's out-and-back routeThrough'd in
+Promise.all → real measured total (instant tap opens Result directly via nearbyDriveToRoute, no /plan);
+per-drive failure keeps the corpus estimate. (d) CLASSIC blend: the 8 hand-picked seed classics
+(discover_seed_drives SECURITY DEFINER RPC, migration 0015, public+seed only) merged into the SAME
+matrix; curviness MEASURED from geometry (seeds store 0); classics traced with interior through-points on
+the pre-build so the route follows the curated line; CLASSIC_BONUS 1.15 (1.3 crowded the menu + pinned
+#1). (e) REPETITION fix: origin-relative proximityTier (1.0-1.15 on the real per-origin drive-time) +
+real drive-times → menus differ by area (the R23 origin-invariant bug fixed; a dominant classic
+legitimately tops its whole radius). (f) MAP-FIRST: shared DriveLinesMap (extracted from MapHome — the
+amber line can't drift), Discover the primary tab. discover_quality R24: 5/7 origins pass all bars,
+repetition cohort 2/2, all pre-built; 2 misses = seed-classic line fidelity on long seeds (Hockley Valley
+averages gentle) — seed-DATA, flagged [HUMAN] content-curation, not a pipeline defect.
+
+**BD-80 — AI: places & time + a visible parse (R24-U12/U13, ADOPTED; no BD-28 bump).** The free-text
+brief was mandatory and duplicated the buttons while being the only home for named places + a time
+budget. R24: (a) the brief is OPTIONAL — the buttons plan a fine drive alone (relaxed plan_draft +
+plan.ts schema minLength 0); an empty brief costs ZERO model spend (parseBrief short-circuits trivial
+input to the rules parser — Hard rule F). (b) A "How long" time control (chips 45 min → 2.5 hr, loops
+only) — there was no time control before; composes to duration_target_s. (c) A "here's what I understood"
+chip row on Result (places · time · style · avoids), deterministic + zero-LLM (parseChips), editable via
+the existing RefinePanel. Tier-1 only; parse_prompt_version stays 3, backend parser byte-identical, no
+BD-28.
+
+**BD-81 — Loop path-search rebuild: REFUSED (R24-U14/U15, 4th loop-chain refusal, 2026-07-22).** The
+prior refusal (BD-40 / round18_3) named "richer span material" as the plausible lever; U1's de-switchback
+RE-PRICING (effectiveCurviness) is exactly that. Pre-registered 48-brief A/B vs the U1 τ_ref=8 baseline
+(CHAIN_CANDIDATES=on): curvyShare 0.11→0.12 (+1 pp; PRIMARY bar ≥ +10 pp — the SAME +1pp miss a 4th
+time), arterial share FLAT 71→70%, wall 8665→14980 ms (kill-condition ≤ +1-2 s). AC did rise 20→24, but
+the PRIMARY curvyShare bar + the latency kill both fail. ROOT CAUSE (structural, not a pricing miss): the
+CONNECTORS between scattered curvy spans ride arterials, so no span re-pricing, ordering, or hard
+angular-monotone closure moves the arterial share — the beam-search rebuild would hit the same wall, so
+LOOP_PATHSEARCH_ON was NOT built. Loop quality ships on U1's de-switchback alone. CHAIN_CANDIDATES_ON
+stays env-gated default OFF (byte-identical); AC +4 recorded as a possible future NARROWER-application
+lever for the human.
+
+**BD-82 — A→B audit + tune: Schomberg no-route FIXED, detour-cap loosening FALSIFIED (R24-U16).** The
+audit-v8 A→B offenders re-run through atob_quality (+ the offender briefs added). Two no-routes were
+GAZETTEER gaps (destination left as an unresolved string): Aurora→Schomberg FIXED by adding Schomberg to
+the gazetteer (44.0119, -79.6793, from the OSM POI corpus) — now routes; Peterborough→Bancroft correctly
+stays out-of-region (Bancroft north of 44.95°). The arterial-heavy A→B (~⅓ ride arterials, mean 83%):
+hypothesis was the detour cull (DETOUR_MAX_DEFAULT 1.8×) rejects curvy corridors — FALSIFIED by the
+15-brief A/B (loosening to 2.2× left arterial share UNCHANGED at 83%, curviness even dipped 0.96→0.94; the
+extra distance is more arterial, not more curvy). Same structural cause as the refused loop chains
+(BD-81); kept 1.8. U1 de-switchback re-pricing already applies to the corridor spans.
+
+**BD-83 — R24 re-audit (audit-v9) + program verification (2026-07-22).** Cross-section confirmation on
+the final config, before/after artifact
+https://claude.ai/code/artifact/ef98b655-fa22-48de-a0a2-5892afc13932 (6 loops + 18 Discover drives
+captured live). Loops de-switchbacked (AC 16→20, microloops down, urban down); Discover curated ·
+pre-built · instant · map-first with distinct menus per area + classics blended (discover_quality 5/7,
+repetition 2/2); A→B no-route fixed, arterial-heavy structural. Program totals: 18 units — 13 shipped, 2
+refused (BD-81 loop rebuild, BD-82 detour cap), 3 verified fixes; backend 319/319, app 140/140, shared
+23/23, whole-repo tsc clean. Config frozen-r24-v1 (eval/params-frozen.json). [HUMAN] remaining: device
+pass (Discover map-first → tap a classic → instant real route; a Plan loop with fewer turns; the
+places+time prompt + visible parse); ratify BD-77..83; run the one-line commits; migrations 0010-0015 at
+hosted deploy (0015 = discover_seed_drives); restart the running backend to serve R24 /discover.

@@ -10,6 +10,7 @@
  * table read here is a security regression, not a refactor.
  */
 
+import type { LatLng, LineString } from '@shared/types';
 import type { Client } from 'pg';
 
 export interface CurvySegmentRow {
@@ -21,6 +22,9 @@ export interface CurvySegmentRow {
   curviness: number;
   /** R19: fraction of segment length inside built-up landuse (0 = country). */
   urban_share: number;
+  /** R24: significant turns (>=8 deg) per km — the switchback vs sweeper signal
+   *  (computed + stored since 0001, previously dropped here). */
+  significant_turns_per_km: number;
   geometry: string; // GeoJSON text (st_asgeojson)
 }
 
@@ -47,6 +51,7 @@ export async function plannerFindCurvyRoads(
   const res = await db.query<CurvySegmentRow>(
     `select id::text, osm_way_id, name, highway, length_m,
             circum_curvature_per_km as curviness, urban_share,
+            significant_turns_per_km,
             st_asgeojson(geom) as geometry
      from planner_find_curvy_roads(p_west := 0, p_south := 0, p_east := 0, p_north := 0,
                                    p_polygon := $1::jsonb, p_min_curviness := $2, p_limit := $3,
@@ -131,6 +136,30 @@ export async function plannerFindSegmentsByName(
       params.minSimilarity ?? 0.35,
       params.limit ?? 40,
     ],
+  );
+  return res.rows;
+}
+
+/** R24-U4: a hand-picked classic seed drive (migration 0015 SECURITY DEFINER —
+ *  public seed rows only). geometry/waypoints arrive as parsed jsonb. */
+export interface SeedDriveRow {
+  id: string;
+  name: string;
+  geometry: LineString;
+  /** The drive's endpoints in order — [entry, exit] for the seed classics. */
+  waypoints: LatLng[];
+  is_loop: boolean;
+  distance_m: number;
+  duration_s: number;
+  /** Stored curviness (0 for the un-measured seeds; Discover re-measures). */
+  curviness: number;
+}
+
+/** The 8 public classic drives (Snake Road, Hockley Valley, …) — region-wide. */
+export async function plannerFindSeedDrives(db: Client): Promise<SeedDriveRow[]> {
+  const res = await db.query<SeedDriveRow>(
+    `select id, name, geometry, waypoints, is_loop, distance_m, duration_s, curviness
+     from discover_seed_drives()`,
   );
   return res.rows;
 }

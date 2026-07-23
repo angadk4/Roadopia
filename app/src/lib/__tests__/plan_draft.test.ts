@@ -11,11 +11,11 @@ function draft(overrides: Partial<PlanDraft>): PlanDraft {
 
 describe('buildPlanRequest', () => {
   it('builds a valid loop request (brief trimmed, origin coords, shape)', () => {
-    const out = buildPlanRequest(draft({ brief: '  a twisty 90 minute loop  ', origin: ORIGIN }));
+    const out = buildPlanRequest(draft({ brief: '  a 90 minute loop  ', origin: ORIGIN }));
     expect(out).toEqual({
       ok: true,
       request: {
-        brief: 'a twisty 90 minute loop',
+        brief: 'a 90 minute loop',
         origin: { lat: 43.26, lng: -79.87 },
         shape: 'loop',
       },
@@ -33,13 +33,27 @@ describe('buildPlanRequest', () => {
     expect(ab.ok && ab.request.shape).toBe('a_to_b');
   });
 
-  it('blocks with friendly problems: empty brief, no origin', () => {
-    const out = buildPlanRequest(draft({ brief: '   ' }));
+  it('U12: an empty brief is allowed; a missing origin still blocks', () => {
+    const out = buildPlanRequest(draft({ brief: '   ' })); // no origin
     expect(out.ok).toBe(false);
     if (!out.ok) {
-      expect(out.problems).toContain('Describe the drive you want.');
+      expect(out.problems).not.toContain('Describe the drive you want.');
       expect(out.problems).toContain('Add a start point.');
     }
+  });
+
+  it('U12: a buttons-only plan (empty brief + origin) is valid', () => {
+    const out = buildPlanRequest(draft({ brief: '', origin: ORIGIN, style: 'backroads' }));
+    expect(out.ok).toBe(true);
+    expect(out.ok && out.request.preset).toBe('backroads');
+    expect(out.ok && out.request.brief).toBe('');
+  });
+
+  it('U12: the time control composes duration_target_s; "Any" (null) omits it', () => {
+    const timed = buildPlanRequest(draft({ brief: '', origin: ORIGIN, durationTargetS: 5400 }));
+    expect(timed.ok && timed.request.duration_target_s).toBe(5400);
+    const any = buildPlanRequest(draft({ brief: '', origin: ORIGIN, durationTargetS: null }));
+    expect(any.ok && 'duration_target_s' in any.request).toBe(false);
   });
 
   it('blocks an over-long brief (Hard rule K mirror of MAX_BRIEF_CHARS)', () => {
@@ -60,15 +74,24 @@ describe('buildPlanRequest', () => {
   });
 });
 
-describe('buildPlanRequest — R16-5 section composition (the preset-slot rules)', () => {
-  it('Twisty → preset twisty + twistiness_pref 0.9; Simple → simple + 0.15', () => {
-    const twisty = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN, style: 'twisty' }));
-    expect(twisty.ok && twisty.request.preset).toBe('twisty');
-    expect(twisty.ok && twisty.request.twistiness_pref).toBe(0.9);
+describe('buildPlanRequest — R23 2-stop drive-style composition', () => {
+  it('Direct → preset simple + twistiness_pref 0.15; Fun & Explorative → backroads, no pref', () => {
+    const direct = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN, style: 'simple' }));
+    expect(direct.ok && direct.request.preset).toBe('simple');
+    expect(direct.ok && direct.request.twistiness_pref).toBe(0.15);
 
-    const simple = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN, style: 'simple' }));
-    expect(simple.ok && simple.request.preset).toBe('simple');
-    expect(simple.ok && simple.request.twistiness_pref).toBe(0.15);
+    const backroads = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN, style: 'backroads' }));
+    expect(backroads.ok && backroads.request.preset).toBe('backroads');
+    // re-homed from the old "backroads alone takes the slot with no pref"
+    expect(backroads.ok && 'twistiness_pref' in backroads.request).toBe(false);
+  });
+
+  it('never emits the retired twisty preset / 0.9 pref (R23 rollback)', () => {
+    for (const style of ['simple', 'backroads'] as const) {
+      const out = buildPlanRequest(draft({ brief: 'b', origin: ORIGIN, style }));
+      expect(out.ok && out.request.preset).not.toBe('twisty');
+      expect(out.ok && out.request.twistiness_pref).not.toBe(0.9);
+    }
   });
 
   it('no style, no toggles → NO preset/pref/avoid/character/stops fields at all', () => {
@@ -83,60 +106,22 @@ describe('buildPlanRequest — R16-5 section composition (the preset-slot rules)
     }
   });
 
-  it('R21-2: the app DEFAULT_DRAFT opens on Backroads (plain generate is fun, not a cruise)', () => {
+  it('the app DEFAULT_DRAFT opens on Fun & Explorative (plain generate is fun, not a cruise)', () => {
     const out = buildPlanRequest({ ...DEFAULT_DRAFT, brief: 'b', origin: ORIGIN });
     expect(out.ok && out.request.preset).toBe('backroads');
+    expect(out.ok && 'twistiness_pref' in out.request).toBe(false);
     // EMPTY_DRAFT stays the true nothing-selected baseline (composes no preset)
     const empty = buildPlanRequest({ ...EMPTY_DRAFT, brief: 'b', origin: ORIGIN });
     expect(empty.ok && 'preset' in empty.request).toBe(false);
   });
 
-  it('backroads takes the preset slot over Twisty; the 0.9 pref rides along', () => {
-    const out = buildPlanRequest(
-      draft({
-        brief: 'b',
-        origin: ORIGIN,
-        style: 'twisty',
-        routeOptions: { avoidHighways: false, mostlyBackroads: true, pavedOnly: false },
-      }),
-    );
-    expect(out.ok && out.request.preset).toBe('backroads');
-    expect(out.ok && out.request.twistiness_pref).toBe(0.9);
-  });
-
-  it('backroads + Simple keeps simple and adds the backroad tag (weak combo, honest)', () => {
-    const out = buildPlanRequest(
-      draft({
-        brief: 'b',
-        origin: ORIGIN,
-        style: 'simple',
-        routeOptions: { avoidHighways: false, mostlyBackroads: true, pavedOnly: false },
-      }),
-    );
-    expect(out.ok && out.request.preset).toBe('simple');
-    expect(out.ok && out.request.character).toEqual(['backroad']);
-  });
-
-  it('backroads alone (no style) takes the slot with no pref', () => {
-    const out = buildPlanRequest(
-      draft({
-        brief: 'b',
-        origin: ORIGIN,
-        routeOptions: { avoidHighways: false, mostlyBackroads: true, pavedOnly: false },
-      }),
-    );
-    expect(out.ok && out.request.preset).toBe('backroads');
-    expect(out.ok && 'twistiness_pref' in out.request).toBe(false);
-  });
-
   it('Scenery adds the scenic tag but NO viewpoint stop (R16-fix) and never the preset slot', () => {
     const out = buildPlanRequest(
-      draft({ brief: 'b', origin: ORIGIN, style: 'twisty', preferViews: true }),
+      draft({ brief: 'b', origin: ORIGIN, style: 'backroads', preferViews: true }),
     );
-    expect(out.ok && out.request.preset).toBe('twisty'); // untouched
+    expect(out.ok && out.request.preset).toBe('backroads'); // untouched by scenery
     expect(out.ok && out.request.character).toEqual(['scenic']);
-    // scenery no longer injects a viewpoint STOP (it dragged loops + skipped
-    // repair); it becomes a routing preference in Thread B
+    // scenery is a routing preference (Thread B), not a viewpoint STOP
     expect(out.ok && 'stops' in out.request).toBe(false);
   });
 
@@ -145,7 +130,7 @@ describe('buildPlanRequest — R16-5 section composition (the preset-slot rules)
       draft({
         brief: 'b',
         origin: ORIGIN,
-        routeOptions: { avoidHighways: true, mostlyBackroads: false, pavedOnly: true },
+        routeOptions: { avoidHighways: true, pavedOnly: true },
       }),
     );
     expect(out.ok && out.request.avoid).toEqual({ highways: true, unpaved: true });
@@ -154,7 +139,7 @@ describe('buildPlanRequest — R16-5 section composition (the preset-slot rules)
       draft({
         brief: 'b',
         origin: ORIGIN,
-        routeOptions: { avoidHighways: true, mostlyBackroads: false, pavedOnly: false },
+        routeOptions: { avoidHighways: true, pavedOnly: false },
       }),
     );
     // an untouched toggle must NOT appear as false (it would clear a
@@ -204,16 +189,16 @@ describe('buildPlanRequest — R16-5 section composition (the preset-slot rules)
       draft({
         brief: 'sunday drive',
         origin: ORIGIN,
-        style: 'twisty',
+        style: 'backroads',
         preferViews: true,
-        routeOptions: { avoidHighways: true, mostlyBackroads: true, pavedOnly: true },
+        routeOptions: { avoidHighways: true, pavedOnly: true },
         stops: [{ type: 'food', when: 'midway' }],
       }),
     );
     expect(out.ok).toBe(true);
     if (out.ok) {
       expect(out.request.preset).toBe('backroads');
-      expect(out.request.twistiness_pref).toBe(0.9);
+      expect('twistiness_pref' in out.request).toBe(false);
       expect(out.request.avoid).toEqual({ highways: true, unpaved: true });
       expect(out.request.character).toEqual(['scenic']);
       // scenery contributes the scenic tag but no longer a viewpoint stop (R16-fix)

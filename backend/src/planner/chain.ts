@@ -36,6 +36,7 @@ import type { MatrixCell } from '../valhalla/matrix';
 import {
   bearingDeg,
   countryClassFactor,
+  effectiveCurviness,
   sectorOf,
   tipOf,
   traversalSpanOf,
@@ -149,6 +150,9 @@ export function mergeRoadPieces(segments: readonly CandidateSegment[]): Candidat
         const lengthM = run.reduce((a, r) => a + r.lengthM, 0);
         const curviness =
           run.reduce((a, r) => a + r.curviness * r.lengthM, 0) / Math.max(1, lengthM);
+        // R24: length-weight the turn density across the merged run (like curviness);
+        // omit the field entirely if no piece carried the signal (fail-open).
+        const anyTurns = run.some((r) => r.significantTurnsPerKm !== undefined);
         out.push({
           ...run[0]!,
           id: run
@@ -157,6 +161,13 @@ export function mergeRoadPieces(segments: readonly CandidateSegment[]): Candidat
             .join('+'),
           lengthM,
           curviness,
+          ...(anyTurns
+            ? {
+                significantTurnsPerKm:
+                  run.reduce((a, r) => a + (r.significantTurnsPerKm ?? 0) * r.lengthM, 0) /
+                  Math.max(1, lengthM),
+              }
+            : {}),
           geometry: { type: 'LineString', coordinates: runCoords },
         });
       }
@@ -193,10 +204,10 @@ export function buildSpanPool(
         bearing: bearingDeg(origin, centroid),
         distanceM,
         value:
-          segment.curviness *
+          effectiveCurviness(segment) *
           segment.lengthM *
           countryClassFactor(segment.highway) *
-          (1 - 0.7 * (segment.urbanShare ?? 0)), // R19: town material ranks last
+          (1 - 0.7 * (segment.urbanShare ?? 0)), // R19: town material ranks last; R24: de-switchback
       };
     })
     // plausibility: reaching the span and coming home must fit the budget
@@ -499,10 +510,10 @@ export function buildCorridorChains(
         prog: progress(centroid),
         detourM,
         value:
-          segment.curviness *
+          effectiveCurviness(segment) *
           segment.lengthM *
           countryClassFactor(segment.highway) *
-          (1 - 0.7 * (segment.urbanShare ?? 0)), // R19: town material ranks last
+          (1 - 0.7 * (segment.urbanShare ?? 0)), // R19: town material ranks last; R24: de-switchback
         centroid,
       };
     })

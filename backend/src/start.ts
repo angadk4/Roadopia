@@ -67,6 +67,13 @@ async function main(): Promise<void> {
       killSwitch: () => config.KILL_SWITCH,
       rateLimiter: new RateLimiter(),
     },
+    // R23: Discover (browse-class — no LLM/cost, its own rate limiter)
+    discover: {
+      db,
+      valhallaUrl: config.VALHALLA_URL,
+      region,
+      rateLimiter: new RateLimiter(),
+    },
   });
 
   await app.listen({ port: PORT, host: HOST });

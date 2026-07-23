@@ -13,7 +13,14 @@
  * without ever touching a raw error.
  */
 
-import type { CharacterTag, LatLng, Preset, RouteThroughOutput, StopRequest } from '@shared/types';
+import type {
+  CharacterTag,
+  DiscoverRequest,
+  LatLng,
+  Preset,
+  RouteThroughOutput,
+  StopRequest,
+} from '@shared/types';
 
 /** Backend dev port (backend/src/start.ts default). */
 export const BACKEND_PORT = 8080;
@@ -47,6 +54,12 @@ export interface PlanRequest {
   avoid?: { highways?: boolean; tolls?: boolean; ferries?: boolean; unpaved?: boolean };
   character?: CharacterTag[];
   twistiness_pref?: number;
+  /** R23 discovery tap (near drive): a 'through <road>' pin (with a near_point
+   *  disambiguation hint) + the computed loop budget. */
+  location_constraints?: Array<{ kind: 'through'; text: string; near_point?: LatLng }>;
+  duration_target_s?: number;
+  /** R23 discovery tap (far drive): build a direct out-and-back to the road. */
+  out_and_back?: { entry: LatLng; exit: LatLng; name: string };
 }
 
 /** POST /route request body (manual building — backend/src/routes/route.ts). */
@@ -210,6 +223,21 @@ async function request<T>(
 /** GET /health → {status:'ok'} (M7-T01 AC: the API client reaches /health). */
 export async function getHealth(opts: ApiClientOptions): Promise<{ status: string }> {
   return request<{ status: string }>(opts, '/health', { method: 'GET' });
+}
+
+/** POST /discover — origin → the ranked menu (R23). Returns the RAW body; the
+ *  caller (lib/discover.ts) zod-validates it (Hard rule K). Throws ApiError
+ *  (incl. 404 when the endpoint is not registered) / NetworkError. */
+export async function postDiscover(
+  opts: ApiClientOptions,
+  body: DiscoverRequest,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return request<unknown>(opts, '/discover', {
+    method: 'POST',
+    body,
+    ...(signal ? { signal } : {}),
+  });
 }
 
 /** POST /route — waypoints → drivable geometry (M9 manual building; typed now). */

@@ -8,21 +8,23 @@
  * body, or the friendly problems that block submission (Hard rule K mirrors —
  * the server re-validates everything).
  *
- * R16-5 sections replace the single preset chip ([GATE-W]/BD-30 still holds:
- * presets only, no sliders — the sections COMPOSE onto the one preset slot +
- * the frozen server-side vectors):
- *   - Drive style (Twisty | Simple)   → preset twisty/simple + twistiness_pref
+ * R23 collapse — the Twisty/Backroads/Simple tiers + the Mostly-backroads
+ * toggle proved to be at most TWO honest behaviours (twisty≈backroads was a
+ * coin-flip, audit-v6 → R22-1 rolled back), so the "Drive style" control is now
+ * a 2-STOP axis; "how far the good roads are" lives in Discover, not here.
+ * Sections still COMPOSE onto the one preset slot ([GATE-W]/BD-30: presets
+ * only, no sliders — discrete chips):
+ *   - Drive style (Direct | Fun & Explorative) → preset simple/backroads
+ *     (Direct keeps the twistiness_pref 0.15 of the old Simple)
  *   - Scenery (Prefer views)          → the scenic CHARACTER tag; the server's
  *     R18-4 scenic bundle turns it into anti-urban routing (arterial bar 0.35)
  *     + one nice-to-have viewpoint where the corpus has one. Never the preset
  *     slot; [GATE-S] holds (no numeric scenic scoring anywhere)
- *   - On the route: avoid-highways / mostly-backroads / paved-only toggles +
- *     the stops builder (Coffee | Food | Gas × Anytime | Early | Midway | Late)
+ *   - On the route: avoid-highways / paved-only toggles + the stops builder
+ *     (Coffee | Food | Gas × Anytime | Early | Midway | Late)
  *
- * Preset-slot rules (single slot, deterministic):
- *   backroads-ON takes the slot over Twisty (the 0.9 pref rides along);
- *   with Simple it keeps `simple` and adds the `backroad` tag (weak combo,
- *   honest); Scenery never touches the slot.
+ * Preset-slot rule (single slot, deterministic): the Drive-style chip IS the
+ * preset (Direct→simple, Fun & Explorative→backroads); Scenery never touches it.
  */
 
 import type { CharacterTag, LatLng, Preset, StopFraction, StopRequest } from '@shared/types';
@@ -33,7 +35,9 @@ import { MAX_BRIEF_CHARS, type PlanRequest } from './api';
 /** Where the origin point came from — drives the §18 permission states. */
 export type OriginSource = 'current' | 'pin';
 
-export type DriveStyle = 'twisty' | 'simple';
+/** The 2-stop drive-style axis (R23). UI labels: simple→"Direct",
+ *  backroads→"Fun & Explorative" (R24-U2). The value IS the preset it composes. */
+export type DriveStyle = 'simple' | 'backroads';
 
 /** Builder stop types — the request domain the corpus actually covers
  *  (viewpoint arrives via the Scenery toggle; rest/great_road via the brief). */
@@ -52,7 +56,6 @@ export const MAX_STOP_ROWS_CLIENT = 4;
 
 export interface RouteOptions {
   avoidHighways: boolean;
-  mostlyBackroads: boolean;
   pavedOnly: boolean;
 }
 
@@ -65,6 +68,9 @@ export interface PlanDraft {
   preferViews: boolean;
   routeOptions: RouteOptions;
   stops: StopRow[];
+  /** R24-U12: a time budget in seconds (a control chip), or null for "surprise
+   *  me". Composes to duration_target_s. There was no time control before R24. */
+  durationTargetS: number | null;
 }
 
 export const EMPTY_DRAFT: PlanDraft = {
@@ -74,22 +80,33 @@ export const EMPTY_DRAFT: PlanDraft = {
   shape: 'loop',
   style: null,
   preferViews: false,
-  routeOptions: { avoidHighways: false, mostlyBackroads: false, pavedOnly: false },
+  routeOptions: { avoidHighways: false, pavedOnly: false },
   stops: [],
+  durationTargetS: null,
 };
 
+/** R24-U12 time control — the discrete budgets (BD-30: presets, no slider).
+ *  Bounded to the planner's duration_target_s window [2700, 9000]. */
+export const DURATION_CHOICES: ReadonlyArray<{ label: string; seconds: number }> = [
+  { label: '45 min', seconds: 2700 },
+  { label: '1 hr', seconds: 3600 },
+  { label: '1.5 hr', seconds: 5400 },
+  { label: '2 hr', seconds: 7200 },
+  { label: '2.5 hr', seconds: 9000 },
+];
+
 /**
- * The INITIAL draft the Plan screen opens with (R21-2, owner-directed "make the
- * default drive fun"). Same as EMPTY_DRAFT but with Mostly-backroads ON, so a
- * plain "generate" already composes the backroads preset (the already-adopted
- * shortest-costing profile) instead of a boring arterial cruise — the audit's
- * #6 "plain default = arterial region-wide". EMPTY_DRAFT stays the true
- * nothing-selected baseline (the composition tests assert it produces no
- * preset); the user can still switch off Mostly-backroads or pick Simple.
+ * The INITIAL draft the Plan screen opens with (R21-2 "make the default drive
+ * fun", carried into the R23 collapse). The 2-stop control opens on "Scenic
+ * backroads" (style:'backroads'), so a plain "generate" composes the backroads
+ * preset (the adopted shortest-costing profile) instead of a boring arterial
+ * cruise — the audit's "plain default = arterial region-wide". EMPTY_DRAFT
+ * stays the true nothing-selected baseline (the composition tests assert it
+ * produces no preset); the user can still switch to Direct.
  */
 export const DEFAULT_DRAFT: PlanDraft = {
   ...EMPTY_DRAFT,
-  routeOptions: { ...EMPTY_DRAFT.routeOptions, mostlyBackroads: true },
+  style: 'backroads',
 };
 
 /** Early/Midway/Late chips → drive fractions (anytime = no aim). */
@@ -127,7 +144,8 @@ export function buildPlanRequest(draft: PlanDraft): BuildResult {
   const problems: string[] = [];
   const brief = draft.brief.trim();
 
-  if (brief.length === 0) problems.push('Describe the drive you want.');
+  // R24-U12: the brief is OPTIONAL — it now carries PLACES + TIME, and the
+  // buttons (style/scenery/avoids/stops/time) plan a fine drive on their own.
   if (brief.length > MAX_BRIEF_CHARS)
     problems.push(`Keep the brief under ${MAX_BRIEF_CHARS} characters.`);
   if (!draft.origin) problems.push('Add a start point.');
@@ -136,23 +154,16 @@ export function buildPlanRequest(draft: PlanDraft): BuildResult {
 
   if (problems.length > 0 || !draft.origin) return { ok: false, problems };
 
-  // --- preset-slot composition (see module header for the rules) ---
+  // --- preset-slot composition (see module header) — the 2-stop Drive-style
+  // chip IS the preset; Direct carries the old Simple's 0.15 twistiness pref ---
   let preset: Preset | null = null;
   let twistiness: number | undefined;
   const character: CharacterTag[] = [];
-  if (draft.style === 'twisty') {
-    preset = 'twisty';
-    twistiness = 0.9;
-  } else if (draft.style === 'simple') {
+  if (draft.style === 'simple') {
     preset = 'simple';
     twistiness = 0.15;
-  }
-  if (draft.routeOptions.mostlyBackroads) {
-    if (draft.style === 'simple') {
-      character.push('backroad'); // weak combo: simple keeps the slot, honest tag
-    } else {
-      preset = 'backroads'; // takes the slot; a twisty pref rides along
-    }
+  } else if (draft.style === 'backroads') {
+    preset = 'backroads';
   }
   if (draft.preferViews) character.push('scenic');
 
@@ -180,6 +191,7 @@ export function buildPlanRequest(draft: PlanDraft): BuildResult {
     ...(stops.length > 0 ? { stops } : {}),
     ...(Object.keys(avoid).length > 0 ? { avoid } : {}),
     ...(character.length > 0 ? { character } : {}),
+    ...(draft.durationTargetS !== null ? { duration_target_s: draft.durationTargetS } : {}),
   };
   return { ok: true, request };
 }

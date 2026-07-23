@@ -26,7 +26,12 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import StopsBuilder from '../components/StopsBuilder';
 import { MAX_BRIEF_CHARS } from '../lib/api';
 import { getCurrentLocation, type LocationResult } from '../lib/location';
-import { buildPlanRequest, usePlanDraft, type DriveStyle } from '../lib/plan_draft';
+import {
+  buildPlanRequest,
+  DURATION_CHOICES,
+  usePlanDraft,
+  type DriveStyle,
+} from '../lib/plan_draft';
 import { font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
 type LocationState = 'idle' | 'fetching' | 'denied' | 'error';
@@ -81,18 +86,18 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
 
       {/* brief */}
       <View style={styles.section}>
-        <Text style={[styles.label, { color: colors.text }]}>What kind of drive?</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Add places or a vibe</Text>
         <TextInput
           multiline
           value={draft.brief}
           onChangeText={(t) => setDraft({ brief: t.slice(0, MAX_BRIEF_CHARS) })}
-          placeholder="e.g. a 90 minute twisty loop on quiet backroads with a coffee stop"
+          placeholder="e.g. through the Forks of the Credit, ending near Elora — quiet and scenic"
           placeholderTextColor={colors.textMuted}
           style={[
             styles.brief,
             { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
           ]}
-          accessibilityLabel="Describe the drive you want"
+          accessibilityLabel="Add places or a vibe for your drive"
         />
         <Text style={[styles.counter, { color: colors.textMuted }]}>
           {draft.brief.length}/{MAX_BRIEF_CHARS}
@@ -231,23 +236,61 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
         )}
       </View>
 
+      {/* how long (R24-U12) — a real time budget; loops only (A → B time is set
+          by the endpoints). "Any" = surprise me. */}
+      {draft.shape === 'loop' && (
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: colors.text }]}>How long</Text>
+          <View style={styles.buttonRow}>
+            {[{ label: 'Any', seconds: null }, ...DURATION_CHOICES].map((c) => {
+              const active = draft.durationTargetS === c.seconds;
+              return (
+                <Pressable
+                  key={c.label}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => setDraft({ durationTargetS: c.seconds })}
+                  style={({ pressed }) => [
+                    styles.shapeChip,
+                    {
+                      backgroundColor: active ? colors.accent : colors.surface,
+                      borderColor: active ? colors.accent : colors.border,
+                      opacity: pressed ? 0.8 : 1,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.secondaryLabel,
+                      { color: active ? colors.onAccent : colors.text },
+                    ]}
+                  >
+                    {c.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       {/* --- R16-5 fine-tune sections (all optional; brief alone plans) --- */}
       <Text style={[styles.optionalHint, { color: colors.textMuted }]}>
-        Everything below is optional — your description plans the drive; these fine-tune it.
+        Everything below is optional — these fine-tune your drive.
       </Text>
 
       {/* drive style */}
       <View style={styles.section}>
         <Text style={[styles.label, { color: colors.text }]}>Drive style</Text>
         <View style={styles.buttonRow}>
-          {(['twisty', 'simple'] as const).map((s: DriveStyle) => {
+          {(['simple', 'backroads'] as const).map((s: DriveStyle) => {
             const active = draft.style === s;
             return (
               <Pressable
                 key={s}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
-                onPress={() => setDraft({ style: active ? null : s })}
+                onPress={() => setDraft({ style: s })}
                 style={({ pressed }) => [
                   styles.shapeChip,
                   {
@@ -260,14 +303,14 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
                 <Text
                   style={[styles.secondaryLabel, { color: active ? colors.onAccent : colors.text }]}
                 >
-                  {s === 'twisty' ? 'Twisty' : 'Simple'}
+                  {s === 'simple' ? 'Direct' : 'Fun & Explorative'}
                 </Text>
               </Pressable>
             );
           })}
         </View>
         <Text style={[styles.note, { color: colors.textMuted }]}>
-          Twisty hunts for curves; Simple keeps turns minimal and roads mostly straight.
+          Fun & Explorative favours quiet, characterful roads; Direct keeps it straightforward.
         </Text>
       </View>
 
@@ -312,7 +355,6 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
           {(
             [
               ['avoidHighways', 'Avoid highways'],
-              ['mostlyBackroads', 'Mostly backroads'],
               ['pavedOnly', 'Paved roads only'],
             ] as const
           ).map(([key, label]) => {

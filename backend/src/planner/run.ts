@@ -137,10 +137,23 @@ export const SHAPE_QUALITY_ON = false;
  * twisty ask ranks candidate clusters + the road it drives by CURVINESS instead
  * of weight (curviness × length), so it hunts the twistiest road that still fits
  * the budget rather than the most backroad-km. OFF → twisty generates exactly
- * like the default (byte-identical). Replaces the REFUTED retrieval-θ notch
+ * like the default (byte-identical). Replaced the REFUTED retrieval-θ notch
  * (BD-69: retrieval is already curviest-first, so a θ floor was inert).
+ *
+ * R23 — ROLLED BACK (BD-74 reverses the BD-70 adoption). Audit-v6 showed the
+ * lever is a coin-flip, not reliably better: +8 origins / −7 (Terra Cotta
+ * 1.18 → 0.00), because emphasising a single road's curviness can pick a
+ * twistier road that makes a LESS curvy overall loop. The owner collapsed the
+ * "Twisty" tier entirely (R23 2-stop Direct/Scenic-backroads), so no twisty
+ * ask remains. OFF = byte-identical to the default; the plumbing stays dormant
+ * (BD-40 re-runnability), like CHAIN_CANDIDATES_ON below.
+ *
+ * A/B (this session, 48-brief fixed suite): ON hash fbec02d22906a45a (17/48
+ * AC) vs OFF hash 129ab3f744330649 (16/48 AC) — the flag was marginally better
+ * on the bench (why BD-70 adopted it), but audit-v6 on random origins showed a
+ * coin-flip (+8/−7). OFF is the pre-R22-1 baseline; rankVal → c.weight.
  */
-export const TWISTY_CURVY_RANK = true;
+export const TWISTY_CURVY_RANK = false;
 /**
  * R18-3 LOOP chain generator flag — REFUSED per the pre-registered adoption
  * rule (2026-07-16, 48-brief fixed A/B vs R18-2, BD-40 discipline):
@@ -155,8 +168,22 @@ export const TWISTY_CURVY_RANK = true;
  * The generator + span-atomic repair machinery stay (A→B parity uses them);
  * any loop-chain revival is a NEW pre-registered experiment on richer span
  * material (post-R18-4 named-road merges are the plausible lever).
+ *
+ * R24-U14/U15 — REFUSED AGAIN (4th time; 2026-07-22, 48-brief A/B vs the U1
+ * τ_ref=8 baseline). U1's de-switchback RE-PRICING (effectiveCurviness) was the
+ * "plausible lever" this note named — flipping chains ON with it moved curvyShare
+ * only 0.11 → 0.12 (+1 pp; PRIMARY bar was ≥ +10 pp), arterial share stayed FLAT
+ * (71 → 70 %), and wall time blew to 14 980 ms (baseline 8 665; kill-condition
+ * ≤ +1-2 s). AC did rise 20 → 24, but the PRIMARY curvyShare bar + the latency
+ * kill-condition both fail. ROOT CAUSE (structural, not a pricing miss): the
+ * CONNECTORS between scattered curvy spans ride arterials, so no span re-pricing,
+ * ordering, or hard angular-monotone closure moves the arterial share — a
+ * beam-search rebuild would hit the same wall. The full LOOP_PATHSEARCH_ON
+ * rebuild was therefore NOT built. Loop quality ships on U1's de-switchback
+ * alone (the felt "too many turns" fix). Env-gated default OFF (byte-identical);
+ * CHAIN_CANDIDATES=on re-runs the experiment.
  */
-export const CHAIN_CANDIDATES_ON = false;
+export const CHAIN_CANDIDATES_ON = process.env['CHAIN_CANDIDATES'] === 'on';
 /** R18-3 A→B corridor chains — separate regime, separately judged: no matrix
  *  call, no prior forced-curvy material at all on A→B (the audit's "ONE
  *  off-road centroid, ~100 % fastest-path"), own eval (eval/atob_quality.ts,

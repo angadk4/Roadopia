@@ -62,6 +62,12 @@ export async function parseBrief(
   brief: string,
   opts: { client: AiClient | null; parser?: ParserKind },
 ): Promise<ParseOutcome> {
+  // R24-U12: a buttons-only plan sends an empty brief — nothing to parse, so
+  // never spend a model call on it (Hard rule F); the deterministic rules parser
+  // returns the empty constraints and the structured inputs drive the route.
+  if (brief.trim().length === 0) {
+    return { constraints: parseRules(brief), parser: 'rules', llmInvalidOutputs: 0 };
+  }
   const useLlm = (opts.parser ?? 'llm') === 'llm' && opts.client !== null;
   if (!useLlm) {
     return { constraints: parseRules(brief), parser: 'rules', llmInvalidOutputs: 0 };

@@ -130,12 +130,54 @@ export function countryClassFactor(highway: string): number {
   }
 }
 
+/**
+ * R24-U1 — de-switchback re-pricing (BD-40 lever, byte-identical OFF).
+ *
+ * The loop generator historically ranked road MATERIAL on RAW circum-curvature,
+ * which rewards tight subdivision/park collectors (switchbacks) that cram many
+ * hard turns into few metres — the "weaving into neighbourhoods for pointless
+ * curviness" the audit found. Two BOUNDED rank multipliers fix it (never gates —
+ * "preferences rank, hard caps starve"):
+ *   1. curviness SATURATION min(curviness, CURV_SATURATION): a switchback's absurd
+ *      raw curviness (5–8) stops out-scoring a flowing sweeper (curviness ~2–3).
+ *   2. FLOW factor from significant_turns_per_km: clamp(τ_ref / max(τ, τ_ref), floor, 1)
+ *      — a road with more hard turns/km than a flowing road warrants is discounted.
+ *
+ * Corpus-calibrated (moderate good drives ≈ 3 turns/km, p80 ≈ 6; switchbacks
+ * curv>4 ≈ 13–21). τ_ref = 8, ADOPTED over 6 by the 48-brief A/B: τ_ref=6
+ * over-penalized the fine 6–8 turns/km roads (urban UP vs baseline); τ_ref=8 keeps
+ * every flowing road at full value and still discounts real switchbacks to
+ * ~0.38–0.62, giving AC 16→20, urban DOWN below baseline, curvy up, microloops
+ * 4→3. Discover does the same (DISCOVER_CURV_SATURATION).
+ */
+// BD-40: committed default ON at τ_ref=8 (R24-U1 adopt decision); CURV_SATURATION=off
+// forces the byte-identical legacy baseline for the A/B (COSTING_MODE precedent), and
+// CURV_TURN_REF overrides τ_ref for the parameter sweep.
+export const CURV_SATURATION_ON = process.env['CURV_SATURATION'] !== 'off';
+export const CURV_SATURATION = 3.0;
+export const TURN_REF_PER_KM = Number(process.env['CURV_TURN_REF'] ?? 8.0);
+export const FLOW_FACTOR_FLOOR = 0.3;
+
+/** τ-density flow multiplier in [FLOW_FACTOR_FLOOR, 1]; fail-open (missing/low τ => 1). */
+export function flowFactor(seg: CandidateSegment): number {
+  const t = seg.significantTurnsPerKm;
+  if (t === undefined || !Number.isFinite(t) || t <= TURN_REF_PER_KM) return 1;
+  return Math.max(FLOW_FACTOR_FLOOR, TURN_REF_PER_KM / t);
+}
+
+/** Re-priced curviness used wherever road material is ranked. OFF => raw curviness. */
+export function effectiveCurviness(seg: CandidateSegment): number {
+  if (!CURV_SATURATION_ON) return seg.curviness;
+  return Math.min(seg.curviness, CURV_SATURATION) * flowFactor(seg);
+}
+
 /** Deterministic rank value of a segment: curviness · length · class factor. */
 function segValue(seg: CandidateSegment): number {
   // R19: town-context material is LAST-RESORT (refilled only when the area is
-  // thin) — a curvy subdivision collector must never outrank a country road
+  // thin) — a curvy subdivision collector must never outrank a country road.
+  // R24: effectiveCurviness saturates + flow-discounts switchbacks (OFF = raw).
   return (
-    seg.curviness *
+    effectiveCurviness(seg) *
     seg.lengthM *
     countryClassFactor(seg.highway) *
     (1 - 0.7 * (seg.urbanShare ?? 0))
@@ -401,7 +443,7 @@ export function generateLoopCandidates(
   // toward CURVIER roads over merely-longer ones. Off → weight, byte-identical.
   // Duration still governs via durationFitFactor below.
   const clusterEmph = (c: Cluster): number =>
-    c.members.reduce((s, m) => s + m.segment.curviness * segValue(m.segment), 0);
+    c.members.reduce((s, m) => s + effectiveCurviness(m.segment) * segValue(m.segment), 0);
   const rankVal = (c: Cluster): number => (options.curvyRank === true ? clusterEmph(c) : c.weight);
 
   // HARD duration-plausibility filter (owner round 3 / BD-21): the old
@@ -588,7 +630,8 @@ export function generateLoopCandidates(
         // R22-1b twisty: drive the curviest·longest road (curvature-emphasized —
         // curviness²·length keeps a traversable road preferred over a short spur).
         return (
-          b.segment.curviness * segValue(b.segment) - a.segment.curviness * segValue(a.segment) ||
+          effectiveCurviness(b.segment) * segValue(b.segment) -
+            effectiveCurviness(a.segment) * segValue(a.segment) ||
           a.segment.id.localeCompare(b.segment.id)
         );
       }

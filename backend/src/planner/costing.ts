@@ -70,7 +70,10 @@ const FUN: CostingProfile = {
   sizingSpeedNoHighwayKmh: SHORTEST_SIZING_SPEED_NO_HIGHWAY_KMH,
 };
 
-const BACKROADS: CostingProfile = {
+/** The backroads (shortest) connector profile. Exported so R23 Discover sizes
+ *  its reach matrix with the SAME costing the tap's /route builds (a discovery
+ *  drive IS a backroads loop) — matrix.ts:11 warns the budget lies otherwise. */
+export const BACKROADS: CostingProfile = {
   id: 'backroads',
   options: SHORTEST_OPTIONS,
   sizingSpeedKmh: SHORTEST_SIZING_SPEED_KMH,

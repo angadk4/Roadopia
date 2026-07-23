@@ -17,6 +17,7 @@ import { registerAuth, type JwtVerifier } from './auth/jwt';
 import { AppError, errorBody, INTERNAL_ERROR_MESSAGE } from './lib/errors';
 import { loggerOptions } from './lib/logger';
 import type { RegionBoundary } from './lib/region';
+import { registerDiscoverEndpoint, type DiscoverEndpointDeps } from './routes/discover';
 import { registerMatchEndpoint, type MatchEndpointDeps } from './routes/match';
 import { registerPlanEndpoint, type PlanEndpointDeps } from './routes/plan';
 import { registerRouteEndpoint, type RouteEndpointDeps } from './routes/route';
@@ -35,6 +36,8 @@ export interface BuildServerOptions {
   matchFn?: MatchEndpointDeps['matchFn'];
   /** /plan wiring (M6-T04/T05) — registers only when present. */
   plan?: PlanEndpointDeps;
+  /** /discover wiring (R23) — registers only when present; absent ⇒ 404. */
+  discover?: DiscoverEndpointDeps;
 }
 
 export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
@@ -87,6 +90,10 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
 
   if (opts.plan) {
     registerPlanEndpoint(app, opts.plan);
+  }
+
+  if (opts.discover) {
+    registerDiscoverEndpoint(app, opts.discover);
   }
 
   return app;

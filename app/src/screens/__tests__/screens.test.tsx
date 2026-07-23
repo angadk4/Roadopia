@@ -40,31 +40,38 @@ describe('screen smoke', () => {
     expect(text).toContain('Pick on map');
     expect(text).toContain('Loop');
     expect(text).toContain('A → B');
-    // R16-5 sections replace the chip row; still presets-only under the hood
-    // (BD-30 / Hard rule L — buildPlanRequest composes onto the preset slot)
+    // R23: the drive-style control is a 2-stop axis (Direct / Fun & Explorative,
+    // R24-U2 rename); still presets-only under the hood (BD-30 / Hard rule L —
+    // buildPlanRequest composes onto the preset slot)
     expect(text).toContain('optional');
+    expect(text).toContain('How long'); // R24-U12 time control (loops)
     expect(text).toContain('Drive style');
-    expect(text).toContain('Twisty');
-    expect(text).toContain('Simple');
+    expect(text).toContain('Direct');
+    expect(text).toContain('Fun & Explorative');
     expect(text).toContain('Scenery');
     expect(text).toContain('Prefer views');
     expect(text).toContain('On the route');
     expect(text).toContain('Avoid highways');
-    expect(text).toContain('Mostly backroads');
     expect(text).toContain('Paved roads only');
     expect(text).toContain('Add a stop');
     expect(text.toLowerCase()).not.toContain('slider');
-    // Chill is gone from the UI ('Simple' replaced it, owner ask R16)
+    // Chill + the retired Twisty / Mostly-backroads tiers are gone from the UI
     expect(text).not.toContain('Chill');
-    // CTA blocked with friendly reasons
-    expect(text).toContain('Describe the drive you want.');
+    expect(text).not.toContain('Twisty');
+    expect(text).not.toContain('Mostly backroads');
+    // Hard rule D: no speed/racing/timing framing anywhere in the drive copy
+    for (const w of ['racing', 'fastest', 'leaderboard', 'mph', 'velocity']) {
+      expect(text.toLowerCase()).not.toContain(w);
+    }
+    // CTA blocked only by the missing origin — the brief is optional now (U12)
+    expect(text).not.toContain('Describe the drive you want.');
     expect(text).toContain('Add a start point.');
   });
 
   it('PlanScreen with a complete draft shows the set origin and no blockers', () => {
     const text = textOf(
       planScreenWith({
-        brief: 'twisty 90 minute loop',
+        brief: 'a 90 minute loop',
         origin: { source: 'current', point: { lat: 43.26, lng: -79.87 } },
       }),
     );
@@ -75,7 +82,7 @@ describe('screen smoke', () => {
   it('PlanScreen marks the active drive-style chip selected; stops builder rows render', () => {
     const text = textOf(
       planScreenWith({
-        style: 'twisty',
+        style: 'backroads',
         stops: [
           { type: 'coffee', when: 'midway' },
           { type: 'fuel', when: 'late' },

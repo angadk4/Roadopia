@@ -94,6 +94,9 @@ export interface CandidateSegment {
   /** R19: fraction of length inside built-up landuse (0 = country; optional
    *  fail-open for synthetic/test material). */
   urbanShare?: number;
+  /** R24: significant turns (>=8 deg) per km — switchback vs sweeper signal.
+   *  Optional fail-open: undefined => flowFactor 1 (never penalize on missing data). */
+  significantTurnsPerKm?: number;
   geometry: LineString;
 }
 
@@ -200,6 +203,7 @@ export async function retrieveCandidates(
         lengthM: Number(row.length_m),
         curviness: Number(row.curviness),
         urbanShare: Number(row.urban_share),
+        significantTurnsPerKm: Number(row.significant_turns_per_km),
         geometry: JSON.parse(row.geometry) as LineString,
       });
     }

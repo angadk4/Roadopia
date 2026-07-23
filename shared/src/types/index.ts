@@ -8,3 +8,4 @@ export * from './spot';
 export * from './constraints';
 export * from './tools';
 export * from './events';
+export * from './discover';

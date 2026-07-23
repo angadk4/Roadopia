@@ -1,6 +1,6 @@
 {
-  "config_id": "frozen-r21-v1",
-  "frozen_at": "2026-07-20",
+  "config_id": "frozen-r24-v1",
+  "frozen_at": "2026-07-22",
   "discipline": "\u00a721: tuned on DEV only, validated on VAL; any later change = new config id + fresh VAL pass",
   "params": {
     "ALPHA_LOOP": 0.45,
@@ -127,7 +127,45 @@
     "SHAPE_QUALITY_ON": false,
     "RETURN_ANCHOR_DISTANCE_FRACTION": 0.6,
     "LOOPINESS_DISCLOSE_FLOOR": 0.1,
-    "r21_disclosures": "R21-4: presented best discloses u-turns, |durErr|>0.15, and loopiness<0.10 out-and-backs (informational, after status decision \u2014 no selection change)"
+    "r21_disclosures": "R21-4: presented best discloses u-turns, |durErr|>0.15, and loopiness<0.10 out-and-backs (informational, after status decision \u2014 no selection change)",
+    "TWISTY_CURVY_RANK": false,
+    "twisty_preset_retained": "R23/BD-73: the app emits only simple/backroads (2-stop Direct/Fun & Explorative, renamed R24-U2); the backend twisty preset stays in PresetSchema for parity (a typed 'twisty' brief behaves \u2248 backroads with R22-1 off) \u2014 do not remove",
+    "CURV_SATURATION_ON": true,
+    "CURV_SATURATION": 3.0,
+    "TURN_REF_PER_KM": 8.0,
+    "FLOW_FACTOR_FLOOR": 0.3,
+    "de_switchback": "R24-U1 ADOPTED (\u03c4_ref=8, 48-brief A/B vs OFF 129ab3f744330649). effectiveCurviness = min(curviness,3.0)\u00b7flowFactor, flowFactor = clamp(\u03c4_ref/max(\u03c4,\u03c4_ref), 0.3, 1) from significant_turns_per_km (surfaced R24 \u2014 was computed+stored since 0001, dropped at planner_reads). Re-prices segValue/clusterEmph/byValue/pickInsertSegment/chain+corridor value. \u03c4_ref=8 beat 6 (6 over-penalized fine 6-8 turns/km roads \u2192 urban UP): AC 16\u219220, urban DOWN below baseline, curvy 0.10\u21920.11, microloops 4\u21923, corridor-doubling p80 0.16\u21920.11. OFF (CURV_SATURATION=off) byte-identical (hash 129ab3f744330649). ON hash 521c0078a123abee.",
+    "LOOP_PATHSEARCH": "NOT built \u2014 U14/U15 REFUSED (4th loop-chain refusal). With U1 re-pricing (the lever the prior refusal named), enabling CHAIN_CANDIDATES moved curvyShare only 0.11\u21920.12 (+1pp; bar +10pp), arterial FLAT 71\u219270%, wall 8665\u219214980ms (kill \u2264+1-2s); AC rose 20\u219224 but the PRIMARY curvyShare bar + latency kill-condition both fail. ROOT CAUSE structural: connectors between scattered curvy spans ride arterials \u2014 no span re-pricing/ordering/closure moves arterial share, a beam-search rebuild hits the same wall. Loops ship on U1 alone.",
+    "discover": {
+      "DISCOVER_REACH_S": 3600,
+      "DISCOVER_SEGMENT_LIMIT": 5000,
+      "DISCOVER_CURV_SATURATION": 3.0,
+      "DISCOVER_MIN_ROAD_M": 2000,
+      "DISCOVER_SECTOR_COUNT": 8,
+      "DISCOVER_SECTOR_QUOTA": 2,
+      "DISCOVER_AUTO_POOL_CAP": 16,
+      "DISCOVER_MENU_MIN": 5,
+      "DISCOVER_MENU_MAX": 6,
+      "DISCOVER_MENU_SEP_M": 4000,
+      "DISCOVER_REACH_DISCOUNT_K": 0.5,
+      "DISCOVER_PROX_NEAR_S": 720,
+      "DISCOVER_PROX_MID_S": 1440,
+      "DISCOVER_PROX_NEAR_MULT": 1.15,
+      "DISCOVER_PROX_MID_MULT": 1.07,
+      "DISCOVER_CLASSIC_BONUS": 1.15,
+      "DISCOVER_CLASSIC_TRACE_POINTS": "3, length-adaptive up to 8 (~1 per 2.5km)",
+      "TAP_OAB_SLACK": 1.15,
+      "TAP_DURATION_MIN_S": 2700,
+      "TAP_DURATION_MAX_S": 9000,
+      "DISCOVER_PREBUILD_TIMEOUT_MS": 8000,
+      "menuScore": "value\u00b7(1 \u2212 0.5\u00b7min(1, toStart/reach))\u00b7proximityTier(toStart)\u00b7(classic ? 1.15 : 1)",
+      "value": "min(curviness,3.0)\u00b7length\u00b7countryClassFactor\u00b7(1\u22120.7\u00b7urban)",
+      "shape": "OUT-AND-BACK for ALL Discover drives (R24-U5): pre-buildable, predictable, uniform. Loops live only in the Plan tab (a pre-built loop would run the money-spending planner behind an unauthenticated browse endpoint \u2014 forbidden).",
+      "classics": "R24-U4/U5: blends the 8 hand-picked seed classics (discover_seed_drives SECURITY DEFINER RPC, migration 0015, public+seed only) with the auto corpus; curviness MEASURED from geometry (seeds store 0); CLASSIC_BONUS 1.15 (1.3 crowded the menu 3-4/6 + pinned #1). A long classic that averages gentle self-corrects downward (honest).",
+      "prebuild": "R24-U6: each menu drive's out-and-back (origin\u2192entry\u2192[classic trace pts]\u2192exit\u2192origin, BACKROADS, middleType through) pre-built via routeThrough in Promise.all \u2192 route + measuredDurationS + durationSource='measured'; per-drive failure keeps the corpus estimate (app rebuilds on tap). Net /discover \u2248 4-6s.",
+      "repetition": "R24-U5: origin-relative proximityTier (bounded 1.0-1.15 on the REAL per-origin matrix drive-time) + real drive-times \u2192 nearby doors reorder (menus differ by AREA). A dominant classic legitimately tops its whole radius (correct, not the R23 origin-invariant bug).",
+      "notes": "discover_quality R24: 5/7 origins pass all bars (curated 5-6, top3curv, spread, ALL pre-built+measured, onRoad\u226580%, determinism, repetition 2/2); the 2 misses = seed-classic line fidelity on long seeds (Hockley Valley averages gentle) \u2014 seed-DATA, flagged [HUMAN] content-curation, not a pipeline defect. Determinism = golden fixture (committed, 9/9) + live same-session only (BD-69); byte-identical off = /discover unregistered -> 404; browsing-class, no LLM/cost-guard (Hard rule A/F)."
+    }
   },
   "provenance": {
     "gates": ["BD-26 C", "BD-28 A", "BD-29 F", "BD-30 W", "BD-31 R", "BD-32 S"],
@@ -173,6 +211,24 @@
       "program": "Quality Overhaul (owner-directed after the 80-route audit + the Kuehne+Nagel 'random stop'). 9 units, adopt-or-refuse per pre-registered A/B. ADOPT: R21-0(a) closed-ring exclusion (BD-61, migration 0013 \u2014 fixes the K+N/Standish U-turn; AC 11\u219213, dirty 2.12\u21921.76), R21-2(b) app-default Backroads (BD-63 \u2014 the default drive is now fun via the adopted backroads bundle), R21-5 best-material floor FLOOR=1 (BD-64 \u2014 AC 13\u219217, 0 regressions; lottery was already fixed by R21-0a), R21-4 honesty disclosures (BD-65 \u2014 u-turn/duration/sliver, 100% coverage), R21-0(b) dual-flank urban_share (BD-68, migration 0014 \u2014 kills the parcel-gap collector blindness; dirty 1.81\u21921.38, no starvation). REFUSE: R21-1 loop-shape gate (BD-62 \u2014 loopiness demotion counterproductive, 3-skeptic verified), R21-2(a) planner fun-default (BD-63 \u2014 4th refusal), R21-6 return-corridor (BD-66 \u2014 u-turns structural, anchor-inert), R21-3 twist-disclosure (BD-67 \u2014 dishonest-risk; core already fixed by R21-0a: twisty now BETTER than default in 14/20 towns).",
       "integrated_48brief": "final integrated state (all adopts live, FLOOR=1 + dual-flank): AC 16/48, no-route 0/48, dirty units mean 1.38 (from 2.12 at the R21 start), urban mean 7%/p80 13%, arterial mean 72%, curvy p20 0.04, determinism hash e9f6cac9786e27d6.",
       "deploy": "hosted Supabase needs migrations 0010-0014 + landuse load + dual-flank urban_share compute."
+    },
+    "r23": {
+      "date": "2026-07-22",
+      "program": "Great Drives Near You (owner reframe after audit-v6; BD-71). Discovery mode + 2-stop collapse + AI-minimal. 14 units, all green. Discovery is auto-ranked from the corpus (no curated table): full/spread/curvy menus from flat + urban-adjacent origins (discover_quality 7/7); near=loop / far=out-and-back (owner: far loops balloon unpredictably; out-and-backs are predictable + honest). Backend 316/316, app 129/129.",
+      "rollback": "R22-1 twisty curvy-rank reversed (BD-74): TWISTY_CURVY_RANK=false. Same-session 48-brief A/B ON fbec02d22906a45a (17/48) vs OFF 129ab3f744330649 (16/48); OFF = pre-R22-1 baseline, byte-identical by construction.",
+      "byte_identical": "loop-quality re-run after ALL R23 backend changes = 129ab3f744330649 (unchanged) — every R23 addition (discover, out-and-back, /plan branch, tap contract, shared types, near_point tiebreak) is OUTSIDE runPlanner.",
+      "ai_minimal": "app-copy relabel only (BD-75); parse_prompt_version stays 3, backend parser byte-identical, no BD-28.",
+      "determinism": "discover golden fixture (discover.test.ts 8/8) is the committed proof; live menu same-session only (BD-69 env-sensitivity).",
+      "deploy": "hosted Supabase needs migrations 0010-0014 (as r21) — discovery adds NO migration (per-request pipeline over the existing curvy_segments corpus)."
+    },
+    "r24": {
+      "date": "2026-07-22",
+      "program": "The Perfection Pass (owner-directed after audit-v8; BD-77). 18 units, adopt-or-refuse per pre-registered A/B. Fix everything the cross-section audit found + the owner's felt items (neighbourhood-weaving loops, Discover re-generating on tap / same top road, 'Scenic backroads' rename). Backend 319/319, app 140/140, shared 23/23, whole-repo tsc clean.",
+      "adopt": "U1 de-switchback (BD-78, τ_ref=8; AC 16→20, microloops 4→3, urban down). U5/U6 Discover reshape (BD-79): out-and-back-only + curated 5-6 + PRE-BUILT (real measured times) + classic blend (migration 0015) + origin-relative repetition fix + map-first (DriveLinesMap) + Discover-primary tab. U12/U13 AI (BD-80): optional brief (places), 'How long' time control, visible 'here's what I understood' parse, empty brief = zero LLM spend. U2 rename Scenic backroads → Fun & Explorative. U16 A→B (BD-82): Schomberg gazetteer no-route FIXED.",
+      "refuse": "U14/U15 loop path-search (BD-81 — 4th loop-chain refusal): U1 re-pricing moved curvyShare only +1pp (bar +10pp), latency 8665→14980ms (kill), arterial flat; structural (arterial connectors), rebuild not built. U16 A→B detour-cap loosening (BD-82 — FALSIFIED: 1.8→2.2 left arterial 83% unchanged; same structural cause; kept 1.8).",
+      "hashes": "loop-quality OFF (CURV_SATURATION=off) byte-identical 129ab3f744330649; U1 ON (τ_ref=8) 521c0078a123abee; chains diagnostic (re-priced, refused) 8eebf7a799e691af; A→B baseline (Schomberg fixed) 306691ed58746226. Discover determinism = golden fixture (committed).",
+      "audit_v9": "before/after artifact https://claude.ai/code/artifact/ef98b655-fa22-48de-a0a2-5892afc13932 (6 loops + 18 drives captured live on the final config).",
+      "deploy": "hosted Supabase needs migrations 0010-0015 (0015 = discover_seed_drives RPC, R24-U4) at deploy; the running backend needs a restart to serve the R24 /discover."
     }
   }
 }

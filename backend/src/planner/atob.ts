@@ -37,8 +37,15 @@ import {
 } from './residential';
 import type { CandidateSegment } from './retrieve';
 
-/** Detour cap (routed distance ÷ direct routed distance); candidate value, M4 tunes. */
-export const DETOUR_MAX_DEFAULT = 1.8;
+/** Detour cap (routed distance ÷ direct routed distance); candidate value, M4 tunes.
+ *  R24-U16: the audit found ~⅓ of A→B rides arterials; the hypothesis was this
+ *  cull rejects curvy corridor detours. FALSIFIED by the 15-brief A/B (2026-07-22):
+ *  loosening to 2.2× left arterial share UNCHANGED at 83 % (curviness even dipped
+ *  0.96→0.94) — the extra distance is more arterial, not more curvy. Root cause is
+ *  structural (same as the refused loop chains): connecting scattered points across
+ *  the region uses arterial connectors; the cap is not the lever. Kept at 1.8;
+ *  ATOB_DETOUR_MAX re-runs the sweep. */
+export const DETOUR_MAX_DEFAULT = Number(process.env['ATOB_DETOUR_MAX'] ?? 1.8);
 /** A→B self-overlap sanity cap (looser than loops — legitimate shared approaches). */
 export const ATOB_SELF_OVERLAP_CAP = 0.3;
 /** A→B repair passes (cheaper than loops: pools are smaller, offences fewer). */

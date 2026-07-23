@@ -90,6 +90,17 @@ function centroidOfSegment(seg: CandidateSegment): LatLng {
   return { lat: mid[1]!, lng: mid[0]! };
 }
 
+/** Smallest distance (m) from a point to any vertex of a segment — the
+ *  disambiguation metric for two same-named roads (R23). */
+function minVertexDistM(seg: CandidateSegment, point: LatLng): number {
+  let best = Infinity;
+  for (const [lng, lat] of seg.geometry.coordinates) {
+    const d = distM(point, { lat: lat!, lng: lng! });
+    if (d < best) best = d;
+  }
+  return best;
+}
+
 export interface ResolveContext {
   origin: LatLng;
   /** Lookup bbox — the scope's outer bounds padded (deg). */
@@ -143,8 +154,17 @@ export async function resolveLocations(
           // a weaker fuzzy neighbour doesn't pollute the span)
           const topName = pieces[0]!.name;
           const merged = mergeRoadPieces(pieces.filter((p) => p.name === topName));
-          // longest merged run IS the road (ties by id via merge determinism)
-          road = merged.sort((a, b) => b.lengthM - a.lengthM || a.id.localeCompare(b.id))[0]!;
+          // pick the road: an R23 discovery tap passes a near_point (the tapped
+          // drive's entry) → resolve the NEAREST same-named run, so "Side Road
+          // 10" can't collapse to a far namesake; otherwise the LONGEST run IS
+          // the road. Ties by id (merge determinism). near_point omitted (the
+          // parsers, a brief 'through') → byte-identical to pre-R23.
+          const near = constraint.near_point ?? null;
+          road = merged.sort((a, b) =>
+            near
+              ? minVertexDistM(a, near) - minVertexDistM(b, near) || a.id.localeCompare(b.id)
+              : b.lengthM - a.lengthM || a.id.localeCompare(b.id),
+          )[0]!;
         }
       } catch {
         road = null; // lookup unavailable — fall through to town/unresolved

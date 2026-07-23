@@ -49,6 +49,9 @@ const IN_REGION: Record<string, GazetteerHit> = {
   bolton: { name: 'Bolton', lat: 43.8828, lng: -79.737 },
   newmarket: { name: 'Newmarket', lat: 44.0592, lng: -79.4613 },
   aurora: { name: 'Aurora', lat: 44.0065, lng: -79.4504 },
+  // R24-U16: in-region King Township village — was an unresolved-string no-route
+  // (Aurora→Schomberg) in the audit; coords from the OSM POI corpus.
+  schomberg: { name: 'Schomberg', lat: 44.0119, lng: -79.6793 },
   stouffville: { name: 'Stouffville', lat: 43.9706, lng: -79.2441 },
   uxbridge: { name: 'Uxbridge', lat: 44.1089, lng: -79.1204 },
   'port perry': { name: 'Port Perry', lat: 44.1006, lng: -78.943 },

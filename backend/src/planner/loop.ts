@@ -13,7 +13,12 @@ import { haversineMeters } from '../../../data/curvature/geometry';
 import { routeThrough, type AutoCostingOptions } from '../valhalla/route';
 import { traceRoadClasses, type TraceResult } from '../valhalla/trace';
 
-import { countryClassFactor, traversalSpanOf, type WaypointCandidate } from './candidates';
+import {
+  countryClassFactor,
+  effectiveCurviness,
+  traversalSpanOf,
+  type WaypointCandidate,
+} from './candidates';
 import {
   maxRetraceRunM,
   microloopEvents,
@@ -465,8 +470,9 @@ export function pickInsertSegment(
     if (dM(v.lng, v.lat, runMid[0], runMid[1]) > 20_000) continue; // out of reach
     if (waypoints.some((w) => dM(v.lng, v.lat, w.lng, w.lat) < 1_500)) continue; // shadowed
     // R19: never repair-INSERT a subdivision collector (urbanShare fail-open 0)
+    // R24: effectiveCurviness de-prioritizes switchbacks here too (OFF = raw)
     const rank =
-      s.curviness * s.lengthM * countryClassFactor(s.highway) * (1 - (s.urbanShare ?? 0));
+      effectiveCurviness(s) * s.lengthM * countryClassFactor(s.highway) * (1 - (s.urbanShare ?? 0));
     if (rank > bestRank) {
       bestRank = rank;
       best = s;

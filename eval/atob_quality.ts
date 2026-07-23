@@ -39,6 +39,10 @@ const BRIEFS: string[] = [
   'drive from Oshawa to Peterborough with a coffee stop',
   'drive from Milton to Elora, no highways',
   'backroads drive from Cobourg to Uxbridge',
+  // R24-U16: the audit-v8 arterial-heavy + no-route offenders (the tune targets)
+  'scenic drive from Cambridge to Paris',
+  'scenic drive from Newmarket to Uxbridge',
+  'drive from Aurora to Schomberg',
 ];
 
 interface Row {
