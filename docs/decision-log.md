@@ -1787,3 +1787,161 @@ refused (BD-81 loop rebuild, BD-82 detour cap), 3 verified fixes; backend 319/31
 pass (Discover map-first → tap a classic → instant real route; a Plan loop with fewer turns; the
 places+time prompt + visible parse); ratify BD-77..83; run the one-line commits; migrations 0010-0015 at
 hosted deploy (0015 = discover_seed_drives); restart the running backend to serve R24 /discover.
+
+**BD-84 — The avoid system was INERT; made real (R25-U2, ADOPTED 2026-07-26).** Probed live on
+kimberley→markdale (pinned Valhalla 3.7.0): `exclude_highways` / `exclude_tolls` / `exclude_ferries` are
+byte-identical to a deliberately-bogus control key — Valhalla silently ignores unknown auto-costing
+options, so the app's "Avoid highways" toggle changed NOTHING about routing, ever. Only `use_highways: 0`
+works, and `shortest` bypasses every soft use_* factor (verified twice). Fix: `realizeCostingOptions()`
+(route.ts + matrix.ts, flag `AVOID_REAL_LEVERS` default ON) translates exclude_highways → `use_highways:0`
++ drops `shortest`; tolls→`use_tolls:0`; ferries→`use_ferry:0`; 4 regression tests pin the translation so
+this cannot silently rot again. CORRECTION TO OUR OWN EVIDENCE BASE: eval baseline B1
+(`{exclude_highways:true}`) has been byte-identical to B0 all along — every published B0-vs-B1 comparison
+is void. Companion truth fix (R25-U4, flag `TRACE_HIGHWAY_TRUTH` default ON): Valhalla's summary
+`has_highway` misses `trunk` (reported false on a route the trace measures at 33% trunk — Hwy 10/26/89
+ARE highways to a driver), so `has_highway` is now overridden from the traced edges (the has_unpaved/R16-2
+precedent), fixing validate/assertAvoidHonoured/disclosures in one place.
+
+**BD-85 — Fun & Explorative excludes highways via MEASURED rejection, floor 600 m (R25-U3v2, ADOPTED
+2026-07-26).** Owner decision: hard-exclude highways on Fun + Discover, never A→B. v1 (impose the avoid
+into the COSTING at ladder-init) was A/B-REJECTED by its own pre-registration: hwy 1.6→0.3% but
+backroad 27→21% / main 70→77% — pushing use_highways:0 region-wide destroyed `shortest`, the backroad
+lever (the probe predicted this: Acton–Georgetown 48%→0% backroad under use_highways:0). v2 keeps
+`shortest` for imposed avoids and enforces at ASSEMBLY: traced highway metres > floor → reject (clean
+pool-mates win; rung-4 relaxes with the honest "this area has no non-highway route at this length"
+disclosure); only a USER-asked no-highways changes the costing. Floor swept, not guessed: 200 m → AC
+20→18 (Waterdown pushed onto 10% residential; Collingwood twisty flattened — a 300-600 m trunk hop
+linking backroad sections was treated like a 30 km motorway run); 600 m → AC 20 (=baseline), hwy mean
+1.6→0.3% (12→7 routes >0, remainder legacy/fallback-by-design), defects/route 2.08→1.90, durErr p80
+18→16%, shape defects 10→5, wall +141 ms (fixed suite, hash 83e23648d271b639); SUITE=random confirm vs
+its own levers-off baseline: AC 7→9/30, hwy 3.4→0.3%, hood-run p80 5986→2053 m, defects 2.43→2.17,
+no-route flat 3=3 (hash 497ed18edfbe7da7). HONEST COSTS, recorded: backroad 27→26% (−1 pp); main on the
+random suite 64→70% (freed highway/hood metres land on main — the U10/U19 target); Belfountain +
+Orangeville twisty briefs FLATTEN (curv → 0.00 — their twisty pools carry >600 m of Hwy 10 trunk; pool
+starves to flat survivors). That is a GENERATION gap assigned to U19/U20, not a reason to re-admit
+multi-km highway runs. Discover rides the same exclusion (matrix + pre-build costing).
+
+**BD-86 — The neighbourhood gate, un-blinded (R25-U5, a+b+d ADOPTED · c REFUSED, 2026-07-26).** Audit
+issue #5: the residential gate was blind three ways (2.5 km grace hiding 36% of hood metres; class ===
+'residential' only — service/living_street invisible; share-only rejection). ADOPTED, default ON:
+(a)+(b) HOOD_MEASURE_V2 — wide hood predicate (residential/service/living_street/… + hood-grade uses) +
+grace 2500→700 m, judged TOGETHER per pre-registration (apart, each looks like a false regression).
+(d) OFFENCE_SCALE_V2 — residential overflow ~8 pts/m-scale instead of 1 (a 1.3 km weave no longer weighs
+less than one u-turn) + residential-first repair targeting. PLUS two mechanism repairs the A/B itself
+exposed: DIRTY_GRADE_CAP 4.5 SATURATES in all-dirty pools (measured: St. Jacobs presented a
+19.1%-residential winner over a 7.2% pool-mate on a 0.07 score edge — min(4.5, 8.24×1.5) vs
+min(4.5, 2.79×1.5) differ by 0.31) → DIRTY_GRADE_CAP_V2 = 30 with the tier-order proof asserted in BOTH
+flag states; and the soft bars are RULER-RELATIVE — 0.05/500 m were calibrated for the narrow measure, so
+keeping them under the wide one was an unregistered ~1.5-2× tightening (paired Milton probe, same winner
+id: run 458→584 m, share 1.5→3.5%) → V2 bars 8%/800 m, V1 values byte-identical under
+HOOD_MEASURE_V2=off. FINAL A/B vs the U3 baseline (83e2): AC 20→19 (bar ≥18 ✓; the 3 down-flips are
+measurement truth — St. Jacobs' pool is genuinely ≥7% residential after highway rejects; St. Thomas
+traded a HIDDEN >500 m hood run for a clean-but-late route, correctly; 2 up-flips from better repair
+aim), no-route 0 ✓, hood run max 7895→5563 m, p80 1954→1468 m, dirty units 2.04→1.19, loopiness p20
+0.18→0.21, wall +435 ms, hash c5fd7d6cf7f178b1. REFUSED: (c) HOOD_HARD_RUN 1500 m assembly reject — hit
+its pre-registered kill EXACTLY as the round-6 precedent warned (no-route 0→2, AC −5, wall +2.2 s;
+stacked-run hood wins of max 2045 m were bought with starvation); demoted to presentation-only per plan
+(the V2 pricing already puts a 7.9 km weave ~22 points down inside the dirty tier), flag stays opt-in.
+Random-suite confirmation leg recorded alongside (r25_lq_u5_rand).
+
+**BD-87 — Duration wild-miss tier ADOPTED · third resize REFUSED (R25-U7, 2026-07-26).** Audit issue
+#12: 7/60 loops over the asked time by >25%, worst +93% ("asked 60, got 116") — those won because every
+pool-mate was durOff and the flat −100 tier couldn't separate +30% from +93%. DUR_HARD_TIER (default ON):
+beyond a 50% miss a SECOND −100 stacks (total −200) — a wildly-over route wins only when nothing closer
+exists, and the overshoot disclosure now says "well over" instead of the lie "a bit over" past the same
+bar. A/B vs c5fd: hash BYTE-IDENTICAL on the fixed suite — the current config produces no >50% misses, so
+the tier is a proven-zero-collateral safety net for the audit-class pathology (tier stacking proof-tested
+in score.test.ts in both flag states). RESIZE_ATTEMPTS_3 REFUSED: no brief on either suite reached a
+third resize — adopting an unexercised lever that costs engine calls when it fires would be evidence-free;
+stays opt-in, revisit if audit-v12 reproduces overshoots.
+
+**BD-88 — Backroad mix grade: CONTINUITY half ADOPTED @ 12 km target · MAJORITY half CANCELLED
+(R25-U1/U10, 2026-07-26).** The U1 diagnostic (12 briefs, per-pool decomposition, pre-registered
+verdict rule) measured within-pool SD(backroadLongestM) REAL on 11/12 briefs (1.5-10 km — pools
+genuinely contain one-long-stretch vs many-fragments variants) while SD(backroadShare) cleared its bar
+on only 3/12 (rq11's curse persists: most pools straddle nothing, 8/12 briefs have ZERO backroad>main
+candidates). Per the pre-registration the MAJORITY grade is CANCELLED — inert material, its job moves to
+U19 generation — and the CONTINUITY grade is built: presentationKey −
+CONTINUITY_GRADE_MAX·clamp01((TARGET − backroadLongestM)/TARGET), max 6 (declared in the proof budget),
+unknown = FULL deduction, `simple` exempt, NOT loop-gated (U6e: A→B needs it — measured, hamilton→guelph
+90 %-main winner beat a 51 %-main clean contender by keyGap 0.02 with nothing rewarding mix). Target
+swept, not guessed: 8000 zeroed the gradient at the pool mean (+781 m, under the bar); 12000 graded the
+whole pool: longest mean 9522→10600 m (+1078 ≥ the +1000 bar), p20 5429→5989, backroad 26→28 % (p20
++3), main p80 87→84, curviness EXACTLY held (the BD-62-class kill bar), AC 19=19 same brief set,
+no-route 0, hood flat, wall −656 ms (hash 7364021dd366ea13). Default ON.
+
+**BD-89 — A→B keeps what it builds (R25-U5e/U6, four flags ADOPTED, 2026-07-26).** Audit issue #6
+(hamilton→guelph built a 61 %-arterial chain and shipped 89.5 %) was decomposed FIRST (U6a, onScored
+observability + pre-registered branches over 15 briefs): no_contender 6 (the pool holds nothing better —
+generation-bound, U19's job, said plainly) · culled 4 (2 = the PRE-EXISTING Cambridge→Paris /
+Aurora→Schomberg planner give-ups, present in the session-start baseline b7c77d; 1 = Bancroft
+out-of-region by design) · no-mix-reward 3 (fixed by BD-88's continuity grade — measured: 90 %-main
+winner over a 51 %-main clean contender at keyGap 0.02) · dirty-flip 2. NOTE: the ADOPTED default stack
+(V2 hood measure + continuity grade, neither loop-gated) had ALREADY moved A→B before these flags:
+arterial 83→76 %, main 80→72 %, backroad 16→23 %, longest backroad run 7841→11017 m (new baseline
+7120a765c57497b7). The four flags then: ATOB_PREDICT_V2 (fills sized so straight-line prediction ×
+CORRIDOR_ROAD_FACTOR 1.3 fits UNDER the untouched 1.8× cap — 1.35×1.3=1.755; ladder 2→4 entries; NOT
+BD-82's refused cap loosening — the cap stays, the prediction stops lying), ATOB_REPAIR_VALUE_AWARE
+(drop by detour-per-unit-VALUE — blind drop amputated the curviest span; floor 1→2; an ACCEPTED chain is
+never DROP-repaired), ATOB_ASSEMBLY_RELAX (rung 5 finally reaches A→B — self-overlap only, never
+detour), ATOB_GATES_V2 (graced self-overlap + V2 residential parity). A/B vs 7120: one brief transformed
+(Milton→Elora no-highways: arterial 72→59 %, curv 1.13→1.21 — the chain survived), aggregates
+uniformly +: backroad 23→24 %, longest 11017→11692 m, main 72→71 %; routed 12/15 =, u-turns 1 =,
+hwy =, wall +58 ms; zero regressions (hash e4ae43d051bcd2af). The remaining A→B main share is
+POOL-BOUND per the diagnostic — assigned to U19, not to more ranking knobs.
+
+**BD-90 — Unmeasured-is-dirty ADOPTED · turn-density grade REFUSED (R25-U8c/U9b, 2026-07-26).**
+TRACE_NULL_STRICT (default ON): a failed trace now flips the dirty clause AND costs 2.0 offence units
+(was 0.5 — half a u-turn), so an unmeasured route can never outrank a measured-clean pool-mate (audit
+issue #13). A/B vs the U10-adopted config: per-brief PASS/FAIL set IDENTICAL, AC 19 =, defect tallies
+identical incl. unmeasured×1 — the only movement was the honest accounting (dirty units mean 1.24→1.27);
+zero selection cost, invariant gained (hash e216d28335da10f8). TURN_GRADE (U9b) REFUSED on its
+pre-registered primary bar: briefs over 5 turns/10min stayed 4/48 (bar ≤3) — the four turn-heavy pools
+contain NO clean under-5 alternative, so a presentation grade has nothing to choose (BD-62's lesson,
+third confirmation: a presentation tool cannot fix a generation property). What it DID move is recorded:
+worst best-route flow 8.1→6.1 turns/10min, curviness EXACTLY held; costs: backroad 28→27 %, defects
+1.94→1.98. Stays opt-in (TURN_GRADE=on) as measurement-backed safety; the flow tail belongs to U19/U20
+generation. turnsPer10min remains a first-class measured output everywhere (U0).
+
+**BD-91 — Discover Stage 1: gates BUILT + measured; production default stays OFF pending the core
+index (R25-U11, 2026-07-26).** Audit issue #4 (180 pre-built routes, ZERO validations) is answered in
+code: DISCOVER_GATES 'report'|'strict' — cheap pure detectors (uturns/spurs/microloops) then ONE trace
+per survivor; highway metres (600 m floor) / residential >20 % / offences DROP in both modes with
+COUNTED disclosures ("2 had highway on the way — not shown"); self-overlap + connector-share
+disclose+DEMOTE in report, drop in strict; the refill loop is DELETED under gates (it re-added drives
+ignoring the separation rule); classics leave the ranked menu (owner decision); the tap's wasted Haiku
+parse is KILLED unconditionally (test pins 0 LLM parse calls); NEW pure `reversalPositions` detector
+catches the middleType:'through' block-circle that uturnCount misses (5 tests). MEASURED (discover
+_quality ×4 runs): the plan's warning materialized EXACTLY — the provisional 8 km road floor emptied
+7/7 origins (median merged road 4.6 km; the 8 km number was written for the core-index era); at a 5 km
+floor, report mode fills honest menus (2-5 drives, 100 % pre-built, 0 classics), FIXES the repetition
+cohort 2/2 (jaccard 1.00→0.75/0.50 — the no-refill separation rule working), at the cost of smaller
+flat-origin menus (5/7 origins under the R24 menu≥5 bar) and top3curv 2.9→1.1-1.5 (the floor removes
+short-but-supercurvy roads). DISPOSITION: gates stay opt-in (eval runs 'report'/'strict'; the golden
+fixture pins both modes) rather than shipping 2-drive menus days before U13/U14's measured core index
+replaces this path outright — Stage 1's deliverable was measurement + honest gates, and both now exist
+behind one env. The 8 km floor returns with ribbon cores.
+
+**BD-92 — The generation rebuilds: core-index machinery BUILT + kill-condition measured · anchor
+sweep REFUSED · connector rebuild DEFERRED with its evidence staged (R25-U13/U19/U20, 2026-07-26).**
+(a) U13 drive-core index: ACP-001 approved and recorded; migration 0016 (`drive_cores`, RLS
+deny-by-default, SECURITY DEFINER pinning generator_version + highway_share=0) applied LOCALLY; ONE
+rulebook `core_bars.ts` (6 tests) shared by sweep/live/eval; deterministic offline sweep + transactional
+loader written; U14 v2 `/discover` three-leg browse behind `v:2` with the v1 branch TEST-PINNED (4+7
+tests); U15 client layer + three-leg helpers (12 tests), app switch dark until an index is loaded.
+SMOKE SWEEP (Hockley + Belfountain cells) ran end-to-end and returned the ACP's pre-registered kill
+condition with the binding bars NAMED: main_share×15 · backroad_share×13 · loopiness×13 ·
+assembly_rejected×7 · hood_share×2 — today's generator cannot produce ≥55 %-backroad cores even in the
+twisty heartland. The per-cell relaxed profile (`bar_profile='cell_relaxed'`) stays specified-not-
+implemented until the binding constraint moves. (b) U20a RETURN_ANCHOR_FRACTION sweep REFUSED on its
+pre-registered primary bar: loopiness p20 FLAT at 0.20 for both 0.85 and 0.75 (bar ≥0.25). Recorded
+honestly: 0.85 raised AC 19→22 (shape defects 7→4, timing 4→2) but bought it with backroad 27→25 % /
+main 70→73 % — trading away the owner's core ask; 0.75 was strictly worse (AC 14, main_majority 42→47).
+0.6 stays. (c) U19 connector rebuild DEFERRED, not attempted-and-rushed: the session's probes stand
+(highway removal via two-stage sampling SOLID at +1.6 % distance; backroad share NOT pre-validated —
++11/0/−18 pp), the U13 histogram independently names backroad/main share as THE binding constraint, and
+every instrument it needs is now staged (onScored decomposition, the sweep as its offline testbed,
+per-span values, U0 truth metrics). It is the recorded headline unit of the next session — attempting
+the program's least-certain rebuild at the tail of a 20-unit batch would produce neither an honest A/B
+nor a proper record. Both U19 and U20b (anchor-point ring seeding) go together: they are the same
+generation problem.

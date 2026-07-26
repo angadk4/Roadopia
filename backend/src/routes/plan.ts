@@ -54,6 +54,8 @@ import { buildOutAndBack } from '../planner/out_and_back';
 import { refineConstraints } from '../planner/refine';
 import { runPlanner, type PlannerResult } from '../planner/run';
 
+import { applyClientOverrides } from './plan_overrides';
+
 export const MAX_BRIEF_CHARS = 500;
 export const HEARTBEAT_MS = 15_000;
 
@@ -153,7 +155,24 @@ export function roadNamesFromManeuvers(
   return names;
 }
 
-function factsOf(constraints: ParsedConstraints, result: PlannerResult): RouteFacts {
+/**
+ * R25-U8b — the route is tagged with the character treatments that RAN
+ * (PlannerResult.characterApplied, derived from the resolved bundle), never
+ * with the ask (audit-v11 issue #10: "Prefer views" tagged routes `scenic`
+ * that received zero scenic handling, and the AI narrated from the tag).
+ * `off` restores the old copy-the-ask behaviour byte-identically.
+ */
+const CHARACTER_APPLIED_ON = process.env['CHARACTER_APPLIED'] !== 'off';
+
+function appliedTagsOf(constraints: ParsedConstraints, result: PlannerResult): CharacterTag[] {
+  return CHARACTER_APPLIED_ON ? (result.characterApplied ?? []) : constraints.character;
+}
+
+function factsOf(
+  constraints: ParsedConstraints,
+  result: PlannerResult,
+  clientOverrides: string[] = [],
+): RouteFacts {
   const route = result.route!;
   const results = result.validation?.results ?? [];
   const satisfied = results.filter((c) => c.status === 'satisfied').map((c) => c.constraint);
@@ -179,6 +198,13 @@ function factsOf(constraints: ParsedConstraints, result: PlannerResult): RouteFa
     satisfied,
     relaxed,
     viewpointCount: result.stops.filter((s) => s.type === 'viewpoint').length,
+    // R25-U8b: the prompt sees only treatments that ran — narration cannot
+    // claim a scenic handling that never happened. Omitted when the flag is
+    // off (byte-identical prompt bytes).
+    ...(CHARACTER_APPLIED_ON ? { characterApplied: appliedTagsOf(constraints, result) } : {}),
+    // R25-U16a: what the controls overrode — the narration can say "the chip
+    // won" instead of pretending the text was honoured. Omitted when empty.
+    ...(clientOverrides.length > 0 ? { clientOverrides } : {}),
   };
 }
 
@@ -203,7 +229,7 @@ function routePayload(
     toll_flag: route.has_toll,
     ferry_flag: route.has_ferry,
     unpaved_flag: route.has_unpaved,
-    character_tags: constraints.character,
+    character_tags: appliedTagsOf(constraints, result), // R25-U8b: applied, not asked
     intensity: constraints.intensity ?? 'moderate',
     free_tags: [],
     visibility: 'private',
@@ -225,6 +251,7 @@ function alternatePayload(
   constraints: ParsedConstraints,
   alt: PlannerResult['alternates'][number],
   generationRequestId: string | null,
+  appliedTags: CharacterTag[], // R25-U8b: same run, same bundle — same applied set
 ): Route {
   return {
     geometry: alt.route.geometry,
@@ -241,7 +268,7 @@ function alternatePayload(
     toll_flag: alt.route.has_toll,
     ferry_flag: alt.route.has_ferry,
     unpaved_flag: alt.route.has_unpaved,
-    character_tags: constraints.character,
+    character_tags: appliedTags,
     intensity: constraints.intensity ?? 'moderate',
     free_tags: [],
     visibility: 'private',
@@ -574,6 +601,17 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
           }
           constraints = refined.merged;
           parserKind = 'refine-merge';
+        } else if (outAndBack) {
+          // R25-U11 — the Discover tap fallback sends a SYNTHETIC brief
+          // ("Out and back to X") whose parse output is then discarded whole
+          // (the outAndBackFn branch below never reads `constraints`). That
+          // was a PAID Haiku call per tap for nothing. Rules parse only:
+          // free, deterministic, and byte-equivalent in effect because every
+          // field the request needs arrives structured (origin/shape/preset/
+          // out_and_back).
+          const outcome = await parseFn(brief, { client: null });
+          constraints = outcome.constraints;
+          parserKind = `${outcome.parser} (oab: no LLM spend)`;
         } else {
           const outcome = await parseFn(brief, {
             client: aborter.signal.aborted ? null : deps.aiClient,
@@ -605,62 +643,35 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
             missing: constraints.missing.filter((m) => m !== 'destination'),
           };
         }
-        if (shape) constraints = { ...constraints, shape };
-        // preset override (M7-T03): the planner resolves it via weightsForPreset
-        // at run.ts; explicit client weights still win key-by-key (mergeWeights).
-        if (preset) constraints = { ...constraints, preset };
-        if (weights) constraints = { ...constraints, weights: weights as Weights };
-        // R16-4 structured overrides (the Plan screen's sections):
-        // stops — per-TYPE override: a builder row replaces the brief's ask for
-        // that type (no accidental doubling when both name coffee); brief-only
-        // types ride along.
-        if (stopOverrides !== null) {
-          const overrideTypes = new Set(stopOverrides.map((s) => s.type));
-          constraints = {
-            ...constraints,
-            stops: [
-              ...stopOverrides,
-              ...constraints.stops.filter((s) => !overrideTypes.has(s.type)),
-            ],
-          };
-        }
-        // avoid — only the keys the client sent override (a toggle the user
-        // never touched must not clear a brief-parsed avoid)
-        if (avoidOverrides) {
-          constraints = { ...constraints, avoid: { ...constraints.avoid, ...avoidOverrides } };
-          if (avoidOverrides.unpaved === true) {
-            constraints = { ...constraints, surface_pref: 'paved' };
-          }
-        }
-        // character — union (the Scenery toggle adds 'scenic' without
-        // clobbering brief-derived tags)
-        if (characterOverrides && characterOverrides.length > 0) {
-          constraints = {
-            ...constraints,
-            character: [...new Set([...constraints.character, ...characterOverrides])],
-          };
-        }
-        if (twistinessOverride !== undefined) {
-          constraints = { ...constraints, twistiness_pref: twistinessOverride };
-        }
-        // R23 discovery tap: the structured 'through' pin REPLACES parsed
-        // location constraints (the tap knows the exact road + near_point); the
-        // computed loop budget overrides the parsed duration. Both absent for a
-        // normal Plan request → constraints unchanged (BD-40 byte-identical).
-        if (locationOverrides !== null) {
-          constraints = { ...constraints, location_constraints: locationOverrides };
-        }
-        if (durationTargetOverride !== undefined) {
-          constraints = { ...constraints, duration_target_s: durationTargetOverride };
-        }
+        // R25-U16a — ONE disclosed merge instead of five silent overwrites
+        // (identical win-order, extracted pure to plan_overrides.ts; the
+        // overrides[] names every control that CONTRADICTED the text)
+        const merged = applyClientOverrides(constraints, {
+          shape,
+          preset,
+          weights: weights as Weights | undefined,
+          stopOverrides,
+          avoidOverrides,
+          characterOverrides,
+          twistinessOverride,
+          locationOverrides,
+          durationTargetOverride,
+        });
+        constraints = merged.constraints;
+        const clientOverrides = merged.overrides;
         sse({
           type: 'step',
           step: 'parse',
           status: 'completed',
           detail: parserKind === 'refine-merge' ? 'refine-merge' : `parser=${parserKind}`,
         });
-        // the effective running `c` — the client holds it for refinement (§34)
-        sse({ type: 'constraints', constraints });
+        // the effective running `c` — the client holds it for refinement (§34);
+        // R25-U16a: + which controls overrode the text (additive optional field)
+        sse({
+          type: 'constraints',
+          constraints,
+          ...(clientOverrides.length > 0 ? { overrides: clientOverrides } : {}),
+        });
 
         if (aborter.signal.aborted) return; // disconnected during parse
 
@@ -712,7 +723,7 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
         let explanationText: { text: string; satisfied: string[]; relaxed: string[] } | null = null;
         if (!aborter.signal.aborted) {
           sse({ type: 'step', step: 'explain', status: 'started' });
-          const explanation = await explainFn(factsOf(constraints, result), {
+          const explanation = await explainFn(factsOf(constraints, result, clientOverrides), {
             client: deps.aiClient,
           });
           explanationText = {
@@ -752,7 +763,12 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
         for (const alt of result.alternates) {
           sse({
             type: 'alternate',
-            route: alternatePayload(constraints, alt, generationRequestId),
+            route: alternatePayload(
+              constraints,
+              alt,
+              generationRequestId,
+              appliedTagsOf(constraints, result),
+            ),
           });
         }
         if (explanationText) sse({ type: 'explanation', explanation: explanationText });

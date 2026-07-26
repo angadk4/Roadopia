@@ -39,4 +39,31 @@ describe('bundleForRequest (R18-4)', () => {
     expect(d.weights).toEqual(DEFAULT_WEIGHTS);
     expect(d.autoViewpointStop).toBe(false);
   });
+
+  it('R25-U8a scenic MODIFIER: composes onto a preset-resolved bundle instead of dying', () => {
+    // the production shape: app always ships a preset, "Prefer views" adds the tag
+    const ask = { ...parseRules('90 minute backroads loop from Bolton') };
+    ask.character = [...ask.character, 'scenic' as const];
+    // OFF (explicit — ON is the default since the freeze): the scenic ask is
+    // silently discarded — the recorded defect this modifier fixes
+    const off = bundleForRequest(ask, { scenicModifier: false });
+    expect(off.id).toBe('backroads');
+    expect(off.scenicApplied).toBe(false);
+    expect(off.autoViewpointStop).toBe(false);
+    // ON: same bundle, urban bar tightened to scenic's, viewpoint armed, APPLIED recorded
+    const on = bundleForRequest(ask, { scenicModifier: true });
+    expect(on.id).toBe('backroads'); // still the preset's bundle — a modifier, not a coup
+    expect(on.urbanShareSoft).toBe(0.1);
+    expect(on.autoViewpointStop).toBe(true);
+    expect(on.scenicApplied).toBe(true);
+    expect(on.weights).toEqual(off.weights); // no weight change — [GATE-S] holds
+    // no scenic ask → the modifier never fires even when armed
+    const plain = bundleForRequest(parseRules('90 minute backroads loop from Bolton'), {
+      scenicModifier: true,
+    });
+    expect(plain.scenicApplied).toBe(false);
+    // the scenic BUNDLE itself reports applied (it IS the treatment)
+    const scenic = bundleForRequest(parseRules('2 hour scenic loop from Owen Sound'));
+    expect(scenic.scenicApplied).toBe(true);
+  });
 });

@@ -156,8 +156,11 @@ export interface OffenceInput {
 }
 
 export const RETRACE_UNIT_SOFT_M = 1_200; // mirrors RETRACE_RUN_SOFT_M (no import cycle)
-export const RESIDENTIAL_UNIT_SOFT_SHARE = 0.05;
-export const RESIDENTIAL_UNIT_SOFT_RUN_M = 500;
+// R25-U5ab: mirror loop.ts's ruler-relative recalibration (paired Milton
+// probe; see loop.ts RESIDENTIAL_SOFT_SHARE) — the graded units must start
+// where the dirty clause starts, in BOTH flag states.
+export const RESIDENTIAL_UNIT_SOFT_SHARE = process.env['HOOD_MEASURE_V2'] !== 'off' ? 0.08 : 0.05;
+export const RESIDENTIAL_UNIT_SOFT_RUN_M = process.env['HOOD_MEASURE_V2'] !== 'off' ? 800 : 500;
 
 // --- R21-1: loop-shape degeneracy units (folded into the DIRTY tier) --------
 // The audit found thin "loops" (out-and-backs), showcase routes that drive one
@@ -205,9 +208,20 @@ export function fallbackOffenceUnits(d: OffenceInput): number {
   if (d.corridorDoubling != null) {
     units += SHAPE_UNIT_CORRIDOR * Math.max(0, d.corridorDoubling - CORRIDOR_DOUBLING_SOFT);
   }
-  if (d.traceNull) units += 0.5;
+  if (d.traceNull) units += TRACE_NULL_STRICT_ON ? TRACE_NULL_UNITS_STRICT : 0.5;
   return Math.round(units * 100) / 100;
 }
+
+/**
+ * R25-U8c — unmeasured must never outrank measured-clean (audit-v11 issue
+ * #13: a failed trace cost 0.5 units — HALF a u-turn — so a route nobody
+ * measured could beat a route measured clean). Strict: an unmeasured route
+ * costs 2.0 units AND the dirty clause fires on traceNull (run.ts/eval), so
+ * it sits in the dirty tier below every measured-clean pool-mate — presented
+ * only when nothing measured survives, reported as its own bucket.
+ */
+export const TRACE_NULL_STRICT_ON = process.env['TRACE_NULL_STRICT'] !== 'off'; // R25-U8c ADOPTED (BD-90)
+export const TRACE_NULL_UNITS_STRICT = 2.0;
 
 /**
  * Tier bases (R18-2). BD-42's ordering was always LEXICOGRAPHIC intent —
@@ -227,9 +241,21 @@ export const PRESENT_TIER_DIRTY = 200;
  * in an all-dirty pool, least-offence wins (one whole offence unit, 1.5,
  * outweighs the ~1.35 max scalar-score spread). DIRTY_GRADE_UNIT = 0 reverts
  * to boolean tiering exactly.
+ *
+ * R25-U5ab iterate — the 4.5 cap was calibrated when units were u-turn-scale
+ * (0-3); with HOOD_MEASURE_V2 removing the residential blindness, hoody-town
+ * pools go ALL-dirty with units of 3-20, and the cap SATURATES: measured on
+ * St. Jacobs, a 19.1 %-residential winner (u 8.24 → capped 4.5) beat a 7.2 %
+ * pool-mate (u 2.79 → 4.19) on a 0.07 score edge — the grade could no longer
+ * tell "a bit residential" from "a subdivision weave". Under V2 the cap rises
+ * to 30 (20 units × 1.5), still ≪ the 100-point tier gap, so the tier-order
+ * proof budget holds in BOTH flag states (asserted in score.test.ts).
+ * Env read mirrors residential.ts's flag literal (no import cycle — the
+ * RETRACE_UNIT_SOFT_M precedent above).
  */
 export const DIRTY_GRADE_UNIT = 1.5;
-export const DIRTY_GRADE_CAP = 4.5;
+export const DIRTY_GRADE_CAP_V2 = 30;
+export const DIRTY_GRADE_CAP = process.env['HOOD_MEASURE_V2'] !== 'off' ? DIRTY_GRADE_CAP_V2 : 4.5;
 
 export function dirtyPenaltyOf(dirty: boolean, units: number): number {
   if (!dirty) return 0;
@@ -250,6 +276,144 @@ export function durationGradeOf(durationS: number, targetS: number | null): numb
   if (targetS === null || targetS <= 0) return 0;
   const err = Math.abs(durationS - targetS) / targetS;
   return DURATION_GRADE_MAX * (Math.min(err, 0.2) / 0.2);
+}
+
+/**
+ * R25-U9a — THE presentation key, extracted. The formula previously lived
+ * hand-copied in run.ts, eval/loop_quality.ts and (as a deduction stack) in
+ * the tier-order proof — every new term had to be mirrored three ways, and a
+ * missed mirror silently un-covered the proof. One function, one budget.
+ *
+ * ANY new subtractive within-tier term MUST be added here AND declared in
+ * PRESENT_GRADE_BUDGET — the proof asserts budget + score spread < TIER bases,
+ * so an undeclared term fails the test instead of rotting the ordering.
+ */
+export interface PresentationInput {
+  /** Scalar candidate score (scoreCandidate().score). */
+  score: number;
+  dirty: boolean;
+  /** fallbackOffenceUnits — grades within the dirty tier. */
+  units: number;
+  durOff: boolean;
+  contextHeavy: boolean;
+  /** Routed duration + the brief's target — the within-tier duration grade. */
+  durationS: number;
+  durationTargetS: number | null;
+  /** R25-U9b — total maneuvers per 10 driving minutes (turnsPer10minOf).
+   *  Optional/null → grade 0 (byte-identical for callers that don't measure). */
+  turnsPer10min?: number | null;
+  /** R25-U10 — longest contiguous backroad run (m). null/undefined under the
+   *  flag → FULL deduction (unknown is never rewarded). */
+  backroadLongestM?: number | null;
+  /** R25-U10 — true for the `simple` profile (fast main roads are the ask). */
+  mixExempt?: boolean;
+}
+
+/**
+ * R25-U9b — turn density as a graded within-tier term (audit-v11 issue #7:
+ * "a stop sign or light every 2 minutes"; mean one maneuver per 2.8 min,
+ * worst 1.5 min, 11/60 over 5/10min — measured NOWHERE before U0, scored
+ * nowhere before this). Deliberately NOT an OffenceInput field: offences only
+ * bite when dirty is already true, which misses the entire clean-but-
+ * turn-heavy population — and road taste doesn't belong in the −200 offence
+ * vocabulary. The grade starts at the clean-drive bar (5.0) and saturates at
+ * the observed worst (8.0), so the ~90 % of routes under the bar pay ZERO —
+ * this targets the flow-killing tail, not twisty roads (a twisty road's
+ * curves are geometry, not maneuvers; only instructions count here).
+ * BD-62's warning applies (a presentation tool aimed at a generation
+ * property) — the A/B carries a curviness KILL condition for exactly that.
+ */
+export const TURN_GRADE_ON = process.env['TURN_GRADE'] === 'on';
+export const TURN_GRADE_MAX = 12;
+export const TURNS_GRADE_SOFT = 5.0; // grade starts (the clean-drive bar)
+export const TURNS_GRADE_HARD = 8.0; // grade saturates (observed max 8.1)
+
+export function turnGradeOf(turnsPer10min: number | null | undefined): number {
+  if (turnsPer10min == null) return 0;
+  const t = Math.min(
+    1,
+    Math.max(0, (turnsPer10min - TURNS_GRADE_SOFT) / (TURNS_GRADE_HARD - TURNS_GRADE_SOFT)),
+  );
+  return TURN_GRADE_MAX * t;
+}
+
+/**
+ * R25-U10 (continuity half ONLY — the U1 diagnostic's pre-registered verdict,
+ * 2026-07-26): within-pool SD(backroadLongestM) is REAL on 11/12 briefs
+ * (1.5-10 km) — pools genuinely contain one-long-stretch and many-fragments
+ * variants of the same drive — while SD(backroadShare) clears the bar on only
+ * 3/12 (rq11's curse persists: most pools straddle nothing, so the MAJORITY
+ * grade was CANCELLED in favour of U19, publicly). The owner's ask this term
+ * serves: long CONTINUOUS backroad stretches beat many short fragments — and
+ * every road-class switch is a junction, so it pays down "too many turns"
+ * with the same lever. Unknown is never rewarded: an untraced route takes the
+ * FULL deduction. The `simple` profile is exempt (fast main roads are the
+ * ask — the ARTERIAL_PRESENT_PENALTY precedent). Not loop-gated (U6e: A→B
+ * needs it too).
+ */
+export const MIX_GRADE_ON = process.env['MIX_GRADE'] !== 'off'; // R25-U10 ADOPTED (BD-88)
+export const CONTINUITY_GRADE_MAX = 6;
+/** Full marks at one unbroken backroad stretch of this length. 8000 (the
+ *  ribbon-core floor) zeroes the gradient right where the pool mean already
+ *  sits (9.5 km) — env-swept; the A/B picks the value. */
+export const CONTINUITY_TARGET_M = Number(process.env['CONTINUITY_TARGET'] ?? 12_000); // swept 8k/12k; 12k met the +1000 m bar
+
+export function continuityGradeOf(backroadLongestM: number | null | undefined): number {
+  if (backroadLongestM == null) return CONTINUITY_GRADE_MAX; // unknown ≠ rewarded
+  return (
+    CONTINUITY_GRADE_MAX *
+    Math.min(1, Math.max(0, (CONTINUITY_TARGET_M - backroadLongestM) / CONTINUITY_TARGET_M))
+  );
+}
+
+/** Sum of every within-tier grade maximum. The tier-order proof asserts
+ *  PRESENT_GRADE_BUDGET + max score spread < PRESENT_TIER_DUROFF.
+ *  TURN_GRADE_MAX / CONTINUITY_GRADE_MAX are declared unconditionally — the
+ *  proof must hold with the flags in EITHER state. */
+export const PRESENT_GRADE_BUDGET =
+  DURATION_GRADE_MAX +
+  ARTERIAL_PRESENT_PENALTY +
+  DIRTY_GRADE_CAP +
+  TURN_GRADE_MAX +
+  CONTINUITY_GRADE_MAX;
+
+/**
+ * R25-U7a — a SECOND duration tier for wild misses (audit-v11: 7/60 loops
+ * overshot the asked time by >25 %, worst +93 % — "asked 60 min, got 116").
+ * Mechanically: those routes won because EVERY pool-mate was durOff, so the
+ * flat −100 tier couldn't separate +30 % from +93 %. Beyond DURATION_HARD_ERR
+ * a second −100 stacks (total −200): a wildly-over route only ever wins when
+ * literally nothing closer exists — which the never-empty fallback then
+ * presents WITH the existing overshoot disclosure. Tier stacking is safe by
+ * the same construction as durOff (within-tier spread ≈ 10 ≪ 100).
+ */
+export const DUR_HARD_TIER_ON = process.env['DUR_HARD_TIER'] !== 'off'; // R25-U7 ADOPTED (BD-87)
+export const DURATION_HARD_ERR = 0.5;
+
+export function presentationKey(
+  i: PresentationInput,
+  opts?: { durHardTier?: boolean; turnGrade?: boolean; mixGrade?: boolean },
+): number {
+  const durHardOff =
+    (opts?.durHardTier ?? DUR_HARD_TIER_ON) &&
+    i.durationTargetS !== null &&
+    i.durationTargetS > 0 &&
+    Math.abs(i.durationS - i.durationTargetS) / i.durationTargetS > DURATION_HARD_ERR;
+  const turnGrade = (opts?.turnGrade ?? TURN_GRADE_ON) ? turnGradeOf(i.turnsPer10min) : 0;
+  const continuityGrade =
+    (opts?.mixGrade ?? MIX_GRADE_ON) && i.mixExempt !== true
+      ? continuityGradeOf(i.backroadLongestM)
+      : 0;
+  return (
+    i.score -
+    dirtyPenaltyOf(i.dirty, i.units) -
+    (i.durOff ? PRESENT_TIER_DUROFF : 0) -
+    (durHardOff ? PRESENT_TIER_DUROFF : 0) -
+    (i.contextHeavy ? ARTERIAL_PRESENT_PENALTY : 0) -
+    durationGradeOf(i.durationS, i.durationTargetS) -
+    turnGrade -
+    continuityGrade
+  );
 }
 
 export interface ScoreBreakdown {

@@ -4,6 +4,7 @@ import type {
   LineString,
   NearbyDrive,
   RouteThroughOutput,
+  CoreDrive,
 } from '@shared/types';
 import { describe, expect, it } from 'vitest';
 
@@ -16,7 +17,13 @@ import {
   drivesBounds,
   fetchDiscoverDrives,
   nearbyDriveToRoute,
+  buildRemixRequest,
+  coreDrivesToFeatureCollection,
+  coreTripDurationS,
+  coreTripLabel,
 } from '../discover';
+
+// --- R25-U15: three-leg helpers ------------------------------------------------
 
 const ORIGIN: LatLng = { lat: 43.5, lng: -80.0 };
 
@@ -190,5 +197,77 @@ describe('nearbyDriveToRoute', () => {
 
   it('returns null when the route was not pre-built (caller falls back to /plan)', () => {
     expect(nearbyDriveToRoute(OAB_DRIVE)).toBeNull();
+  });
+});
+
+const CORE: CoreDrive = {
+  id: 'c-80.0_43.5:loop:x',
+  kind: 'loop',
+  name: 'River Road',
+  barProfile: 'strict',
+  core: {
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [-80, 43.5],
+        [-80.01, 43.51],
+        [-80, 43.5],
+      ],
+    },
+    distance_m: 42_000,
+    duration_s: 2520,
+    entry: { lat: 43.5, lng: -80 },
+    exit: { lat: 43.5, lng: -80 },
+    curviness: 2.1,
+    backroadShare: 0.62,
+    mainShare: 0.22,
+    hoodShare: 0.03,
+    turnsPer10min: 3.2,
+    loopiness: 0.41,
+  },
+  connectorOut: {
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [-79.9, 43.4],
+        [-80, 43.5],
+      ],
+    },
+    distance_m: 12_000,
+    duration_s: 1080,
+  },
+  connectorHome: {
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [-80, 43.5],
+        [-79.9, 43.4],
+      ],
+    },
+    distance_m: 13_000,
+    duration_s: 1260,
+  },
+  sameWayHome: false,
+};
+
+describe('R25-U15 three-leg helpers', () => {
+  it('renders three separately-styled features per drive (amber core, grey legs)', () => {
+    const fc = coreDrivesToFeatureCollection([CORE]);
+    expect(fc.features.map((f) => f.properties.leg)).toEqual(['core', 'out', 'home']);
+    expect(fc.features[0]!.geometry).toBe(CORE.core.geometry);
+  });
+
+  it('the card label is the honest three-part time, never one blob', () => {
+    expect(coreTripLabel(CORE)).toBe('the drive 42 min · getting there 18 · home 21');
+    expect(coreTripDurationS(CORE)).toBe(4860);
+  });
+
+  it('Remix seeds the REAL planner via the tap contract (through-pin + clamped budget)', () => {
+    const req = buildRemixRequest(CORE, { lat: 43.4, lng: -79.9 });
+    expect(req.location_constraints).toEqual([
+      { kind: 'through', text: 'River Road', near_point: CORE.core.entry },
+    ]);
+    expect(req.duration_target_s).toBe(4860); // inside the tap window
+    expect(req.out_and_back).toBeUndefined(); // a REAL planner run, not a rebuild
   });
 });

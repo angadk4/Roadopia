@@ -1,6 +1,6 @@
 {
-  "config_id": "frozen-r24-v1",
-  "frozen_at": "2026-07-22",
+  "config_id": "frozen-r25-v1",
+  "frozen_at": "2026-07-26",
   "discipline": "\u00a721: tuned on DEV only, validated on VAL; any later change = new config id + fresh VAL pass",
   "params": {
     "ALPHA_LOOP": 0.45,
@@ -38,13 +38,13 @@
     "slider_ranges": "N/A \u2014 W1 presets-only (BD-30)",
     "use_living_streets": 0,
     "maneuver_penalty_s": 5,
-    "RESIDENTIAL_SOFT_SHARE": 0.05,
+    "RESIDENTIAL_SOFT_SHARE": 0.08,
     "RESIDENTIAL_HARD_SHARE": 0.2,
     "MICROLOOP_MIN_M": 150,
     "MICROLOOP_MAX_M": 3000,
     "MICROLOOP_CLOSE_M": 30,
     "MICROLOOP_AREA_M2": 3000,
-    "RESIDENTIAL_RUN_SOFT_M": 500,
+    "RESIDENTIAL_RUN_SOFT_M": 800,
     "RESIDENTIAL_RUN_BRIDGE_M": 250,
     "REPAIR_PASS_CAP": 4,
     "w_country": 0,
@@ -68,7 +68,7 @@
       "mode": "on (rollback: legacy)",
       "backroads": "ADOPTED \u2014 shortest:true, use_living_streets:0 (twisty/backroads presets or pref>=0.7)",
       "simple": "fastest-path (legacy options) \u2014 fewer turns is the ask",
-      "fun_default": "REFUSED 4× (FUN_DEFAULT_ADOPTED=false); R21-2 (BD-63): with corpus cleanup + R19 urban live, AC 13->8, dirty 1.76->3.49, arterial only -8pp. The default USER experience is fun instead via the APP defaulting to Backroads (DEFAULT_DRAFT.mostlyBackroads=true → the adopted backroads bundle) — raw shortest on characterless briefs stays refused",
+      "fun_default": "REFUSED 4\u00d7 (FUN_DEFAULT_ADOPTED=false); R21-2 (BD-63): with corpus cleanup + R19 urban live, AC 13->8, dirty 1.76->3.49, arterial only -8pp. The default USER experience is fun instead via the APP defaulting to Backroads (DEFAULT_DRAFT.mostlyBackroads=true \u2192 the adopted backroads bundle) \u2014 raw shortest on characterless briefs stays refused",
       "SHORTEST_SIZING_SPEED_KMH": 50,
       "SHORTEST_SIZING_SPEED_NO_HIGHWAY_KMH": 38
     },
@@ -80,7 +80,7 @@
     "PRESENT_TIER_DUROFF": 100,
     "PRESENT_TIER_DIRTY": 200,
     "DIRTY_GRADE_UNIT": 1.5,
-    "DIRTY_GRADE_CAP": 4.5,
+    "DIRTY_GRADE_CAP": 30,
     "DURATION_GRADE_MAX": 2.0,
     "SNAP_OFFSET_MAX_M": 1500,
     "assembly_relax_caps": "rung 5 (disclosed, last resort): overlap 0.45, uturns/spurs/microloops reject >=3, residential 0.30; fast-forward on zero-assembled iterations",
@@ -165,6 +165,34 @@
       "prebuild": "R24-U6: each menu drive's out-and-back (origin\u2192entry\u2192[classic trace pts]\u2192exit\u2192origin, BACKROADS, middleType through) pre-built via routeThrough in Promise.all \u2192 route + measuredDurationS + durationSource='measured'; per-drive failure keeps the corpus estimate (app rebuilds on tap). Net /discover \u2248 4-6s.",
       "repetition": "R24-U5: origin-relative proximityTier (bounded 1.0-1.15 on the REAL per-origin matrix drive-time) + real drive-times \u2192 nearby doors reorder (menus differ by AREA). A dominant classic legitimately tops its whole radius (correct, not the R23 origin-invariant bug).",
       "notes": "discover_quality R24: 5/7 origins pass all bars (curated 5-6, top3curv, spread, ALL pre-built+measured, onRoad\u226580%, determinism, repetition 2/2); the 2 misses = seed-classic line fidelity on long seeds (Hockley Valley averages gentle) \u2014 seed-DATA, flagged [HUMAN] content-curation, not a pipeline defect. Determinism = golden fixture (committed, 9/9) + live same-session only (BD-69); byte-identical off = /discover unregistered -> 404; browsing-class, no LLM/cost-guard (Hard rule A/F)."
+    },
+    "r25": {
+      "note": "R25 \"Make it an actual driving app\" \u2014 audit-v11 (0/60 clean) \u2192 adopted lever packs BD-84..91; every lever flag-gated, byte-identical OFF, pre-registered A/B (BD-40).",
+      "AVOID_REAL_LEVERS": "on \u2014 exclude_* proven a Valhalla NO-OP (byte-identical to a bogus key); realized as use_highways/tolls/ferry:0 + shortest dropped (route+matrix, 4 regression tests) [BD-84]",
+      "TRACE_HIGHWAY_TRUTH": "on \u2014 has_highway from traced edges (summary misses trunk); TRACE_HIGHWAY_FLOOR_M 600 (swept 200/600: 200 flattened Belfountain/Collingwood twisty for a 300-600 m trunk hop) [BD-84/85]",
+      "FUN_EXCLUDE_HIGHWAYS": "on \u2014 loops on fun/backroads profiles; IMPOSED avoids reject on TRACED metres at assembly (keeps shortest, the backroad lever); USER-asked avoids change the costing [BD-85]",
+      "HOOD_MEASURE_V2": "on \u2014 wide hood predicate (residential/service/living_street + hood uses) + RESIDENTIAL_GRACE_RADIUS_M 700 (was 2500); soft bars ruler-recalibrated from the paired Milton probe (share 0.08, run 800) [BD-86]",
+      "OFFENCE_SCALE_V2": "on \u2014 residential overflow 8 pts/m-scale, retrace 4; residential-first repair targeting [BD-86]",
+      "HOOD_HARD_RUN": "OFF \u2014 REFUSED: pre-registered starvation kill fired (no-route 0\u21922, AC \u22125; round-6 precedent) [BD-86]",
+      "DIRTY_GRADE_CAP_V2": "30 \u2014 the 4.5 cap SATURATED in all-dirty V2 pools (19.1% residential winner over 7.2% on a 0.07 score edge); tier proof asserted in both states [BD-86]",
+      "DUR_HARD_TIER": "on \u2014 >50% duration miss stacks a second \u2212100 tier; disclosure says \"well over\" past the same bar; byte-identical on the suite (no >50% misses at this config) [BD-87]",
+      "RESIZE_ATTEMPTS_3": "OFF \u2014 REFUSED: never fired on either suite [BD-87]",
+      "MIX_GRADE": "on \u2014 CONTINUITY half only (U1: SD(backroadLongestM) real 11/12, SD(share) 3/12 \u2192 MAJORITY CANCELLED toward U19); CONTINUITY_GRADE_MAX 6, CONTINUITY_TARGET_M 12000 (swept 8k/12k; 12k met the +1000 m bar: longest 9522\u219210600 m) [BD-88]",
+      "TURN_GRADE": "OFF \u2014 REFUSED: >5/10min briefs 4\u21924 (their pools hold no clean alternative \u2014 BD-62, third confirmation); worst flow 8.1\u21926.1 recorded; stays opt-in [BD-90]",
+      "TRACE_NULL_STRICT": "on \u2014 unmeasured IS dirty + 2.0 units (was 0.5); identical brief set, invariant gained [BD-90]",
+      "ATOB_PREDICT_V2": "on \u2014 CORRIDOR_ROAD_FACTOR 1.3; fills [1.35,1.25,1.15,1.05] (1.35\u00d71.3=1.755 under the UNTOUCHED 1.8 cap); ladder 2\u21924 [BD-89]",
+      "ATOB_REPAIR_VALUE_AWARE": "on \u2014 drop by detour-per-unit-value; floor 2; accepted chains never DROP-repaired [BD-89]",
+      "ATOB_ASSEMBLY_RELAX": "on \u2014 rung 5 reaches A\u2192B (self-overlap only; NEVER the detour cap, BD-82) [BD-89]",
+      "ATOB_GATES_V2": "on \u2014 graced self-overlap + V2 residential parity for A\u2192B [BD-89]",
+      "SCENIC_MODIFIER": "on \u2014 scenic composes onto any preset (urban bar \u2192 0.10 + viewpoint garnish); suite-inert by construction, unit-proven; [GATE-S] holds (no numeric scenic scoring) [BD-91-adjacent]",
+      "CHARACTER_APPLIED": "on \u2014 route tags + explain facts carry treatments that RAN, never the ask [U8b]",
+      "CLIENT_OVERRIDES_DISCLOSED": "applyClientOverrides \u2014 one merge, identical win-order, overrides[] named on the constraints SSE event + explain facts [U16a]",
+      "PARSE_ENDPOINT": "/parse \u2014 browse-class rules parse (no LLM, own looser limiter) for quick-fill [U16c]",
+      "QUICK_FILL": "app: untouched control = f(default, parse); touched[] mechanical; \u00b120% duration snap; No-preference chip makes preset:null reachable; \"Road character\" relabel [U16b/d, U17]",
+      "DISCOVER_GATES": "OFF in production (opt-in report/strict) \u2014 8 km floor emptied 7/7 origins; 5 km report fills honest menus + fixes repetition 2/2 but flat origins drop to 2-drive menus; superseded by the core index path [BD-91]",
+      "DRIVE_CORE_INDEX": "staged \u2014 ACP-001, migration 0016 (LOCAL; hosted=[HUMAN]), core_bars rulebook, deterministic sweep + loader, /discover v:2 three-leg contract (v1 branch test-pinned), app dark switch; smoke kill-condition named binding bars main_share\u00d715/backroad\u00d713/loopiness\u00d713 [BD-92]",
+      "RETURN_ANCHOR_DISTANCE_FRACTION": "0.6 \u2014 sweep REFUSED (p20 loopiness flat at 0.75/0.85; 0.85 traded backroad \u22122pp for AC +3) [BD-92]",
+      "U19_CONNECTOR_REBUILD": "DEFERRED with evidence staged \u2014 next session headline; probes: highway removal solid (+1.6% dist), backroad NOT pre-validated (+11/0/\u221218pp) [BD-92]"
     }
   },
   "provenance": {
@@ -216,19 +244,27 @@
       "date": "2026-07-22",
       "program": "Great Drives Near You (owner reframe after audit-v6; BD-71). Discovery mode + 2-stop collapse + AI-minimal. 14 units, all green. Discovery is auto-ranked from the corpus (no curated table): full/spread/curvy menus from flat + urban-adjacent origins (discover_quality 7/7); near=loop / far=out-and-back (owner: far loops balloon unpredictably; out-and-backs are predictable + honest). Backend 316/316, app 129/129.",
       "rollback": "R22-1 twisty curvy-rank reversed (BD-74): TWISTY_CURVY_RANK=false. Same-session 48-brief A/B ON fbec02d22906a45a (17/48) vs OFF 129ab3f744330649 (16/48); OFF = pre-R22-1 baseline, byte-identical by construction.",
-      "byte_identical": "loop-quality re-run after ALL R23 backend changes = 129ab3f744330649 (unchanged) — every R23 addition (discover, out-and-back, /plan branch, tap contract, shared types, near_point tiebreak) is OUTSIDE runPlanner.",
+      "byte_identical": "loop-quality re-run after ALL R23 backend changes = 129ab3f744330649 (unchanged) \u2014 every R23 addition (discover, out-and-back, /plan branch, tap contract, shared types, near_point tiebreak) is OUTSIDE runPlanner.",
       "ai_minimal": "app-copy relabel only (BD-75); parse_prompt_version stays 3, backend parser byte-identical, no BD-28.",
       "determinism": "discover golden fixture (discover.test.ts 8/8) is the committed proof; live menu same-session only (BD-69 env-sensitivity).",
-      "deploy": "hosted Supabase needs migrations 0010-0014 (as r21) — discovery adds NO migration (per-request pipeline over the existing curvy_segments corpus)."
+      "deploy": "hosted Supabase needs migrations 0010-0014 (as r21) \u2014 discovery adds NO migration (per-request pipeline over the existing curvy_segments corpus)."
     },
     "r24": {
       "date": "2026-07-22",
       "program": "The Perfection Pass (owner-directed after audit-v8; BD-77). 18 units, adopt-or-refuse per pre-registered A/B. Fix everything the cross-section audit found + the owner's felt items (neighbourhood-weaving loops, Discover re-generating on tap / same top road, 'Scenic backroads' rename). Backend 319/319, app 140/140, shared 23/23, whole-repo tsc clean.",
-      "adopt": "U1 de-switchback (BD-78, τ_ref=8; AC 16→20, microloops 4→3, urban down). U5/U6 Discover reshape (BD-79): out-and-back-only + curated 5-6 + PRE-BUILT (real measured times) + classic blend (migration 0015) + origin-relative repetition fix + map-first (DriveLinesMap) + Discover-primary tab. U12/U13 AI (BD-80): optional brief (places), 'How long' time control, visible 'here's what I understood' parse, empty brief = zero LLM spend. U2 rename Scenic backroads → Fun & Explorative. U16 A→B (BD-82): Schomberg gazetteer no-route FIXED.",
-      "refuse": "U14/U15 loop path-search (BD-81 — 4th loop-chain refusal): U1 re-pricing moved curvyShare only +1pp (bar +10pp), latency 8665→14980ms (kill), arterial flat; structural (arterial connectors), rebuild not built. U16 A→B detour-cap loosening (BD-82 — FALSIFIED: 1.8→2.2 left arterial 83% unchanged; same structural cause; kept 1.8).",
-      "hashes": "loop-quality OFF (CURV_SATURATION=off) byte-identical 129ab3f744330649; U1 ON (τ_ref=8) 521c0078a123abee; chains diagnostic (re-priced, refused) 8eebf7a799e691af; A→B baseline (Schomberg fixed) 306691ed58746226. Discover determinism = golden fixture (committed).",
+      "adopt": "U1 de-switchback (BD-78, \u03c4_ref=8; AC 16\u219220, microloops 4\u21923, urban down). U5/U6 Discover reshape (BD-79): out-and-back-only + curated 5-6 + PRE-BUILT (real measured times) + classic blend (migration 0015) + origin-relative repetition fix + map-first (DriveLinesMap) + Discover-primary tab. U12/U13 AI (BD-80): optional brief (places), 'How long' time control, visible 'here's what I understood' parse, empty brief = zero LLM spend. U2 rename Scenic backroads \u2192 Fun & Explorative. U16 A\u2192B (BD-82): Schomberg gazetteer no-route FIXED.",
+      "refuse": "U14/U15 loop path-search (BD-81 \u2014 4th loop-chain refusal): U1 re-pricing moved curvyShare only +1pp (bar +10pp), latency 8665\u219214980ms (kill), arterial flat; structural (arterial connectors), rebuild not built. U16 A\u2192B detour-cap loosening (BD-82 \u2014 FALSIFIED: 1.8\u21922.2 left arterial 83% unchanged; same structural cause; kept 1.8).",
+      "hashes": "loop-quality OFF (CURV_SATURATION=off) byte-identical 129ab3f744330649; U1 ON (\u03c4_ref=8) 521c0078a123abee; chains diagnostic (re-priced, refused) 8eebf7a799e691af; A\u2192B baseline (Schomberg fixed) 306691ed58746226. Discover determinism = golden fixture (committed).",
       "audit_v9": "before/after artifact https://claude.ai/code/artifact/ef98b655-fa22-48de-a0a2-5892afc13932 (6 loops + 18 drives captured live on the final config).",
       "deploy": "hosted Supabase needs migrations 0010-0015 (0015 = discover_seed_drives RPC, R24-U4) at deploy; the running backend needs a restart to serve the R24 /discover."
+    },
+    "r25_baselines": {
+      "pre_R25_loop_fixed": "a44707383134c686 (AC 20/48, CLEAN 1/48)",
+      "pre_R25_atob": "b7c77d2bd676c96d (12/15)",
+      "frozen_loop_fixed": "e216d28335da10f8",
+      "frozen_loop_random": "1aee2533b8b6fa95",
+      "frozen_atob": "e4ae43d051bcd2af",
+      "decision_log": "BD-84..BD-92"
     }
   }
 }

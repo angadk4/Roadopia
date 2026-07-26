@@ -16,10 +16,14 @@
  * only, no sliders — discrete chips):
  *   - Drive style (Direct | Fun & Explorative) → preset simple/backroads
  *     (Direct keeps the twistiness_pref 0.15 of the old Simple)
- *   - Scenery (Prefer views)          → the scenic CHARACTER tag; the server's
- *     R18-4 scenic bundle turns it into anti-urban routing (arterial bar 0.35)
- *     + one nice-to-have viewpoint where the corpus has one. Never the preset
- *     slot; [GATE-S] holds (no numeric scenic scoring anywhere)
+ *   - Scenery (Prefer views)          → the scenic CHARACTER tag. R25-U8a
+ *     honesty note: with a preset always present, the server's scenic BUNDLE
+ *     branch is unreachable — the tag only acts once the server's
+ *     SCENIC_MODIFIER flag is on (tightens the R19 urban bar to scenic's
+ *     0.10 + arms one nice-to-have viewpoint). The old claim here of an
+ *     "arterial bar 0.35" was stale twice over — R19 replaced arterial bars
+ *     with urban-context bars. Never the preset slot; [GATE-S] holds (no
+ *     numeric scenic scoring anywhere)
  *   - On the route: avoid-highways / paved-only toggles + the stops builder
  *     (Coffee | Food | Gas × Anytime | Early | Midway | Late)
  *

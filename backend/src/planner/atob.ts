@@ -27,15 +27,35 @@ import { routeThrough, type AutoCostingOptions } from '../valhalla/route';
 import { traceRoadClasses, type TraceResult } from '../valhalla/trace';
 
 import { traversalSpanOf, type CandidateSpanRef, type WaypointCandidate } from './candidates';
-import { pickInsertSegment, segMidVertex, uturnPositions } from './loop';
+import {
+  pickInsertSegment,
+  RESIDENTIAL_HARD_RUN_M,
+  RESIDENTIAL_HARD_RUN_ON,
+  RESIDENTIAL_HARD_SHARE,
+  segMidVertex,
+  uturnPositions,
+} from './loop';
 import { selfOverlapRatio } from './overlap';
 import {
   arterialShareOf,
+  classRunStatsOf,
   countryScoreOf,
+  maxClassRunInfo,
   maxResidentialRunInfo,
+  RESIDENTIAL_GRACE_RADIUS_M,
   residentialShareOf,
 } from './residential';
 import type { CandidateSegment } from './retrieve';
+import {
+  BACKROAD_CLASSES,
+  classMixOf,
+  HOOD_CLASSES,
+  TRACE_HIGHWAY_FLOOR_M,
+  TRACE_HIGHWAY_TRUTH_ON,
+  tracedHighwayM,
+  turnsPer10minOf,
+  type ClassMix,
+} from './roadclass';
 
 /** Detour cap (routed distance ÷ direct routed distance); candidate value, M4 tunes.
  *  R24-U16: the audit found ~⅓ of A→B rides arterials; the hypothesis was this
@@ -52,6 +72,28 @@ export const ATOB_SELF_OVERLAP_CAP = 0.3;
 export const ATOB_REPAIR_PASS_CAP = 2;
 /** A chain may shed spans down to this floor (1 span still beats a centroid). */
 export const CORRIDOR_DROP_MIN_SPANS = 1;
+/**
+ * R25-U6c — value-aware repair (audit-v11 issue #6): with no u-turn present,
+ * DROP used to remove the span with the largest straight-line marginal detour
+ * — the most off-corridor one, which is SYSTEMATICALLY the curviest (curvy
+ * roads are why you leave the corridor). Under the flag: (1) drop by worst
+ * detour-PER-UNIT-VALUE instead; (2) the keep-floor rises 1 → 2 spans (a
+ * "chain" of one span is a single-touch commute); (3) an ACCEPTED route never
+ * runs a DROP pass at all — the audit's hamilton→guelph chain passed with
+ * zero reject reasons and was then repaired into a worse route.
+ */
+export const ATOB_REPAIR_VALUE_AWARE_ON = process.env['ATOB_REPAIR_VALUE_AWARE'] !== 'off'; // R25-U6c ADOPTED (BD-89)
+export const CORRIDOR_DROP_MIN_SPANS_V2 = 2;
+/**
+ * R25-U6d — rung 5 never reached A→B (RELAXED_ASSEMBLY_CAPS sat inside the
+ * isLoop branch). Under the flag the ladder's last rung relaxes the A→B
+ * self-overlap cap — EXPLICITLY NOT the detour cap (loosening it was
+ * falsified, BD-82: the extra kilometres bought more arterial, not more fun).
+ */
+export const ATOB_ASSEMBLY_RELAX_ON = process.env['ATOB_ASSEMBLY_RELAX'] !== 'off'; // R25-U6d ADOPTED (BD-89)
+/** R25-U5e — A→B gains the residential gates + origin-graced self-overlap
+ *  that loops always had. OFF = byte-identical legacy. */
+export const ATOB_GATES_V2_ON = process.env['ATOB_GATES_V2'] !== 'off'; // R25-U5e/U6 ADOPTED (BD-89)
 
 export interface AssembledAtoB {
   candidate: WaypointCandidate;
@@ -73,6 +115,16 @@ export interface AssembledAtoB {
   countryScore: number | null;
   /** Arterial-class share of traced edges; null = trace failed. */
   arterialShare: number | null;
+  /** R25-U0 road-class truth (audit-v11 buckets); null = trace failed. */
+  classMix: ClassMix | null;
+  /** R25-U0 backroad continuity: longest contiguous backroad run (m), ungraced. */
+  backroadLongestM: number | null;
+  /** Mean backroad run length (m); null = trace failed. */
+  backroadMeanM: number | null;
+  /** R25-U0: longest contiguous hood-class run (m), ungraced; null = untraced. */
+  hoodRunM: number | null;
+  /** R25-U0 flow: total maneuvers per 10 driving minutes. */
+  turnsPer10min: number | null;
 }
 
 /**
@@ -171,16 +223,40 @@ export async function assembleAtoB(
     const unpavedM = trace.edges.reduce((acc, e) => acc + (e.unpaved === true ? e.lengthM : 0), 0);
     if (unpavedM > 50) route = { ...route, has_unpaved: true };
   }
+  // R25-U4: has_highway from the TRACE — the summary misses `trunk` (probed:
+  // summary false on 33 % trunk). Same pattern as has_unpaved (fail-open).
+  if (TRACE_HIGHWAY_TRUTH_ON && trace !== null) {
+    route = { ...route, has_highway: tracedHighwayM(trace.edges) > TRACE_HIGHWAY_FLOOR_M };
+  }
   const grace = [origin, destination] as const;
   const residentialShare =
-    trace === null ? null : residentialShareOf(trace.edges, route.geometry, grace);
+    trace === null
+      ? null
+      : residentialShareOf(trace.edges, route.geometry, grace, RESIDENTIAL_GRACE_RADIUS_M);
   const residentialRunM =
-    trace === null ? null : maxResidentialRunInfo(trace.edges, route.geometry, grace).runM;
+    trace === null
+      ? null
+      : maxResidentialRunInfo(trace.edges, route.geometry, grace, RESIDENTIAL_GRACE_RADIUS_M).runM;
   const countryScore = trace === null ? null : countryScoreOf(trace.edges);
   const arterialShare = trace === null ? null : arterialShareOf(trace.edges);
+  // R25-U0: road-class truth + continuity — same edges, no extra calls.
+  const classMix = trace === null ? null : classMixOf(trace.edges);
+  const backStats =
+    trace === null
+      ? null
+      : classRunStatsOf(trace.edges, route.geometry, BACKROAD_CLASSES, grace, 0);
+  const hoodRunM =
+    trace === null
+      ? null
+      : maxClassRunInfo(trace.edges, route.geometry, HOOD_CLASSES, grace, 0).runM;
 
   const detourRatio = route.distance_m / direct;
-  const selfOverlap = selfOverlapRatio(route.geometry);
+  // R25-U5e: grace the ORIGIN like loops do — A→B was judged UNgraced against
+  // the same 0.3 cap loops meet WITH 2.5 km of grace (apples to oranges; it
+  // also silently punished every candidate for leaving the user's own town).
+  const selfOverlap = ATOB_GATES_V2_ON
+    ? selfOverlapRatio(route.geometry, undefined, origin)
+    : selfOverlapRatio(route.geometry);
 
   const rejectReasons: string[] = [];
   if (detourRatio > detourMax) {
@@ -194,6 +270,20 @@ export async function assembleAtoB(
   // assembly-level zero tolerance starved pools twice).
   const uturns = route.maneuvers.filter((m) => m.type.startsWith('uturn')).length;
   if (uturns >= 2) rejectReasons.push(`uturns ${uturns}`);
+  // R25-U5e: A→B had NO residential gate at all (loops have both). Same
+  // constants as loops — one source of truth.
+  if (ATOB_GATES_V2_ON) {
+    if (residentialShare !== null && residentialShare > RESIDENTIAL_HARD_SHARE) {
+      rejectReasons.push(`residential ${(residentialShare * 100).toFixed(0)}%`);
+    }
+    if (
+      RESIDENTIAL_HARD_RUN_ON &&
+      residentialRunM !== null &&
+      residentialRunM > RESIDENTIAL_HARD_RUN_M
+    ) {
+      rejectReasons.push(`residential_run ${Math.round(residentialRunM)}m`);
+    }
+  }
 
   return {
     // effective candidate: TSP may have reordered waypoints + stop indices
@@ -209,6 +299,11 @@ export async function assembleAtoB(
     residentialRunM,
     countryScore,
     arterialShare,
+    classMix,
+    backroadLongestM: backStats === null ? null : backStats.longestM,
+    backroadMeanM: backStats === null ? null : backStats.meanM,
+    hoodRunM,
+    turnsPer10min: turnsPer10minOf(route),
   };
 }
 
@@ -280,13 +375,19 @@ export async function assembleAtoBWithRepair(
       })[0]!;
       move = 'shift';
     } else {
-      // detour/overlap: DROP the span whose visit deviates most from the corridor
+      // R25-U6c: an ACCEPTED chain is never DROP-repaired — the audit's
+      // hamilton→guelph chain passed with zero reject reasons and repair
+      // then "improved" it into a worse single-touch route
+      if (ATOB_REPAIR_VALUE_AWARE_ON && current.accepted) break;
+      // detour/overlap: DROP the span whose visit deviates most from the
+      // corridor — under U6c, PER UNIT of chain value (the most off-corridor
+      // span is systematically the curviest; blind DROP amputated the point)
       const marginal = (s: CandidateSpanRef) => {
         const w = cand.waypoints[s.startIndex]!;
-        return (
+        const detour =
           dM(origin.lng, origin.lat, w.lng, w.lat) +
-          dM(w.lng, w.lat, destination.lng, destination.lat)
-        );
+          dM(w.lng, w.lat, destination.lng, destination.lat);
+        return ATOB_REPAIR_VALUE_AWARE_ON ? detour / Math.max(1, s.value ?? 1) : detour;
       };
       target = [...movable].sort((s, t) => marginal(t) - marginal(s))[0]!;
       move = 'drop';
@@ -333,7 +434,10 @@ export async function assembleAtoBWithRepair(
 
     // DROP the target span (also the SHIFT fallback); pinned spans don't
     // count toward the keep-floor (they can never be dropped anyway)
-    if (movable.length < 1 || cand.spans!.length <= CORRIDOR_DROP_MIN_SPANS) break;
+    const dropFloor = ATOB_REPAIR_VALUE_AWARE_ON
+      ? CORRIDOR_DROP_MIN_SPANS_V2 // R25-U6c: one span is not a chain
+      : CORRIDOR_DROP_MIN_SPANS;
+    if (movable.length < 1 || cand.spans!.length <= dropFloor) break;
     const isTouch = target.startIndex === target.endIndex;
     const [lo, hi] = [target.startIndex, target.endIndex].sort((a, b) => a - b) as [number, number];
     const shiftIdx = isTouch

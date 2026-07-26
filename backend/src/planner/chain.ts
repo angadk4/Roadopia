@@ -444,6 +444,21 @@ export const CORRIDOR_MIN_SPANS = 2;
 /** Straight-line predicted path caps (× direct distance) — two variants, both
  *  under the 1.8× assembly detour cap so real-road routing keeps slack. */
 export const CORRIDOR_FILL_TARGETS = [1.55, 1.3] as const;
+/**
+ * R25-U6b — the predictor was structurally optimistic: predict() is
+ * STRAIGHT-LINE while assembleAtoB measures REAL-ROAD detour against a rigid
+ * 1.8×, and real roads run ~1.25-1.35× straight-line — so a chain predicting
+ * 1.55× measures ~2.0× and DIES at assembly (audit-v11 issue #6: the good
+ * 4-span chains were generated and thrown away). Under the flag the fill
+ * targets are set so predicted × CORRIDOR_ROAD_FACTOR stays under the cap
+ * (1.35 × 1.3 = 1.755 ≤ 1.8) — chains that get built genuinely FIT — and the
+ * ladder widens 2 → 4 entries (2 chain candidates vs up to 20 legacy ones was
+ * a generation-diversity deficit). This is NOT the refused DETOUR_MAX
+ * loosening (BD-82): the cap stays 1.8; the PREDICTION stops lying about it.
+ */
+export const ATOB_PREDICT_V2_ON = process.env['ATOB_PREDICT_V2'] !== 'off'; // R25-U6b ADOPTED (BD-89)
+export const CORRIDOR_ROAD_FACTOR = 1.3;
+export const CORRIDOR_FILL_TARGETS_V2 = [1.35, 1.25, 1.15, 1.05] as const;
 /** A span whose lone marginal detour exceeds this × direct can never fit. */
 export const CORRIDOR_SPAN_DETOUR_MAX = 0.5;
 /** Minimum corridor-progress gap between spans — monotone separation. */
@@ -545,7 +560,10 @@ export function buildCorridorChains(
   };
 
   const out: WaypointCandidate[] = [];
-  for (const fill of CORRIDOR_FILL_TARGETS) {
+  const fills: readonly number[] = ATOB_PREDICT_V2_ON
+    ? CORRIDOR_FILL_TARGETS_V2
+    : CORRIDOR_FILL_TARGETS;
+  for (const fill of fills) {
     const budgetM = fill * directM;
     const chain: CorridorSpan[] = []; // kept in progress order
     for (const cand of pool) {
@@ -571,6 +589,7 @@ export function buildCorridorChains(
           segmentId: c.segment.id,
           startIndex: waypoints.length,
           endIndex: waypoints.length,
+          value: c.value, // R25-U6c: value-aware repair reads this
         });
         waypoints.push(c.entry);
       } else {
@@ -578,6 +597,7 @@ export function buildCorridorChains(
           segmentId: c.segment.id,
           startIndex: waypoints.length,
           endIndex: waypoints.length + 1,
+          value: c.value, // R25-U6c
         });
         waypoints.push(c.entry, c.exit);
       }

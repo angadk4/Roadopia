@@ -74,6 +74,18 @@ async function main(): Promise<void> {
       region,
       rateLimiter: new RateLimiter(),
     },
+    // R25-U16c: /parse (browse-class rules parse — no LLM, no engine; fired
+    // per debounced keystroke, so its limiter is deliberately looser than the
+    // planner's: a bounded regex call costs nothing but CPU)
+    parse: {
+      rateLimiter: new RateLimiter({
+        perIp: [
+          { limit: 60, windowMs: 60_000 },
+          { limit: 1_000, windowMs: 3_600_000 },
+        ],
+        perSession: [{ limit: 30, windowMs: 60_000 }],
+      }),
+    },
   });
 
   await app.listen({ port: PORT, host: HOST });

@@ -30,6 +30,7 @@ import { plannerFindSeedDrives, type SeedDriveRow } from '../db/planner_reads';
 import type { MatrixCell, MatrixRequest } from '../valhalla/matrix';
 import { travelMatrix } from '../valhalla/matrix';
 import { routeThrough, type RouteThroughRequest } from '../valhalla/route';
+import { traceRoadClasses } from '../valhalla/trace';
 
 import { bearingDeg, countryClassFactor, sectorOf, traversalSpanOf } from './candidates';
 import {
@@ -39,10 +40,14 @@ import {
   SPAN_MIN_SEPARATION_M,
   type ChainSpan,
 } from './chain';
-import { BACKROADS } from './costing';
+import { BACKROADS, FUN_EXCLUDE_HIGHWAYS_ON } from './costing';
 import { measureCurvature } from './curvature';
+import { microloopEvents, selfOverlapRatio, spurPositions } from './overlap';
+import { residentialShareOf } from './residential';
 import { retrieveCandidates, type CandidateSegment } from './retrieve';
+import { TRACE_HIGHWAY_FLOOR_M, tracedHighwayM } from './roadclass';
 import { buildScope, type IsochroneFn, type Scope } from './scope';
+import { uturnCount } from './score';
 
 // --- tunables (pre-registered; frozen into params-frozen.json at U18) --------
 /** 60-min reach → a sensible ≤~2.5 h half-day round trip; under MAX_TAU_S. */
@@ -100,6 +105,33 @@ export const TAP_DURATION_MAX_S = 9000;
 /** Per-drive pre-build budget — parallel, so /discover ≈ the slowest build. */
 export const DISCOVER_PREBUILD_TIMEOUT_MS = 8000;
 
+// --- R25-U11 Discover Stage 1: gates (audit-v11 issue #4 — 180 pre-built
+// routes, ZERO validations; 110/180 exceeded the loop planner's own hard
+// self-overlap bar). Two modes, one code path: production candidate 'report'
+// (hard defects DROP; shape/commute facts DISCLOSE + DEMOTE), eval 'strict'
+// (everything drops). 'off' = today, byte-identical (BD-40).
+export type DiscoverGatesMode = 'off' | 'report' | 'strict';
+export const DISCOVER_GATES: DiscoverGatesMode =
+  process.env['DISCOVER_GATES'] === 'report' || process.env['DISCOVER_GATES'] === 'strict'
+    ? (process.env['DISCOVER_GATES'] as DiscoverGatesMode)
+    : 'off';
+/** Gated "great road" floor. The plan's ~8 km was written for the CORE-INDEX
+ *  era (U13 ribbons); measured on the CURRENT out-and-back corpus it empties
+ *  every origin (DQ 2026-07-26: 0 drives at 7/7 origins — median merged road
+ *  4.6 km). Env-swept for Stage 1; 8 km returns with the core index. */
+export const DISCOVER_GATED_MIN_ROAD_M = Number(process.env['DISCOVER_MIN_ROAD'] ?? 5000);
+/** Hard residential ceiling on the whole trip — both modes drop. */
+export const DISCOVER_RESIDENTIAL_MAX = 0.2;
+/** The loop planner's own hard self-overlap bar — strict drops; report
+ *  discloses + demotes (an out-and-back's overlap IS its shape, not a defect
+ *  of that particular drive — hard-dropping it today would empty the menu;
+ *  the U13 core index is the shape fix). */
+export const DISCOVER_SELF_OVERLAP_MAX = 0.3;
+/** PROVISIONAL pre-U11a (probe table re-baselines it): strict-mode connector
+ *  ceiling. Report mode only disclose+demotes — a cap chosen under the broken
+ *  costing would empty every origin (audit median 0.79 connector). */
+export const DISCOVER_CONNECTOR_SHARE_MAX = 0.85;
+
 const NO_DRIVES = 'No standout drives within reach of here — try a different start point.';
 
 type RetrieveFn = typeof retrieveCandidates;
@@ -120,6 +152,8 @@ export interface DiscoverDeps {
   retrieveFn?: RetrieveFn;
   seedDrivesFn?: SeedDrivesFn;
   routeFn?: RouteFn;
+  /** R25-U11: gates trace each SURVIVING pre-built route once. */
+  traceFn?: typeof traceRoadClasses;
 }
 
 /** Origin-relative proximity multiplier (bounded) — the R24 repetition fix. */
@@ -130,11 +164,18 @@ function proximityTier(driveTimeToStartS: number): number {
 }
 
 /** A merged whole road → value-scored ChainSpan (full traversal, never a touch). */
-function rankedSpans(origin: LatLng, segments: readonly CandidateSegment[]): ChainSpan[] {
+function rankedSpans(
+  origin: LatLng,
+  segments: readonly CandidateSegment[],
+  gates: DiscoverGatesMode,
+): ChainSpan[] {
   const vMs = BACKROADS.sizingSpeedKmh / 3.6;
   const maxRoundTripS = DISCOVER_SPAN_DURATION_S;
+  // R25-U11: under gates the "great road" floor rises — a 2 km fragment is
+  // not a destination drive (median featured road today: 4.6 km)
+  const minRoadM = gates === 'off' ? DISCOVER_MIN_ROAD_M : DISCOVER_GATED_MIN_ROAD_M;
   return mergeRoadPieces(segments)
-    .filter((m) => m.lengthM >= DISCOVER_MIN_ROAD_M && m.name !== '') // full spans, labelled
+    .filter((m) => m.lengthM >= minRoadM && m.name !== '') // full spans, labelled
     .map((segment) => {
       const [a, b] = traversalSpanOf(segment);
       const centroid: LatLng = { lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 };
@@ -260,7 +301,12 @@ function buildClassicSpans(origin: LatLng, rows: readonly SeedDriveRow[]): Chain
  * Rank the region's best drives reachable from `origin` and return the menu —
  * curated, out-and-back, pre-built.
  */
-export async function discoverDrives(origin: LatLng, deps: DiscoverDeps): Promise<DiscoverResult> {
+export async function discoverDrives(
+  origin: LatLng,
+  deps: DiscoverDeps,
+  opts?: { gates?: DiscoverGatesMode }, // test seam; production uses the env flag
+): Promise<DiscoverResult> {
+  const gates = opts?.gates ?? DISCOVER_GATES;
   const retrieve = deps.retrieveFn ?? retrieveCandidates;
   const matrix = deps.matrixFn ?? travelMatrix;
   const seedDrives = deps.seedDrivesFn ?? plannerFindSeedDrives;
@@ -275,23 +321,38 @@ export async function discoverDrives(origin: LatLng, deps: DiscoverDeps): Promis
     deps.isochroneFn,
   );
   const retrieved = await retrieve(deps.db, scope, { segmentLimit: DISCOVER_SEGMENT_LIMIT });
-  const autoPool = spreadPool(rankedSpans(origin, retrieved.segments), DISCOVER_AUTO_POOL_CAP);
+  const autoPool = spreadPool(
+    rankedSpans(origin, retrieved.segments, gates),
+    DISCOVER_AUTO_POOL_CAP,
+  );
 
   // Blend the hand-picked classics into the SAME matrix (never fatal — a seed
-  // read failure just means an all-auto menu).
+  // read failure just means an all-auto menu). R25-U11: under gates the
+  // classics leave the RANKED menu entirely (owner decision — no
+  // hand-curation; the audit measured the classics as the highway offenders).
+  // Their seed rows stay (migrations are additive); an unranked "Editor's
+  // picks" surface returns with the U14/U15 rewrite.
   let classicSpans: ChainSpan[] = [];
-  try {
-    classicSpans = buildClassicSpans(origin, await seedDrives(deps.db));
-  } catch {
-    classicSpans = [];
+  if (gates === 'off') {
+    try {
+      classicSpans = buildClassicSpans(origin, await seedDrives(deps.db));
+    } catch {
+      classicSpans = [];
+    }
   }
   const pool = [...autoPool, ...classicSpans];
   if (pool.length === 0) return empty();
 
   // ONE real travel matrix over [origin, span0.a, span0.b, …] (≤49 locations)
+  // R25-U3: Discover is fun-by-definition — the no-highway rule rides along
+  // (U2 translates it into use_highways:0 + shortest dropped), so the budget
+  // is costed on the same roads the drive is allowed to use.
   const cells = await matrix(deps.valhallaUrl, {
     locations: chainMatrixLocations(origin, pool),
-    costingOptions: BACKROADS.options,
+    costingOptions: {
+      ...BACKROADS.options,
+      ...(FUN_EXCLUDE_HIGHWAYS_ON ? { exclude_highways: true } : {}),
+    },
   });
 
   const roadV = BACKROADS.sizingSpeedNoHighwayKmh / 3.6; // curvy-road pace for the traverse
@@ -367,7 +428,11 @@ export async function discoverDrives(origin: LatLng, deps: DiscoverDeps): Promis
     if (drivesMenu.length >= DISCOVER_MENU_MAX) break;
     if (farEnough(d)) drivesMenu.push(d);
   }
-  if (drivesMenu.length < DISCOVER_MENU_MIN) {
+  // R25-U11: the refill loop is DELETED under gates — it re-added drives
+  // while ignoring the separation rule (two cards, same road). A short menu
+  // with honest copy beats a padded one; DISCOVER_MENU_MIN is a disclosure
+  // trigger below, never a target.
+  if (gates === 'off' && drivesMenu.length < DISCOVER_MENU_MIN) {
     for (const d of drives) {
       if (drivesMenu.length >= DISCOVER_MENU_MAX) break;
       if (!drivesMenu.includes(d)) drivesMenu.push(d);
@@ -402,7 +467,14 @@ export async function discoverDrives(origin: LatLng, deps: DiscoverDeps): Promis
               [d.exit.lng, d.exit.lat],
               [origin.lng, origin.lat],
             ],
-            costingOptions: BACKROADS.options,
+            // R25-U3: no highway on a Discover drive (audit-v11: 18/30 tapped
+            // drives contained highway, worst 65 %). U2's translation makes
+            // the connector fastest+use_highways:0 — which also stops
+            // `shortest` cutting through subdivisions on the commute legs.
+            costingOptions: {
+              ...BACKROADS.options,
+              ...(FUN_EXCLUDE_HIGHWAYS_ON ? { exclude_highways: true } : {}),
+            },
             middleType: 'through',
           },
           { timeoutMs: DISCOVER_PREBUILD_TIMEOUT_MS },
@@ -427,5 +499,105 @@ export async function discoverDrives(origin: LatLng, deps: DiscoverDeps): Promis
       'The good roads near here are a fair drive out — showing the ones that fit a half-day.',
     );
   }
-  return { drives: built, reachMinutes, disclosures };
+  if (gates === 'off') {
+    return { drives: built, reachMinutes, disclosures };
+  }
+
+  // --- R25-U11 gates: cheap pure detectors first, ONE trace on survivors ---
+  // (audit-v11 issue #4: 180 routes, zero validations). Hard road defects
+  // DROP in both modes; shape/commute facts DISCLOSE + DEMOTE in 'report'
+  // (an out-and-back's overlap is its shape) and DROP in 'strict' (eval).
+  const trace = deps.traceFn ?? traceRoadClasses;
+  let droppedOffence = 0;
+  let droppedHighway = 0;
+  let droppedHood = 0;
+  let demotedCommute = 0;
+  const keptClean: NearbyDrive[] = [];
+  const demoted: NearbyDrive[] = [];
+  await Promise.all(
+    built.map(async (d) => {
+      if (!d.route) {
+        // unmeasured: report keeps it honestly-estimated (the app builds on
+        // tap); strict drops — eval judges measured drives only
+        if (gates === 'report') demoted.push(d);
+        return;
+      }
+      // cheap gates (engine-free) — hard drops in both modes
+      const uturns = uturnCount(d.route);
+      const spurs = spurPositions(d.route.geometry, origin).length;
+      const microloops = microloopEvents(d.route.geometry, origin);
+      if (uturns > 0 || spurs > 0 || microloops > 0) {
+        droppedOffence++;
+        return;
+      }
+      // one trace per survivor — road-class truth on the WHOLE trip
+      let highwayM = 0;
+      let resShare = 0;
+      try {
+        const traced = await trace(deps.valhallaUrl, d.route.geometry);
+        highwayM = tracedHighwayM(traced.edges);
+        resShare = residentialShareOf(traced.edges, d.route.geometry, [origin]);
+      } catch {
+        // trace down: unknown is never sold as clean — treat like unmeasured
+        if (gates === 'report') demoted.push(d);
+        return;
+      }
+      if (highwayM > TRACE_HIGHWAY_FLOOR_M) {
+        droppedHighway++;
+        return;
+      }
+      if (resShare > DISCOVER_RESIDENTIAL_MAX) {
+        droppedHood++;
+        return;
+      }
+      // shape/commute facts: disclose + demote (report) / drop (strict)
+      const selfOverlap = selfOverlapRatio(d.route.geometry, undefined, origin);
+      const connectorShare = 1 - Math.min(1, d.roadTraverseS / d.route.duration_s);
+      if (
+        selfOverlap > DISCOVER_SELF_OVERLAP_MAX ||
+        connectorShare > DISCOVER_CONNECTOR_SHARE_MAX
+      ) {
+        if (gates === 'report') {
+          demotedCommute++;
+          demoted.push(d);
+        }
+        return;
+      }
+      keptClean.push(d);
+    }),
+  );
+  // deterministic re-assembly: clean first, then demoted, original order within
+  const orderOf = new Map(built.map((d, i) => [d.segmentId, i]));
+  const byMenuOrder = (a: NearbyDrive, b: NearbyDrive): number =>
+    (orderOf.get(a.segmentId) ?? 0) - (orderOf.get(b.segmentId) ?? 0);
+  keptClean.sort(byMenuOrder);
+  demoted.sort(byMenuOrder);
+  const gated = [...keptClean, ...demoted];
+  const droppedTotal = droppedOffence + droppedHighway + droppedHood;
+  if (droppedHighway > 0) {
+    disclosures.push(
+      `${droppedHighway} drive${droppedHighway > 1 ? 's' : ''} near here had highway on the way — not shown.`,
+    );
+  }
+  if (droppedHood > 0) {
+    disclosures.push(`${droppedHood} dove through neighbourhood streets — not shown.`);
+  }
+  if (droppedOffence > 0) {
+    disclosures.push(
+      `${droppedOffence} doubled back on ${droppedOffence > 1 ? 'themselves' : 'itself'} — not shown.`,
+    );
+  }
+  if (demotedCommute > 0) {
+    disclosures.push(
+      `${demotedCommute} ${demotedCommute > 1 ? 'are' : 'is'} mostly getting-there — shown last.`,
+    );
+  }
+  if (gated.length === 0) {
+    return {
+      drives: [],
+      reachMinutes,
+      disclosures: droppedTotal > 0 ? disclosures : [...disclosures, NO_DRIVES],
+    };
+  }
+  return { drives: gated, reachMinutes, disclosures };
 }

@@ -136,3 +136,21 @@ export function profileForRequest(c: ParsedConstraints, mode: CostingMode): Cost
   }
   return FUN_DEFAULT_ADOPTED ? FUN : LEGACY;
 }
+
+/**
+ * R25-U3 — a Fun & Explorative drive NEVER includes highway (owner decision,
+ * 2026-07-26; audit-v11: 33/60 fun loops rode motorway/trunk, worst single run
+ * 30.4 km, while the *Direct* button avoided highways 22× better). Imposed as
+ * a HARD avoid at ladder init (run.ts) so it gets, for free: the working
+ * costing lever (U2 translation), the no-highway sizing speed, rung-4
+ * relaxation WITH disclosure where a region genuinely has no non-highway path,
+ * and honest validation rows (U4 trace truth). `FUN_EXCLUDE_HIGHWAYS=off`
+ * restores today's behaviour byte-identically.
+ */
+export const FUN_EXCLUDE_HIGHWAYS_ON = process.env['FUN_EXCLUDE_HIGHWAYS'] !== 'off';
+
+/** Does this profile carry the imposed no-highway rule? (fun/backroads only —
+ *  'simple' is Direct by request, A→B is exempt by owner decision.) */
+export function profileExcludesHighways(p: CostingProfile): boolean {
+  return FUN_EXCLUDE_HIGHWAYS_ON && (p.id === 'fun' || p.id === 'backroads');
+}

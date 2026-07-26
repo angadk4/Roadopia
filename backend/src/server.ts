@@ -19,6 +19,7 @@ import { loggerOptions } from './lib/logger';
 import type { RegionBoundary } from './lib/region';
 import { registerDiscoverEndpoint, type DiscoverEndpointDeps } from './routes/discover';
 import { registerMatchEndpoint, type MatchEndpointDeps } from './routes/match';
+import { registerParseEndpoint, type ParseEndpointDeps } from './routes/parse';
 import { registerPlanEndpoint, type PlanEndpointDeps } from './routes/plan';
 import { registerRouteEndpoint, type RouteEndpointDeps } from './routes/route';
 
@@ -38,6 +39,9 @@ export interface BuildServerOptions {
   plan?: PlanEndpointDeps;
   /** /discover wiring (R23) — registers only when present; absent ⇒ 404. */
   discover?: DiscoverEndpointDeps;
+  /** /parse wiring (R25-U16c, browse-class rules parse) — registers only when
+   *  present; absent ⇒ 404. */
+  parse?: ParseEndpointDeps;
 }
 
 export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
@@ -94,6 +98,10 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
 
   if (opts.discover) {
     registerDiscoverEndpoint(app, opts.discover);
+  }
+
+  if (opts.parse) {
+    registerParseEndpoint(app, opts.parse);
   }
 
   return app;

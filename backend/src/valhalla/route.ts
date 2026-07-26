@@ -35,17 +35,29 @@ import { decodePolyline } from './polyline';
  * a typo here would fail without any signal.
  */
 export interface AutoCostingOptions {
+  /** ⚠️ R25-U2: VERIFIED NO-OP on the pinned 3.7.0 (probed 2026-07-26 —
+   *  byte-identical route/time/shape to a deliberately bogus control key).
+   *  Kept as the caller-facing INTENT flag; realizeCostingOptions() translates
+   *  it into the lever that works (use_highways: 0, and dropping `shortest`,
+   *  which bypasses every soft factor). Never trust it alone again. */
   exclude_highways?: boolean;
+  /** Same probe caveat as exclude_highways (unproven either way on a toll-free
+   *  pair) — realizeCostingOptions() adds use_tolls: 0 alongside it. */
   exclude_tolls?: boolean;
+  /** Same — realizeCostingOptions() adds use_ferry: 0 alongside it. */
   exclude_ferries?: boolean;
   /** Best-effort steering only (BD-16): Valhalla permits unpaved at the path's
    *  start/end and keeps it where no paved alternative exists (probed: option
    *  present in the 3.7 binary; a gravel-belt corridor kept its gravel). The
    *  TRACE result-scan is the guarantee; validation gates on the measurement. */
   exclude_unpaved?: boolean;
-  /** Soft preference 0..1 (Valhalla default 1). */
+  /** Soft preference 0..1 (Valhalla default 1). THE working highway lever
+   *  (probed: use_highways: 0 removed 64 % highway; exclude_highways removed
+   *  0 %) — but BYPASSED under `shortest`. */
   use_highways?: number;
   use_tolls?: number;
+  /** Soft ferry preference 0..1 (Valhalla auto option `use_ferry`). */
+  use_ferry?: number;
   /** 0..1; near 0 avoids living_street edges (Valhalla default 0.1). */
   use_living_streets?: number;
   /** Seconds added at transitions between unlike-named roads (default 5) —
@@ -58,6 +70,40 @@ export interface AutoCostingOptions {
    *  the soft use_* factors (probed: maneuver_penalty added nothing on top);
    *  hard exclude_* filters still apply. */
   shortest?: boolean;
+}
+
+/**
+ * R25-U2 kill switch — `AVOID_REAL_LEVERS=off` restores the (inert) legacy
+ * pass-through byte-identically. Default ON: an avoid toggle that does nothing
+ * is a defect, not a baseline worth preserving.
+ */
+export const AVOID_REAL_LEVERS_ON = process.env['AVOID_REAL_LEVERS'] !== 'off';
+
+/**
+ * R25-U2 — translate the documented avoid INTENT into levers the pinned
+ * Valhalla actually honours. Probe (2026-07-26, kimberley→markdale, traced):
+ *
+ *   {} baseline                      38.48 km · 2232 s · 64 % highway
+ *   {exclude_highways: true}         38.48 km · 2232 s · 64 % — BYTE-IDENTICAL
+ *   {roadopia_bogus_control: true}   38.48 km · 2232 s · identical (control)
+ *   {use_highways: 0}                45.01 km · 2949 s · **0 % highway**
+ *   {shortest: true, use_highways:0} unchanged — `shortest` BYPASSES use_*
+ *
+ * So: a hard highway avoid emits `use_highways: 0` AND drops `shortest` (the
+ * two are mutually exclusive); tolls/ferries get their soft levers alongside
+ * the exclude_* keys (kept — zero cost, future engines may honour them). The
+ * trace result-scan stays the truth for validation either way.
+ */
+export function realizeCostingOptions(opts: AutoCostingOptions): AutoCostingOptions {
+  if (!AVOID_REAL_LEVERS_ON) return opts;
+  const out: AutoCostingOptions = { ...opts };
+  if (opts.exclude_highways === true) {
+    out.use_highways = 0;
+    delete out.shortest; // shortest bypasses every soft factor — the avoid wins
+  }
+  if (opts.exclude_tolls === true) out.use_tolls = 0;
+  if (opts.exclude_ferries === true) out.use_ferry = 0;
+  return out;
 }
 
 export interface RouteThroughRequest {
@@ -252,7 +298,10 @@ export async function routeThrough(
       };
     }),
     costing: 'auto',
-    ...(request.costingOptions ? { costing_options: { auto: request.costingOptions } } : {}),
+    // R25-U2: translate avoid INTENT into levers the engine honours
+    ...(request.costingOptions
+      ? { costing_options: { auto: realizeCostingOptions(request.costingOptions) } }
+      : {}),
   };
 
   const res = await fetch(`${baseUrl.replace(/\/$/, '')}/route`, {

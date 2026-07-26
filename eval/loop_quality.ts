@@ -29,7 +29,7 @@ import {
   CHAIN_MIN_SPANS,
   chainMatrixLocations,
 } from '../backend/src/planner/chain';
-import { profileForRequest } from '../backend/src/planner/costing';
+import { profileExcludesHighways, profileForRequest } from '../backend/src/planner/costing';
 import { measureCurvatureClassAware } from '../backend/src/planner/curvature';
 import {
   diversify,
@@ -57,6 +57,7 @@ import {
   retrieveCandidates,
   type CandidateSegment,
 } from '../backend/src/planner/retrieve';
+import { cleanDriveVerdict } from '../backend/src/planner/roadclass';
 import {
   CHAIN_CANDIDATES_ON,
   CHARACTER_BUNDLES_ON,
@@ -67,16 +68,14 @@ import {
 } from '../backend/src/planner/run';
 import { buildScope } from '../backend/src/planner/scope';
 import {
-  ARTERIAL_PRESENT_PENALTY,
   ARTERIAL_SHARE_SOFT,
   CORRIDOR_DOUBLING_SOFT,
-  dirtyPenaltyOf,
-  durationGradeOf,
   fallbackOffenceUnits,
   LOOPINESS_SOFT_FLOOR,
   mergeWeights,
-  PRESENT_TIER_DUROFF,
+  presentationKey,
   scoreCandidate,
+  TRACE_NULL_STRICT_ON,
   uturnCount,
 } from '../backend/src/planner/score';
 import { resolveStopArrivals, stopCoverageOf, stopCoverScore } from '../backend/src/planner/stops';
@@ -177,6 +176,22 @@ interface BriefReport {
   bestResidentialRunM: number | null;
   /** Route countryness of the best, 0..1 (round 11; reported, no AC bar yet). */
   bestCountryScore: number | null;
+  /** R25-U0 road-class truth of the best (audit-v11 buckets), % of metres. */
+  bestHighwayPct: number | null;
+  bestMainPct: number | null;
+  bestBackroadPct: number | null;
+  bestHoodPct: number | null;
+  /** R25-U0 backroad continuity of the best (m). */
+  bestBackroadLongestM: number | null;
+  bestBackroadMeanM: number | null;
+  /** R25-U0 longest hood-class run of the best (m), ungraced. */
+  bestHoodRunM: number | null;
+  /** R25-U0 flow: total maneuvers per 10 min + raw count. */
+  bestTurnsPer10min: number | null;
+  bestManeuvers: number | null;
+  /** R25-U0 composite clean-drive verdict (audit bar; null = no best). */
+  cleanDrive: boolean | null;
+  defects: string[];
   // --- R18-0 essence metrics (report-only; gates arrive in later units) ---
   /** Arterial (motorway/trunk/primary/secondary/ramp) share of the best, %. */
   bestArterialPct: number | null;
@@ -315,11 +330,17 @@ async function evaluateBrief(
             c,
             {
               ...profile.options, // R18-1: fun-vs-fast connector costing (parity with run.ts)
+              // R25-U3v2 parity with run.ts: only a USER-asked no-highways
+              // changes the costing; the imposed fun rule enforces via the
+              // avoidHighways trace-reject (keeps shortest = backroad character).
               exclude_highways: constraints.avoid.highways,
               exclude_tolls: constraints.avoid.tolls,
               exclude_ferries: constraints.avoid.ferries,
             },
-            { repairSegments: retrieved.segments }, // round 11b INSERT material
+            {
+              repairSegments: retrieved.segments, // round 11b INSERT material
+              avoidHighways: constraints.avoid.highways || profileExcludesHighways(profile),
+            },
           );
         } catch {
           return null;
@@ -439,7 +460,9 @@ async function evaluateBrief(
       a.microloops > 0 ||
       (shapeLoopiness !== null && shapeLoopiness < LOOPINESS_SOFT_FLOOR) ||
       (shapeCorridor !== null && shapeCorridor > CORRIDOR_DOUBLING_SOFT) ||
-      (SHAPE_QUALITY_ON && a.selfOverlap > SELF_OVERLAP_CAP);
+      (SHAPE_QUALITY_ON && a.selfOverlap > SELF_OVERLAP_CAP) ||
+      // R25-U8c parity with run.ts: unmeasured IS dirty under the strict flag
+      (TRACE_NULL_STRICT_ON && a.trace === null);
     // round 14: on-target outranks shorter within the same quality tier
     const durOff =
       constraints.duration_target_s !== null &&
@@ -465,13 +488,19 @@ async function evaluateBrief(
       loopiness: shapeLoopiness, // R21-1 (null → 0)
       corridorDoubling: shapeCorridor,
     });
-    const durGrade = durationGradeOf(a.route.duration_s, durationS);
-    const presentKey =
-      breakdown.score -
-      dirtyPenaltyOf(dirty, units) -
-      (durOff ? PRESENT_TIER_DUROFF : 0) -
-      (contextHeavy ? ARTERIAL_PRESENT_PENALTY : 0) -
-      durGrade;
+    // R25-U9a: THE shared presentation key — eval can no longer drift from prod.
+    const presentKey = presentationKey({
+      score: breakdown.score,
+      dirty,
+      units,
+      durOff,
+      contextHeavy,
+      durationS: a.route.duration_s,
+      durationTargetS: durationS,
+      turnsPer10min: a.turnsPer10min ?? null, // R25-U9b (grade 0 while flag off)
+      backroadLongestM: a.backroadLongestM ?? null, // R25-U10 continuity (flag off → 0)
+      mixExempt: profile.id === 'simple',
+    });
     return { a, curv, breakdown, presentKey };
   });
 
@@ -576,6 +605,31 @@ async function evaluateBrief(
         corridorDoubling: SHAPE_QUALITY_ON ? bestCorridorDoubling : null,
       })
     : null;
+  // --- R25-U0: road-class truth + continuity + flow + clean-drive verdict ---
+  const bestMix = best ? best.a.classMix : null;
+  const bestHighwayPct = bestMix === null ? null : bestMix.highwayShare * 100;
+  const bestMainPct = bestMix === null ? null : bestMix.mainShare * 100;
+  const bestBackroadPct = bestMix === null ? null : bestMix.backroadShare * 100;
+  const bestHoodPct = bestMix === null ? null : bestMix.hoodShare * 100;
+  const bestBackroadLongestM = best ? best.a.backroadLongestM : null;
+  const bestBackroadMeanM = best ? best.a.backroadMeanM : null;
+  const bestHoodRunM = best ? best.a.hoodRunM : null;
+  const bestTurnsPer10min = best ? best.a.turnsPer10min : null;
+  const bestManeuvers = best ? best.a.route.maneuvers.length : null;
+  const cleanVerdict = best
+    ? cleanDriveVerdict({
+        mix: bestMix,
+        hoodRunM: bestHoodRunM,
+        turnsPer10min: bestTurnsPer10min,
+        loopiness: bestLoopiness,
+        durErrAbs: durErrPct === null ? null : durErrPct / 100,
+        uturns: bestUturns ?? 0,
+        spursWide: bestSpurs ?? 0,
+        microloops: bestMicroloops ?? 0,
+        retraceRunM: bestRetraceM ?? 0,
+        traced: best.a.trace !== null,
+      })
+    : null;
   // R19 honest-composite axis: a best that "passes" by driving town streets
   // (urban > 20 %) is the disease, not a pass (owner 2026-07-18). Null share
   // (index unavailable) is fail-open.
@@ -617,6 +671,17 @@ async function evaluateBrief(
     bestMicroloops,
     bestResidentialRunM,
     bestCountryScore,
+    bestHighwayPct,
+    bestMainPct,
+    bestBackroadPct,
+    bestHoodPct,
+    bestBackroadLongestM,
+    bestBackroadMeanM,
+    bestHoodRunM,
+    bestTurnsPer10min,
+    bestManeuvers,
+    cleanDrive: cleanVerdict === null ? null : cleanVerdict.clean,
+    defects: cleanVerdict === null ? ['no_best'] : cleanVerdict.defects,
     bestArterialPct,
     bestUrbanPct,
     bestCurvyShare,
@@ -683,6 +748,17 @@ async function main(): Promise<void> {
         bestMicroloops: null,
         bestResidentialRunM: null,
         bestCountryScore: null,
+        bestHighwayPct: null,
+        bestMainPct: null,
+        bestBackroadPct: null,
+        bestHoodPct: null,
+        bestBackroadLongestM: null,
+        bestBackroadMeanM: null,
+        bestHoodRunM: null,
+        bestTurnsPer10min: null,
+        bestManeuvers: null,
+        cleanDrive: null,
+        defects: ['no_best'],
         bestArterialPct: null,
         bestUrbanPct: null,
         bestCurvyShare: null,
@@ -889,6 +965,48 @@ async function main(): Promise<void> {
   console.log(`loopiness of bests:      p20 ${fmt(pct(lpi, 0.2))}`);
   console.log(`corridor doubling:       p80 ${fmt(pct(corD, 0.8))}`);
   console.log(`dirty units of bests:    mean ${fmt(mean(units))} · max ${fmt(pct(units, 1.0))}`);
+
+  // --- R25-U0 clean-drive scoreboard (audit-v11 bar, now first-class) -------
+  const hw = vals((r) => r.bestHighwayPct);
+  const mn = vals((r) => r.bestMainPct);
+  const bk = vals((r) => r.bestBackroadPct);
+  const hd = vals((r) => r.bestHoodPct);
+  const bkLong = vals((r) => r.bestBackroadLongestM);
+  const hdRun = vals((r) => r.bestHoodRunM);
+  const t10 = vals((r) => r.bestTurnsPer10min);
+  const cleanCount = reports.filter((r) => r.cleanDrive === true).length;
+  const defectTally = new Map<string, number>();
+  for (const r of reports)
+    for (const d of r.defects) defectTally.set(d, (defectTally.get(d) ?? 0) + 1);
+  const defectsPerRoute =
+    reports.reduce((s, r) => s + r.defects.length, 0) / Math.max(1, reports.length);
+  console.log(`\n-- R25 clean-drive scoreboard (audit-v11 bar) --`);
+  console.log(
+    `CLEAN DRIVES: ${cleanCount}/${reports.length} · defects/route ${defectsPerRoute.toFixed(2)}`,
+  );
+  console.log(
+    `defect tally: ${
+      [...defectTally.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => `${k}×${v}`)
+        .join(' · ') || 'none'
+    }`,
+  );
+  console.log(
+    `road class of bests:     hwy mean ${fmt(mean(hw), 1)} % (${reports.filter((r) => (r.bestHighwayPct ?? 0) > 0.5).length} routes >0) · main mean ${fmt(mean(mn), 0)} % p80 ${fmt(pct(mn, 0.8), 0)} % · backroad mean ${fmt(mean(bk), 0)} % p20 ${fmt(pct(bk, 0.2), 0)} % · hood mean ${fmt(mean(hd), 1)} %`,
+  );
+  console.log(
+    `backroad>main bests:     ${reports.filter((r) => r.bestBackroadPct !== null && r.bestMainPct !== null && r.bestBackroadPct > r.bestMainPct).length}/${reports.length}`,
+  );
+  console.log(
+    `backroad continuity:     longest mean ${fmt(mean(bkLong), 0)} m · p20 ${fmt(pct(bkLong, 0.2), 0)} m`,
+  );
+  console.log(
+    `hood runs of bests:      p80 ${fmt(pct(hdRun, 0.8), 0)} m · max ${fmt(pct(hdRun, 1.0), 0)} m`,
+  );
+  console.log(
+    `turns/10min of bests:    mean ${fmt(mean(t10), 1)} · p80 ${fmt(pct(t10, 0.8), 1)} · max ${fmt(pct(t10, 1.0), 1)} · >5: ${reports.filter((r) => (r.bestTurnsPer10min ?? 0) > 5).length}/${reports.length}`,
+  );
 
   // determinism hash: byte-stable across identical runs (ms stripped)
   const { createHash } = await import('node:crypto');

@@ -20,6 +20,11 @@ import { RouteThroughOutputSchema } from './tools';
 
 export const DiscoverRequestSchema = z.object({
   origin: LatLngSchema,
+  /** R25-U14 contract versioning: the app sends `v: 2` for the three-leg
+   *  drive-core shape; ABSENT ⇒ the backend serves the v1 shape below
+   *  (installed apps can't be force-updated — the v1 branch is test-pinned
+   *  and its removal must be a deliberate, loud act). */
+  v: z.number().int().optional(),
 });
 export type DiscoverRequest = z.infer<typeof DiscoverRequestSchema>;
 
@@ -79,3 +84,54 @@ export const DiscoverResultSchema = z.object({
   disclosures: z.array(z.string()),
 });
 export type DiscoverResult = z.infer<typeof DiscoverResultSchema>;
+
+// --- R25-U14: the v2 three-leg drive-core contract (ACP-001) -----------------
+// A browse returns pre-MEASURED cores (offline sweep, hard core_bars) with
+// fresh get-there / get-home connectors built per request. Core metrics are
+// measured OFFLINE ON THE CORE and stored — the live path never re-routes or
+// re-traces a core; trip metrics are PER-LEG. `loopiness` exists for loop
+// cores only and is never computed over the assembled trip (audit-v11: the
+// old whole-trip loopiness averaged 0.13 because ~80 % of it was connector).
+
+/** One leg of the trip — simplified geometry + measured logistics. */
+export const CoreLegSchema = z.object({
+  geometry: LineStringSchema,
+  distance_m: z.number().nonnegative(),
+  duration_s: z.number().int().nonnegative(),
+});
+export type CoreLeg = z.infer<typeof CoreLegSchema>;
+
+export const CoreDriveSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(['loop', 'ribbon']),
+  name: z.string().min(1),
+  /** 'strict' = full bar; 'cell_relaxed' = best-around-here, stated on the
+   *  card ("44 % backroad, not the 60 % we aim for"). */
+  barProfile: z.enum(['strict', 'cell_relaxed']),
+  /** THE DRIVE — measured offline, served as stored (amber on the map). */
+  core: CoreLegSchema.extend({
+    entry: LatLngSchema,
+    exit: LatLngSchema,
+    curviness: z.number(),
+    backroadShare: z.number().min(0).max(1),
+    mainShare: z.number().min(0).max(1),
+    hoodShare: z.number().min(0).max(1),
+    turnsPer10min: z.number().nonnegative(),
+    /** Loop cores only — never computed on the assembled trip. */
+    loopiness: z.number().nullable(),
+  }),
+  /** Getting there / getting home — fresh per request (grey on the map). */
+  connectorOut: CoreLegSchema,
+  connectorHome: CoreLegSchema,
+  /** True when no good second road home exists (disclosed, one retry max). */
+  sameWayHome: z.boolean(),
+});
+export type CoreDrive = z.infer<typeof CoreDriveSchema>;
+
+export const DiscoverResultV2Schema = z.object({
+  v: z.literal(2),
+  drives: z.array(CoreDriveSchema),
+  reachMinutes: z.number(),
+  disclosures: z.array(z.string()),
+});
+export type DiscoverResultV2 = z.infer<typeof DiscoverResultV2Schema>;

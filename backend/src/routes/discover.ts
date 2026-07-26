@@ -18,6 +18,7 @@ import { errorBody } from '../lib/errors';
 import type { RateLimiter } from '../lib/rate_limit';
 import type { RegionBoundary } from '../lib/region';
 import { discoverDrives } from '../planner/discover';
+import { discoverCores } from '../planner/discover_cores';
 
 export interface DiscoverEndpointDeps {
   db: Client;
@@ -26,10 +27,17 @@ export interface DiscoverEndpointDeps {
   rateLimiter?: RateLimiter;
   /** DI seam for tests. */
   discoverFn?: typeof discoverDrives;
+  /** R25-U14: the v2 drive-core browse (served only when the body carries
+   *  `v: 2`). Absent body `v` ⇒ the v1 shape — installed apps can't be
+   *  force-updated; the v1 branch is pinned by a test and its removal must be
+   *  a deliberate, loud act (dated TODO: retire after the v2 app ships and
+   *  v1 traffic reads zero — check server logs ≥ 2026-09-01). */
+  discoverCoresFn?: typeof discoverCores;
 }
 
 interface DiscoverBody {
   origin: { lat: number; lng: number };
+  v?: number;
 }
 
 const LATLNG_SCHEMA = {
@@ -53,7 +61,11 @@ export function registerDiscoverEndpoint(app: FastifyInstance, deps: DiscoverEnd
           type: 'object',
           required: ['origin'],
           additionalProperties: false,
-          properties: { origin: LATLNG_SCHEMA },
+          properties: {
+            origin: LATLNG_SCHEMA,
+            // R25-U14 contract version: 2 = three-leg drive cores; absent = v1
+            v: { type: 'integer', minimum: 1, maximum: 2 },
+          },
         },
       },
     },
@@ -94,7 +106,15 @@ export function registerDiscoverEndpoint(app: FastifyInstance, deps: DiscoverEnd
       }
 
       try {
-        const result = await discover(origin, { db: deps.db, valhallaUrl: deps.valhallaUrl });
+        // R25-U14: `v: 2` → the drive-core browse; ABSENT/1 → the v1 shape
+        // (installed-app compatibility; branch pinned by discover-route.test)
+        const result =
+          request.body.v === 2
+            ? await (deps.discoverCoresFn ?? discoverCores)(origin, {
+                db: deps.db,
+                valhallaUrl: deps.valhallaUrl,
+              })
+            : await discover(origin, { db: deps.db, valhallaUrl: deps.valhallaUrl });
         void reply.status(200).send(result);
       } catch (err) {
         request.log.error({ err }, '/discover failed');

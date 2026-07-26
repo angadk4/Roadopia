@@ -4,14 +4,24 @@ import { describe, expect, it } from 'vitest';
 import { weightsForPreset, PRESET_WEIGHTS } from './presets';
 import {
   ARTERIAL_PRESENT_PENALTY,
+  DIRTY_GRADE_CAP,
+  DIRTY_GRADE_CAP_V2,
   dirtyPenaltyOf,
   DURATION_GRADE_MAX,
+  DURATION_HARD_ERR,
   fallbackOffenceUnits,
+  PRESENT_GRADE_BUDGET,
+  presentationKey,
   PRESENT_TIER_DUROFF,
   curvFit,
   durFit,
   mergeWeights,
   scoreCandidate,
+  TRACE_NULL_UNITS_STRICT,
+  turnGradeOf,
+  TURN_GRADE_MAX,
+  TURNS_GRADE_HARD,
+  TURNS_GRADE_SOFT,
   DEFAULT_WEIGHTS,
 } from './score';
 
@@ -129,27 +139,114 @@ describe('presets (M3-T10 AC)', () => {
     expect(weightsForPreset('simple')).toEqual(weightsForPreset('chill'));
   });
 
-  it('R18-2 tier-order property: clean+on > clean+off > dirty+on > dirty+off for ALL grades', () => {
-    // presentKey = score − dirtyPenaltyOf − (durOff ? TIER_DUROFF : 0) −
-    // durGrade − arterial(2). This property FAILED under the historical 5/10
-    // encodings once the R18 grades stacked (score spread 1.35 + durGrade 2 +
-    // arterial 2 + dirty grade 4.5 ≈ 10 > 5) — the tier bases are now 100/200
-    // so no combination of within-tier grades can ever cross a tier boundary.
+  it('R18-2/R25-U9a tier-order property: clean+on > clean+off > dirty+on > dirty+off for ALL grades', () => {
+    // R25-U9a: the proof now exercises THE presentationKey function itself
+    // (score.ts) instead of a hand-copied deduction stack — a new subtractive
+    // term added to presentationKey but not declared in PRESENT_GRADE_BUDGET
+    // fails the budget assertion below instead of silently un-covering this
+    // proof. Historical context: the 5/10 encodings failed once the R18
+    // grades stacked; the 100/200 tier bases make crossing impossible.
     const SCORE_FLOOR = -0.5; // below any reachable scalar score
+    const MAX_SCORE_SPREAD = 1.5; // scalar score ∈ ~[-0.35, 1]; 1.5 is generous
+    // The budget must leave the tier bases uncrossable — the mechanism that
+    // keeps every future within-tier grade honest.
+    expect(PRESENT_GRADE_BUDGET + MAX_SCORE_SPREAD).toBeLessThan(PRESENT_TIER_DUROFF);
+    // R25-U5ab: the budget must ALSO hold with the V2 dirty cap active (the
+    // env-dependent DIRTY_GRADE_CAP means this test runs with 4.5; assert the
+    // V2 state statically so neither flag state can cross a tier).
+    expect(
+      DURATION_GRADE_MAX +
+        ARTERIAL_PRESENT_PENALTY +
+        DIRTY_GRADE_CAP_V2 +
+        TURN_GRADE_MAX +
+        MAX_SCORE_SPREAD,
+    ).toBeLessThan(PRESENT_TIER_DUROFF);
+    // worst possible key within a tier: floor score, every grade maxed.
+    // R25-U7 (BD-87): the durations stay UNDER the 50 % wild-miss bar — past
+    // it a clean route DELIBERATELY drops to the dirty tier's level (its own
+    // test below); this proof covers the four ordinary states.
     const worst = (dirty: boolean, durOff: boolean): number =>
-      SCORE_FLOOR -
-      dirtyPenaltyOf(dirty, 1000) - // grade caps at TIER_DIRTY + 4.5
-      (durOff ? PRESENT_TIER_DUROFF : 0) -
-      DURATION_GRADE_MAX -
-      ARTERIAL_PRESENT_PENALTY;
+      presentationKey({
+        score: SCORE_FLOOR,
+        dirty,
+        units: 1000, // grade caps at TIER_DIRTY + DIRTY_GRADE_CAP
+        durOff,
+        contextHeavy: true,
+        durationS: 1400, // err 40 % ⇒ duration grade maxed (caps at 20 %), not wild
+        durationTargetS: 1000,
+      });
+    // best possible key within a tier: top score, zero grades (durOff still
+    // carries the capped duration grade — off-target implies err > band)
     const bestOf = (dirty: boolean, durOff: boolean): number =>
-      1 -
-      dirtyPenaltyOf(dirty, 0) -
-      (durOff ? PRESENT_TIER_DUROFF : 0) -
-      (durOff ? DURATION_GRADE_MAX : 0); // off-target always carries the capped grade
+      presentationKey({
+        score: 1,
+        dirty,
+        units: 0,
+        durOff,
+        contextHeavy: false,
+        durationS: durOff ? 1400 : 1000,
+        durationTargetS: 1000,
+      });
     expect(worst(false, false)).toBeGreaterThan(bestOf(false, true));
     expect(worst(false, true)).toBeGreaterThan(bestOf(true, false));
     expect(worst(true, false)).toBeGreaterThan(bestOf(true, true));
+  });
+
+  it('R25-U9b: turn-density grade — zero under the clean bar, graded to max, flag-gated', () => {
+    // shape: the ~90 % of routes under the bar pay ZERO — this targets the tail
+    expect(turnGradeOf(null)).toBe(0);
+    expect(turnGradeOf(3.3)).toBe(0); // suite mean
+    expect(turnGradeOf(TURNS_GRADE_SOFT)).toBe(0);
+    expect(turnGradeOf(6.5)).toBeCloseTo(TURN_GRADE_MAX / 2, 5);
+    expect(turnGradeOf(TURNS_GRADE_HARD)).toBe(TURN_GRADE_MAX);
+    expect(turnGradeOf(99)).toBe(TURN_GRADE_MAX); // saturates
+    const mk = (turnsPer10min: number): Parameters<typeof presentationKey>[0] => ({
+      score: 0.8,
+      dirty: false,
+      units: 0,
+      durOff: false,
+      contextHeavy: false,
+      durationS: 3600,
+      durationTargetS: 3600,
+      turnsPer10min,
+    });
+    // OFF (default here): turn-heavy and flowing key identically
+    expect(presentationKey(mk(8))).toBe(presentationKey(mk(3)));
+    // ON: the grade separates them by exactly the declared max — within-tier
+    const gap =
+      presentationKey(mk(3), { turnGrade: true }) - presentationKey(mk(8), { turnGrade: true });
+    expect(gap).toBeCloseTo(TURN_GRADE_MAX, 5);
+    expect(gap).toBeLessThan(PRESENT_TIER_DUROFF); // taste never crosses a tier
+  });
+
+  it('R25-U7a: beyond DURATION_HARD_ERR a second duration tier stacks (flag-gated)', () => {
+    const mk = (durationS: number): Parameters<typeof presentationKey>[0] => ({
+      score: 0.8,
+      dirty: false,
+      units: 0,
+      durOff: true,
+      contextHeavy: false,
+      durationS,
+      durationTargetS: 3600,
+    });
+    const mild = mk(4700); // +31 % — over the band, under the hard bar
+    const wild = mk(7000); // +94 % — the audit's worst case (asked 60, got 116)
+    expect(4700 / 3600 - 1).toBeLessThan(DURATION_HARD_ERR);
+    expect(7000 / 3600 - 1).toBeGreaterThan(DURATION_HARD_ERR);
+    // OFF (explicit — the tier is ON by default since BD-87): only the small
+    // duration grade separates them
+    expect(
+      presentationKey(mild, { durHardTier: false }) - presentationKey(wild, { durHardTier: false }),
+    ).toBeLessThanOrEqual(DURATION_GRADE_MAX + 1e-9);
+    // ON: the wild miss drops a full extra tier — no within-tier grade can rescue it
+    const gap =
+      presentationKey(mild, { durHardTier: true }) - presentationKey(wild, { durHardTier: true });
+    expect(gap).toBeGreaterThan(PRESENT_TIER_DUROFF - DURATION_GRADE_MAX - 1e-9);
+    // an on-target route is untouched by the flag in EITHER state
+    const onTarget = { ...mk(3600), durOff: false };
+    expect(presentationKey(onTarget, { durHardTier: true })).toBe(
+      presentationKey(onTarget, { durHardTier: false }),
+    );
   });
 
   it('R18-2 fallbackOffenceUnits: graded, unknown-is-dirty, least-offence orders correctly', () => {
@@ -165,6 +262,9 @@ describe('presets (M3-T10 AC)', () => {
     };
     expect(fallbackOffenceUnits(base)).toBe(0); // everything under soft caps
     expect(fallbackOffenceUnits({ ...base, uturns: 1 })).toBe(1);
+    // R25-U8c (BD-90): unmeasured costs TRACE_NULL_UNITS_STRICT under the
+    // adopted default (was 0.5 — half a u-turn; env TRACE_NULL_STRICT=off
+    // restores it). Pin the constant, not one flag state's literal.
     expect(
       fallbackOffenceUnits({
         ...base,
@@ -172,16 +272,20 @@ describe('presets (M3-T10 AC)', () => {
         residentialShare: null,
         residentialRunM: null,
       }),
-    ).toBe(0.5);
+    ).toBe(TRACE_NULL_UNITS_STRICT);
     // one u-turn < u-turn + spur + 2.2 km retrace (the BD-56 pass-through case)
     const single = fallbackOffenceUnits({ ...base, uturns: 1 });
     const multi = fallbackOffenceUnits({ ...base, uturns: 1, spursWide: 1, retraceRunM: 2200 });
     expect(single).toBeLessThan(multi);
-    // dirtyPenaltyOf: graded within tier, capped below the next tier boundary
+    // dirtyPenaltyOf: graded within tier, capped below the next tier boundary.
+    // R25-U5 adoption note: DIRTY_GRADE_CAP is ruler-relative (V2 default 30,
+    // env HOOD_MEASURE_V2=off restores 4.5) — pin against the constant so the
+    // test states the invariant, not one flag state's literal.
     expect(dirtyPenaltyOf(false, 99)).toBe(0);
     expect(dirtyPenaltyOf(true, 0)).toBe(200);
     expect(dirtyPenaltyOf(true, 1)).toBe(201.5);
-    expect(dirtyPenaltyOf(true, 99)).toBe(204.5); // cap: TIER + 4.5
+    expect(dirtyPenaltyOf(true, 999)).toBe(200 + DIRTY_GRADE_CAP); // capped
+    expect(200 + DIRTY_GRADE_CAP).toBeLessThan(300); // never crosses the next tier
   });
 
   it('mergeWeights honours §30 keys only and ignores junk', () => {

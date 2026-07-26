@@ -35,10 +35,26 @@ import { DURATION_TOLERANCE_DEFAULT } from './validate';
 
 export type BundleId = 'twisty' | 'backroads' | 'scenic' | 'simple' | 'default';
 
+/**
+ * R25-U8a — scenic as a MODIFIER, not a competing bundle. Audit-v11 issue #10:
+ * the app always ships a preset (DEFAULT_DRAFT seeds 'backroads'), so the
+ * `preset !== null` branch below always wins and the scenic tag/pref branch is
+ * DEAD in production — yet the result still gets tagged `scenic` and the AI
+ * narrates from it. With this ON, a scenic ask COMPOSES onto whatever bundle
+ * the preset resolved: tighten the urban bar to scenic's and arm the
+ * nice-to-have viewpoint stop. No numeric scenic scoring anywhere — the same
+ * threshold-plus-garnish scope scenic was always permitted ([GATE-S] holds).
+ */
+export const SCENIC_MODIFIER_ON = process.env['SCENIC_MODIFIER'] !== 'off'; // R25-U8a ADOPTED at freeze (suite-inert by construction; unit-proven)
+
 export interface CharacterBundle {
   id: BundleId;
   /** Tie-break scoring vector (frozen BD-30 numbers via weightsForPreset). */
   weights: WeightVector;
+  /** R25-U8a: true iff a scenic treatment actually RAN on this request —
+   *  either the scenic bundle itself or the scenic modifier composed onto
+   *  another bundle. `character_applied` derives from THIS, never the ask. */
+  scenicApplied: boolean;
   /** Presentation demotion bar (R19): URBAN share above this → the −2 tier.
    *  Replaces R18-4's arterial bars — the owner's correction: "main roads are
    *  fine when surrounded by fields; neighbourhoods are not" (measured:
@@ -63,7 +79,7 @@ const PRESET_TO_BUNDLE: Record<Preset, BundleId> = {
   avoid_highways: 'default',
 };
 
-const BUNDLES: Record<BundleId, Omit<CharacterBundle, 'weights'>> = {
+const BUNDLES: Record<BundleId, Omit<CharacterBundle, 'weights' | 'scenicApplied'>> = {
   // Twisty: the ask is corners — town-heavy bests demote early.
   twisty: {
     id: 'twisty',
@@ -115,7 +131,10 @@ const BUNDLES: Record<BundleId, Omit<CharacterBundle, 'weights'>> = {
  * The costing profile is resolved SEPARATELY by costing.ts (profileForRequest
  * keys on the same fields — one lever, one source of truth each).
  */
-export function bundleForRequest(c: ParsedConstraints): CharacterBundle {
+export function bundleForRequest(
+  c: ParsedConstraints,
+  opts?: { scenicModifier?: boolean }, // test seam; call sites use the env flag
+): CharacterBundle {
   let id: BundleId;
   if (c.preset !== null) {
     id = PRESET_TO_BUNDLE[c.preset];
@@ -132,7 +151,21 @@ export function bundleForRequest(c: ParsedConstraints): CharacterBundle {
   // stay themselves even though their BUNDLE is default); tag-derived bundles
   // use their namesake vector
   const weights = c.preset !== null ? weightsForPreset(c.preset) : weightsForPreset(idAsPreset(id));
-  return { ...BUNDLES[id], weights };
+  const bundle: CharacterBundle = { ...BUNDLES[id], weights, scenicApplied: id === 'scenic' };
+  // R25-U8a — the scenic MODIFIER: a scenic ask alongside a preset-resolved
+  // bundle tightens the urban bar and arms the viewpoint garnish instead of
+  // being silently discarded. Composes with every preset (incl. simple — the
+  // urban bar is presentation-only demotion, never a gate).
+  if (
+    (opts?.scenicModifier ?? SCENIC_MODIFIER_ON) &&
+    !bundle.scenicApplied &&
+    (c.character.includes('scenic') || (c.scenic_pref ?? 0) >= 0.7)
+  ) {
+    bundle.urbanShareSoft = Math.min(bundle.urbanShareSoft, BUNDLES.scenic.urbanShareSoft);
+    bundle.autoViewpointStop = true;
+    bundle.scenicApplied = true;
+  }
+  return bundle;
 }
 
 function idAsPreset(id: BundleId): Preset | null {

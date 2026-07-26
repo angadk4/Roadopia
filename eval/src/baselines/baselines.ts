@@ -197,6 +197,11 @@ export async function runBaseline(
   try {
     const waypoints = await buildWaypoints();
     if (waypoints === null) return finish('error', null, false, [], engineCalls);
+    // R25-U2 CORRECTION (BD-84): `exclude_highways` was a Valhalla NO-OP —
+    // every published B0-vs-B1 comparison before 2026-07-26 compared
+    // byte-identical arms and is void. With AVOID_REAL_LEVERS (default ON)
+    // routeThrough now realizes it as use_highways:0 + shortest dropped, so
+    // B1 is a REAL no-highway baseline from here forward.
     const costing: AutoCostingOptions | undefined =
       id === 'B1' ? { exclude_highways: true } : undefined;
     engineCalls++;

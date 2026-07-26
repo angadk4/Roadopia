@@ -37,6 +37,9 @@ export interface SearchParams {
   /** R18-2 rung 5: loop-quality assembly caps loosened (with disclosure) —
    *  the last resort before redirect; run.ts maps it to RELAXED_ASSEMBLY_CAPS. */
   assemblyRelax: boolean;
+  /** R25-U3: avoid.highways was IMPOSED by the fun profile, not asked by the
+   *  user — rung 4's disclosure wording differs (product rule vs user ask). */
+  imposedHighways?: boolean;
 }
 
 export function initialParams(constraints: ParsedConstraints, thetaCurvy = 0.6): SearchParams {
@@ -90,8 +93,14 @@ export function nextRelaxation(params: SearchParams, telemetry?: LadderTelemetry
     disclosures: [...params.disclosures],
   };
 
+  // R25-U3 fix: the fast-forward used to jump straight to rung 5, SKIPPING
+  // rung 4 — but rung 4 changes the COSTING (the avoid set reaches Valhalla),
+  // so it genuinely changes which routes exist, exactly like rung 5. A
+  // highway-locked region whose every assembly died could never shed its
+  // avoid. Jump to 4 while any avoid is still set; 5 otherwise.
   if (telemetry?.assembledCount === 0 && p.rung >= 2 && !p.assemblyRelax) {
-    p.rung = 5;
+    const avoidPending = AVOID_RELAX_ORDER.some(([key]) => p.avoid[key]);
+    p.rung = avoidPending && p.rung < 4 ? 4 : 5;
   }
 
   while (p.rung <= 5) {
@@ -127,8 +136,13 @@ export function nextRelaxation(params: SearchParams, telemetry?: LadderTelemetry
           const [key, label] = target;
           p.avoid[key] = false;
           p.relaxedConstraints.push(label);
+          // R25-U3: an IMPOSED no-highway rule (the fun profile's, not the
+          // user's) relaxes with product-rule wording, not broken-promise
+          // wording — the user never asked, so nothing they asked was broken.
           p.disclosures.push(
-            `RELAXED a hard constraint: ${label.replace('avoid_', 'no-')} could not be fully honoured — the route may include it (disclosed)`,
+            key === 'highways' && p.imposedHighways === true
+              ? 'this area has no non-highway route at this length — the drive includes a stretch of highway (shown honestly)'
+              : `RELAXED a hard constraint: ${label.replace('avoid_', 'no-')} could not be fully honoured — the route may include it (disclosed)`,
           );
           // stay on rung 4 — further avoid entries relax one per attempt
           return { kind: 'retry', params: p };

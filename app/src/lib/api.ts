@@ -240,6 +240,22 @@ export async function postDiscover(
   });
 }
 
+/** POST /parse — the browse-class RULES parse (R25-U16c): the quick-fill Plan
+ *  screen calls this while the user types so the chips light up from the SAME
+ *  deterministic parser the server falls back to. No LLM, no cost. Returns the
+ *  RAW body; the caller zod-validates the constraints (Hard rule K). */
+export async function postParse(
+  opts: ApiClientOptions,
+  body: { brief: string },
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return request<unknown>(opts, '/parse', {
+    method: 'POST',
+    body,
+    ...(signal ? { signal } : {}),
+  });
+}
+
 /** POST /route — waypoints → drivable geometry (M9 manual building; typed now). */
 export async function postRouteThrough(
   opts: ApiClientOptions,

@@ -40,14 +40,17 @@ describe('screen smoke', () => {
     expect(text).toContain('Pick on map');
     expect(text).toContain('Loop');
     expect(text).toContain('A → B');
-    // R23: the drive-style control is a 2-stop axis (Direct / Fun & Explorative,
-    // R24-U2 rename); still presets-only under the hood (BD-30 / Hard rule L —
-    // buildPlanRequest composes onto the preset slot)
+    // R23: the style control is presets-only under the hood (BD-30 / Hard rule
+    // L — buildPlanRequest composes onto the preset slot). R25-U17 relabel:
+    // "Road character" (it selects which roads, never pace) + R25-U16b's third
+    // chip makes style:null reachable (the duration "Any" precedent).
     expect(text).toContain('optional');
     expect(text).toContain('How long'); // R24-U12 time control (loops)
-    expect(text).toContain('Drive style');
+    expect(text).toContain('Road character');
     expect(text).toContain('Direct');
     expect(text).toContain('Fun & Explorative');
+    expect(text).toContain('No preference');
+    expect(text).toContain('not how fast you drive it'); // Hard rule D sub-label
     expect(text).toContain('Scenery');
     expect(text).toContain('Prefer views');
     expect(text).toContain('On the route');

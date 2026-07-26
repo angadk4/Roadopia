@@ -32,6 +32,8 @@ import {
   usePlanDraft,
   type DriveStyle,
 } from '../lib/plan_draft';
+import { type QuickFillField } from '../lib/quick_fill';
+import { useQuickFill } from '../lib/use_quick_fill';
 import { font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
 type LocationState = 'idle' | 'fetching' | 'denied' | 'error';
@@ -55,6 +57,21 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
   const { draft, setDraft } = usePlanDraft();
   const [locState, setLocState] = useState<LocationState>('idle');
   const locate = props.locate ?? getCurrentLocation;
+
+  // R25-U16d quick-fill: the text populates untouched controls, visibly; a
+  // tapped control joins `touched` and the parse never moves it again.
+  const [touched, setTouched] = useState<ReadonlySet<QuickFillField>>(new Set());
+  const touch = useCallback((f: QuickFillField) => {
+    setTouched((prev) => new Set(prev).add(f));
+  }, []);
+  const quickFill = useQuickFill({ brief: draft.brief, draft, setDraft, touched });
+  const fromText = useCallback(
+    (f: QuickFillField): ReactElement | null =>
+      quickFill.fromText.includes(f) ? (
+        <Text style={[styles.fromText, { color: colors.accent }]}> · from your text</Text>
+      ) : null,
+    [quickFill.fromText, colors.accent],
+  );
 
   const useMyLocation = useCallback(() => {
     setLocState('fetching');
@@ -102,6 +119,23 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
         <Text style={[styles.counter, { color: colors.textMuted }]}>
           {draft.brief.length}/{MAX_BRIEF_CHARS}
         </Text>
+        {/* R25-U16d: place mentions the parse found — visible BEFORE submit
+            (display-only: the text is their source of truth; edit the text to
+            change them) */}
+        {quickFill.pins.length > 0 && (
+          <View style={styles.buttonRow}>
+            {quickFill.pins.map((p) => (
+              <View
+                key={`${p.kind}:${p.text}`}
+                style={[styles.pinChip, { borderColor: colors.accent }]}
+              >
+                <Text style={[styles.pinLabel, { color: colors.accent }]}>
+                  {p.kind === 'through' ? 'via' : p.kind === 'near' ? 'near' : 'avoiding'} {p.text}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* origin */}
@@ -170,7 +204,7 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
 
       {/* shape */}
       <View style={styles.section}>
-        <Text style={[styles.label, { color: colors.text }]}>Shape</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Shape{fromText('shape')}</Text>
         <View style={styles.buttonRow}>
           {(['loop', 'a_to_b'] as const).map((s) => {
             const active = draft.shape === s;
@@ -179,7 +213,10 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
                 key={s}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
-                onPress={() => setDraft({ shape: s })}
+                onPress={() => {
+                  touch('shape');
+                  setDraft({ shape: s });
+                }}
                 style={({ pressed }) => [
                   styles.shapeChip,
                   {
@@ -240,7 +277,7 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
           by the endpoints). "Any" = surprise me. */}
       {draft.shape === 'loop' && (
         <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.text }]}>How long</Text>
+          <Text style={[styles.label, { color: colors.text }]}>How long{fromText('duration')}</Text>
           <View style={styles.buttonRow}>
             {[{ label: 'Any', seconds: null }, ...DURATION_CHOICES].map((c) => {
               const active = draft.durationTargetS === c.seconds;
@@ -249,7 +286,10 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
                   key={c.label}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
-                  onPress={() => setDraft({ durationTargetS: c.seconds })}
+                  onPress={() => {
+                    touch('duration');
+                    setDraft({ durationTargetS: c.seconds });
+                  }}
                   style={({ pressed }) => [
                     styles.shapeChip,
                     {
@@ -271,6 +311,9 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
               );
             })}
           </View>
+          {quickFill.note !== null && (
+            <Text style={[styles.note, { color: colors.textMuted }]}>{quickFill.note}</Text>
+          )}
         </View>
       )}
 
@@ -279,18 +322,33 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
         Everything below is optional — these fine-tune your drive.
       </Text>
 
-      {/* drive style */}
+      {/* road character (R25-U17 relabel: it selects WHICH ROADS the drive is
+          built from — costing profile + character bundle — never pace).
+          R25-U16b: the third chip makes style:null REACHABLE (the duration
+          control's "Any" precedent) — preset:null revives the three tag-driven
+          bundles and unseals RefinePanel's if_unset "more twisty". */}
       <View style={styles.section}>
-        <Text style={[styles.label, { color: colors.text }]}>Drive style</Text>
+        <Text style={[styles.label, { color: colors.text }]}>
+          Road character{fromText('style')}
+        </Text>
         <View style={styles.buttonRow}>
-          {(['simple', 'backroads'] as const).map((s: DriveStyle) => {
-            const active = draft.style === s;
+          {(
+            [
+              { value: 'simple', label: 'Direct' },
+              { value: 'backroads', label: 'Fun & Explorative' },
+              { value: null, label: 'No preference' },
+            ] as ReadonlyArray<{ value: DriveStyle | null; label: string }>
+          ).map((s) => {
+            const active = draft.style === s.value;
             return (
               <Pressable
-                key={s}
+                key={s.label}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
-                onPress={() => setDraft({ style: s })}
+                onPress={() => {
+                  touch('style');
+                  setDraft({ style: s.value });
+                }}
                 style={({ pressed }) => [
                   styles.shapeChip,
                   {
@@ -303,25 +361,30 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
                 <Text
                   style={[styles.secondaryLabel, { color: active ? colors.onAccent : colors.text }]}
                 >
-                  {s === 'simple' ? 'Direct' : 'Fun & Explorative'}
+                  {s.label}
                 </Text>
               </Pressable>
             );
           })}
         </View>
         <Text style={[styles.note, { color: colors.textMuted }]}>
-          Fun & Explorative favours quiet, characterful roads; Direct keeps it straightforward.
+          Changes which roads we build the drive from — not how fast you drive it. Fun & Explorative
+          favours quiet, characterful roads; Direct keeps it straightforward; No preference lets
+          your own words decide.
         </Text>
       </View>
 
       {/* scenery */}
       <View style={styles.section}>
-        <Text style={[styles.label, { color: colors.text }]}>Scenery</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Scenery{fromText('preferViews')}</Text>
         <View style={styles.buttonRow}>
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ selected: draft.preferViews }}
-            onPress={() => setDraft({ preferViews: !draft.preferViews })}
+            onPress={() => {
+              touch('preferViews');
+              setDraft({ preferViews: !draft.preferViews });
+            }}
             style={({ pressed }) => [
               styles.shapeChip,
               {
@@ -350,7 +413,10 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
 
       {/* on the route */}
       <View style={styles.section}>
-        <Text style={[styles.label, { color: colors.text }]}>On the route</Text>
+        <Text style={[styles.label, { color: colors.text }]}>
+          On the route{fromText('avoidHighways')}
+          {fromText('pavedOnly')}
+        </Text>
         <View style={styles.buttonRow}>
           {(
             [
@@ -364,9 +430,10 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
                 key={key}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
-                onPress={() =>
-                  setDraft({ routeOptions: { ...draft.routeOptions, [key]: !active } })
-                }
+                onPress={() => {
+                  touch(key);
+                  setDraft({ routeOptions: { ...draft.routeOptions, [key]: !active } });
+                }}
                 style={({ pressed }) => [
                   styles.shapeChip,
                   {
@@ -421,6 +488,15 @@ const styles = StyleSheet.create({
   title: { ...font.title },
   section: { gap: spacing.sm },
   label: { ...font.heading },
+  // R25-U16d quick-fill affordances
+  fromText: { ...font.caption },
+  pinChip: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  pinLabel: { ...font.caption, fontWeight: '600' },
   brief: {
     minHeight: 96,
     borderWidth: 1,

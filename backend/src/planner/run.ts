@@ -17,6 +17,7 @@
  */
 
 import type {
+  CharacterTag,
   GenerationEvent,
   LatLng,
   ParsedConstraints,
@@ -30,7 +31,7 @@ import type { Client } from 'pg';
 import { getElevationProfile } from '../valhalla/elevation';
 import { travelMatrix } from '../valhalla/matrix';
 
-import { assembleAtoBWithRepair } from './atob';
+import { assembleAtoBWithRepair, ATOB_ASSEMBLY_RELAX_ON } from './atob';
 import { bundleForRequest } from './bundles';
 import {
   generateAtoBCandidates,
@@ -45,7 +46,7 @@ import {
   CHAIN_MIN_SPANS,
   chainMatrixLocations,
 } from './chain';
-import { profileForRequest, type CostingMode } from './costing';
+import { profileExcludesHighways, profileForRequest, type CostingMode } from './costing';
 import { measureCurvatureClassAware } from './curvature';
 import { diversify, prefilterByDuration } from './diversify';
 import {
@@ -53,6 +54,7 @@ import {
   EPSILON_CLOSURE_M,
   RELAXED_ASSEMBLY_CAPS,
   RESIDENTIAL_RUN_SOFT_M,
+  SELF_OVERLAP_RELAXED,
   RESIDENTIAL_SOFT_SHARE,
   RETRACE_RUN_SOFT_M,
   SELF_OVERLAP_CAP,
@@ -62,18 +64,19 @@ import { weightsForPreset } from './presets';
 import { initialParams, nextRelaxation, type SearchParams } from './relax';
 import { AVOID_DISC_RADIUS_M, resolveLocations, type ResolvedLocation } from './resolve_locations';
 import { retrieveAnchorPoints, retrieveCandidates } from './retrieve';
+import type { ClassMix } from './roadclass';
 import { buildScope } from './scope';
 import {
-  ARTERIAL_PRESENT_PENALTY,
   ARTERIAL_SHARE_SOFT,
   CORRIDOR_DOUBLING_SOFT,
-  dirtyPenaltyOf,
-  durationGradeOf,
+  DUR_HARD_TIER_ON,
+  DURATION_HARD_ERR,
   fallbackOffenceUnits,
   LOOPINESS_SOFT_FLOOR,
   mergeWeights,
-  PRESENT_TIER_DUROFF,
+  presentationKey,
   scoreCandidate,
+  TRACE_NULL_STRICT_ON,
   uturnCount,
   type ScoreBreakdown,
 } from './score';
@@ -96,6 +99,14 @@ export const ITERATION_CAP = 5;
  *  in a dead band between this trigger and the 20 % presentation demotion). */
 export const RESIZE_TRIGGER = 0.15;
 /**
+ * R25-U7b — a THIRD resize attempt (audit-v11: 7/60 loops over the asked time
+ * by >25 %, worst +93 %). resizedSpeed scales by the observed miss, so each
+ * attempt roughly halves the error; two attempts strand briefs whose terrain
+ * speed is far from the 38/50 km/h prior. One more regeneration only ever runs
+ * when attempt 2 STILL misses the median trigger — the common case pays zero.
+ */
+export const RESIZE_ATTEMPTS_3_ON = process.env['RESIZE_ATTEMPTS_3'] === 'on';
+/**
  * R21-4 honesty coverage: a presented best that misses the asked time by more
  * than this (aligned with RESIZE_TRIGGER — if resize couldn't close it, say so)
  * discloses it. And a loop whose isoperimetric loopiness is below the DISCLOSE
@@ -114,7 +125,9 @@ export const LOOPINESS_DISCLOSE_FLOOR = 0.1;
  * boolean never flipped on selfOverlap, so they were dead). Never gates
  * assembly — a degenerate route stays feasible, still sets `best`, still breaks
  * the ladder — so it cannot loosen the relax ladder or starve the pool. BD-42
- * tier order is preserved by construction (dirtyPenaltyOf caps at 204.5).
+ * tier order is preserved by construction (dirtyPenaltyOf caps at
+ * TIER_DIRTY + DIRTY_GRADE_CAP — 230 under the R25 V2 cap, 204.5 with
+ * HOOD_MEASURE_V2=off; both far below the next tier).
  *
  * REFUSED (R21-1, 2026-07-20, BD-62) per the pre-registered A/B + a 3-skeptic
  * adversarial review. On the 48-brief fixed suite vs the byte-identical OFF
@@ -215,6 +228,40 @@ export interface PlannerDeps {
   signal?: AbortSignal;
   /** R18-1 rollback lever: 'legacy' restores the BD-21 costing byte-identically. */
   costingMode?: CostingMode;
+  /** R25-U6a — pure observability: called once per iteration with the FULL
+   *  presentation-key decomposition of every scored candidate. Never changes
+   *  selection (read-only snapshot); exists so the A→B loss diagnostic can ask
+   *  "why did the 61 %-arterial chain lose to the 89 %-arterial single-touch?"
+   *  with recorded answers instead of guesses. */
+  onScored?: (rows: ScoredDebugRow[]) => void;
+}
+
+/** R25-U6a — one scored candidate's decomposition (observability only). */
+export interface ScoredDebugRow {
+  id: string;
+  score: number;
+  presentKey: number;
+  dirty: boolean;
+  /** WHICH dirty clauses fired (empty when clean) — the diagnostic's branch (i). */
+  dirtyClauses: string[];
+  units: number;
+  durOff: boolean;
+  contextHeavy: boolean;
+  urbanShare: number | null;
+  curviness: number;
+  durationS: number;
+  distanceM: number;
+  selfOverlap: number;
+  uturns: number;
+  spursWide: number;
+  microloops: number;
+  retraceRunM: number;
+  residentialShare: number | null;
+  residentialRunM: number | null;
+  arterialShare: number | null;
+  classMix: ClassMix | null;
+  backroadLongestM: number | null;
+  traceNull: boolean;
 }
 
 export interface PlannerResult {
@@ -241,6 +288,22 @@ export interface PlannerResult {
   arterialShare: number | null;
   /** R19: measured urban-context share (0 = countryside; null = unavailable). */
   urbanShare: number | null;
+  /** R25-U0 road-class truth of the chosen route (audit-v11 buckets);
+   *  optional so minimal results (out-and-back, early exits) stay valid. */
+  classMix?: ClassMix | null;
+  /** R25-U0 backroad continuity of the chosen route (m). */
+  backroadLongestM?: number | null;
+  backroadMeanM?: number | null;
+  /** R25-U0 longest hood-class run (m), ungraced. */
+  hoodRunM?: number | null;
+  /** R25-U0 flow: maneuvers per 10 driving minutes. */
+  turnsPer10min?: number | null;
+  /** R25-U8b — character treatments that actually RAN (derived from the
+   *  resolved bundle, never copied from the ask). The route payload and the
+   *  explain prompt read THIS, so the narration physically cannot claim a
+   *  treatment that never happened (audit-v11 issue #10: 'scenic' tagged on
+   *  routes that got zero scenic handling). Optional: minimal results omit it. */
+  characterApplied?: CharacterTag[];
 }
 
 /** Wire-shaped stop (matches shared RouteStopSchema field-for-field). */
@@ -390,6 +453,16 @@ export async function runPlanner(
   // rides profileForRequest below; here: weights, arterial bar, duration
   // tolerance, scenic's optional viewpoint garnish)
   const bundle = CHARACTER_BUNDLES_ON ? bundleForRequest(constraints) : null;
+  // R25-U8b — the treatments that actually RAN (from the resolved bundle),
+  // never the ask. plan.ts tags the route and feeds the explain prompt from
+  // THIS list, so narration can't claim a treatment that never happened.
+  {
+    const applied: CharacterTag[] = [];
+    if (bundle?.id === 'twisty') applied.push('twisty');
+    if (bundle?.id === 'backroads') applied.push('backroad');
+    if (bundle?.scenicApplied === true) applied.push('scenic');
+    result.characterApplied = applied;
+  }
   const baseWeights = mergeWeights(
     bundle?.weights ?? weightsForPreset(constraints.preset),
     constraints.weights,
@@ -466,6 +539,15 @@ export async function runPlanner(
   if (distanceNote !== null) params.disclosures.push(distanceNote);
   if (bundle !== null && bundle.durationTolerance !== DURATION_TOLERANCE_DEFAULT) {
     params = { ...params, durationTolerance: bundle.durationTolerance };
+  }
+  // R25-U3: a Fun & Explorative LOOP never includes highway — imposed as a
+  // hard avoid at ladder init, which buys for free: the working costing lever
+  // (U2 translation), the no-highway sizing speed (:798), rung-4 relaxation
+  // with an honest disclosure, and real validation rows (effectiveAvoid).
+  // A→B is exempt (owner decision — some town pairs have no non-highway path).
+  if (isLoop && profileExcludesHighways(profile) && !params.avoid.highways) {
+    params.avoid.highways = true;
+    params.imposedHighways = true;
   }
 
   // --- R18-4 location intents: resolve ONCE (deterministic; constraints do
@@ -550,6 +632,12 @@ export async function runPlanner(
       selfOverlap: number;
       closureM: number | null;
       snapOffsetM: number;
+      /** R25-U0 road-class truth + continuity + flow (null = untraced). */
+      classMix: ClassMix | null;
+      backroadLongestM: number | null;
+      backroadMeanM: number | null;
+      hoodRunM: number | null;
+      turnsPer10min: number | null;
     };
     score: ScoreBreakdown;
     curviness: number;
@@ -640,6 +728,7 @@ export async function runPlanner(
         stopCoverage: stopCoverageOf(effStops, row.candidate.stops),
         stops: resolved,
         relaxedConstraints: params.relaxedConstraints,
+        effectiveAvoid: params.avoid, // R25-U3: imposed avoids get real rows
         ...(intentsActive ? { resolvedLocations } : {}), // R18-4 measured location-intent verdicts
       },
       { durationTolerance: params.durationTolerance },
@@ -777,7 +866,10 @@ export async function runPlanner(
     });
     // no-highway loops average backroad speeds — size clusters accordingly
     // (per-profile speeds: shortest connectors are ~10 % slower — rq18 probe)
-    const sizingSpeed = params.avoid.highways
+    // R25-U3v2: sizing follows the COSTING — an imposed avoid keeps shortest
+    // (enforced by trace-reject), so its sizing speed is the profile normal.
+    const costingAvoidsHighways = params.avoid.highways && params.imposedHighways !== true;
+    const sizingSpeed = costingAvoidsHighways
       ? profile.sizingSpeedNoHighwayKmh
       : profile.sizingSpeedKmh;
     let candidates = isLoop
@@ -854,7 +946,10 @@ export async function runPlanner(
                   candidate,
                   {
                     ...profile.options, // R18-1: fun-vs-fast connector costing
-                    exclude_highways: params.avoid.highways,
+                    // R25-U3v2: only a USER-asked no-highways changes the
+                    // costing (U2 real levers); the imposed rule enforces via
+                    // the avoidHighways trace-reject below, preserving shortest.
+                    exclude_highways: costingAvoidsHighways,
                     exclude_tolls: params.avoid.tolls,
                     exclude_ferries: params.avoid.ferries,
                     exclude_unpaved: params.avoid.unpaved, // best-effort; trace scan = truth (R16-2)
@@ -862,6 +957,7 @@ export async function runPlanner(
                   {
                     repairSegments: retrieved.segments, // round 11b INSERT material
                     shouldStop: outOfBudget, // R18-2 repair cost bound
+                    avoidHighways: params.avoid.highways, // R25-U3v2 trace reject
                     ...(params.assemblyRelax ? RELAXED_ASSEMBLY_CAPS : {}), // rung 5
                   },
                 );
@@ -881,6 +977,11 @@ export async function runPlanner(
                   closureM: a.closureM as number | null,
                   snapOffsetM: a.snapOffsetM,
                   trace: a.trace,
+                  classMix: a.classMix, // R25-U0 road-class truth
+                  backroadLongestM: a.backroadLongestM,
+                  backroadMeanM: a.backroadMeanM,
+                  hoodRunM: a.hoodRunM,
+                  turnsPer10min: a.turnsPer10min,
                   assemblyAccepted: a.accepted,
                 };
               }
@@ -901,6 +1002,11 @@ export async function runPlanner(
                   scanUnpaved: params.avoid.unpaved, // unpaved flag only when it matters
                   repairSegments: retrieved.segments,
                   shouldStop: outOfBudget,
+                  // R25-U6d: rung 5 finally reaches A→B — the self-overlap cap
+                  // relaxes, the DETOUR cap NEVER does (falsified, BD-82)
+                  ...(ATOB_ASSEMBLY_RELAX_ON && params.assemblyRelax
+                    ? { selfOverlapCap: SELF_OVERLAP_RELAXED }
+                    : {}),
                 },
               );
               return {
@@ -917,6 +1023,11 @@ export async function runPlanner(
                 closureM: null as number | null,
                 snapOffsetM: 0, // A→B endpoints are user-chosen; no loop-pin snap story
                 trace: a.trace, // R18-3: always attempted (fail-open null)
+                classMix: a.classMix, // R25-U0 road-class truth
+                backroadLongestM: a.backroadLongestM,
+                backroadMeanM: a.backroadMeanM,
+                hoodRunM: a.hoodRunM,
+                turnsPer10min: a.turnsPer10min,
                 assemblyAccepted: a.accepted,
               };
             } catch {
@@ -946,7 +1057,12 @@ export async function runPlanner(
       const target = constraints.duration_target_s;
       let sizingV = sizingSpeed;
       let batch = routed;
-      for (let attempt = 1; attempt <= 2 && batch.length > 0 && !outOfBudget(); attempt++) {
+      const maxResizeAttempts = RESIZE_ATTEMPTS_3_ON ? 3 : 2; // R25-U7b
+      for (
+        let attempt = 1;
+        attempt <= maxResizeAttempts && batch.length > 0 && !outOfBudget();
+        attempt++
+      ) {
         const durs = batch.map((r) => r.route.duration_s).sort((a, b) => a - b);
         const median = durs[Math.floor(durs.length / 2)]!;
         if (Math.abs(median - target) / target <= RESIZE_TRIGGER) break;
@@ -1009,19 +1125,31 @@ export async function runPlanner(
         SHAPE_QUALITY_ON && isLoop ? corridorDoublingRatio(r.route.geometry, origin) : null;
       // presentation key: any u-turn, wide-window spur (block spins), or
       // notable there-and-back ranks below every clean route (rounds 2–6) —
-      // last-resort material, never preferred content
-      const dirty =
-        uturnCount(r.route) > 0 ||
-        r.spursWide > 0 ||
-        r.retraceRunM > RETRACE_RUN_SOFT_M ||
-        (r.residentialShare ?? 0) > RESIDENTIAL_SOFT_SHARE || // round 7
-        (r.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M || // round 8b
-        r.microloops > 0 || // round 8
-        // R21-1: degenerate loop shape + the previously-inert 0.15-0.30 self-
-        // overlap units (all null/off → false → byte-identical no-op)
-        (shapeLoopiness !== null && shapeLoopiness < LOOPINESS_SOFT_FLOOR) ||
-        (shapeCorridor !== null && shapeCorridor > CORRIDOR_DOUBLING_SOFT) ||
-        (SHAPE_QUALITY_ON && isLoop && r.selfOverlap > SELF_OVERLAP_CAP);
+      // last-resort material, never preferred content. R25-U6a: each clause
+      // is NAMED so the loss diagnostic can report which one fired — the
+      // boolean is derived from the list, semantics unchanged.
+      const dirtyClauses: string[] = [];
+      if (uturnCount(r.route) > 0) dirtyClauses.push('uturn');
+      if (r.spursWide > 0) dirtyClauses.push('spur');
+      if (r.retraceRunM > RETRACE_RUN_SOFT_M) dirtyClauses.push('retrace');
+      if ((r.residentialShare ?? 0) > RESIDENTIAL_SOFT_SHARE) dirtyClauses.push('res_share'); // round 7
+      if ((r.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M) dirtyClauses.push('res_run'); // round 8b
+      if (r.microloops > 0) dirtyClauses.push('microloop'); // round 8
+      // R21-1: degenerate loop shape + the previously-inert 0.15-0.30 self-
+      // overlap units (all null/off → false → byte-identical no-op)
+      if (shapeLoopiness !== null && shapeLoopiness < LOOPINESS_SOFT_FLOOR) {
+        dirtyClauses.push('loopiness');
+      }
+      if (shapeCorridor !== null && shapeCorridor > CORRIDOR_DOUBLING_SOFT) {
+        dirtyClauses.push('corridor_doubling');
+      }
+      if (SHAPE_QUALITY_ON && isLoop && r.selfOverlap > SELF_OVERLAP_CAP) {
+        dirtyClauses.push('self_overlap');
+      }
+      // R25-U8c: unmeasured IS dirty — a route nobody traced can never
+      // outrank a measured-clean pool-mate (audit issue #13)
+      if (TRACE_NULL_STRICT_ON && r.trace === null) dirtyClauses.push('trace_null');
+      const dirty = dirtyClauses.length > 0;
       // round 14: an on-target route outranks a shorter one of the same
       // quality tier (2nd lexicographic tier, below quality)
       const durOff =
@@ -1062,18 +1190,62 @@ export async function runPlanner(
         loopiness: shapeLoopiness, // R21-1 (null → 0)
         corridorDoubling: shapeCorridor,
       });
-      // R18-2 within-tier duration grade: closes the 10-20 % dead band without
-      // touching the BD-42 tier order (grade max 2 < 5 < 10).
-      const durGrade = durationGradeOf(r.route.duration_s, constraints.duration_target_s);
-      const presentKey =
-        breakdown.score -
-        dirtyPenaltyOf(dirty, units) -
-        (durOff ? PRESENT_TIER_DUROFF : 0) -
-        (contextHeavy ? ARTERIAL_PRESENT_PENALTY : 0) - // R19: urban context tier
-        durGrade;
-      return { r, curv, breakdown, presentKey, urbanShare };
+      // R25-U9a: THE shared presentation key (score.ts presentationKey) —
+      // run.ts, eval and the tier-order proof can no longer drift.
+      const presentKey = presentationKey({
+        score: breakdown.score,
+        dirty,
+        units,
+        durOff,
+        contextHeavy, // R19: urban context tier
+        durationS: r.route.duration_s,
+        durationTargetS: constraints.duration_target_s,
+        turnsPer10min: r.turnsPer10min ?? null, // R25-U9b (grade 0 while flag off)
+        backroadLongestM: r.backroadLongestM ?? null, // R25-U10 continuity (flag off → 0)
+        mixExempt: profile.id === 'simple', // fast main roads are the ask
+      });
+      return {
+        r,
+        curv,
+        breakdown,
+        presentKey,
+        urbanShare,
+        dirtyClauses,
+        units,
+        durOff,
+        contextHeavy,
+      };
     });
     step(emit, 'score_rank', 'completed', `${scored.length} scored`);
+    // R25-U6a observability: full decomposition per scored candidate (never
+    // changes selection — a read-only snapshot for the loss diagnostic).
+    deps.onScored?.(
+      scored.map((s) => ({
+        id: s.r.candidate.id,
+        score: s.breakdown.score,
+        presentKey: s.presentKey,
+        dirty: s.dirtyClauses.length > 0,
+        dirtyClauses: s.dirtyClauses,
+        units: s.units,
+        durOff: s.durOff,
+        contextHeavy: s.contextHeavy,
+        urbanShare: s.urbanShare,
+        curviness: s.curv.curviness,
+        durationS: s.r.route.duration_s,
+        distanceM: s.r.route.distance_m,
+        selfOverlap: s.r.selfOverlap,
+        uturns: uturnCount(s.r.route),
+        spursWide: s.r.spursWide,
+        microloops: s.r.microloops,
+        retraceRunM: s.r.retraceRunM,
+        residentialShare: s.r.residentialShare,
+        residentialRunM: s.r.residentialRunM,
+        arterialShare: s.r.arterialShare,
+        classMix: s.r.classMix ?? null,
+        backroadLongestM: s.r.backroadLongestM ?? null,
+        traceNull: s.r.trace === null,
+      })),
+    );
 
     step(emit, 'diversify', 'started');
     const diversified = diversify(
@@ -1103,6 +1275,7 @@ export async function runPlanner(
           stopCoverage: stopCoverageOf(effectiveStops, s.r.candidate.stops),
           stops: resolved,
           relaxedConstraints: params.relaxedConstraints,
+          effectiveAvoid: params.avoid, // R25-U3: imposed avoids get real rows
           ...(intentsActive ? { resolvedLocations } : {}), // R18-4 measured location-intent verdicts
         },
         { durationTolerance: params.durationTolerance },
@@ -1129,6 +1302,12 @@ export async function runPlanner(
             selfOverlap: s.r.selfOverlap,
             closureM: s.r.closureM,
             snapOffsetM: s.r.snapOffsetM,
+            // R25-U0: road-class truth + continuity + flow carried to the result
+            classMix: s.r.classMix,
+            backroadLongestM: s.r.backroadLongestM,
+            backroadMeanM: s.r.backroadMeanM,
+            hoodRunM: s.r.hoodRunM,
+            turnsPer10min: s.r.turnsPer10min,
           },
           score: s.breakdown,
           curviness: s.curv.curviness,
@@ -1223,6 +1402,12 @@ export async function runPlanner(
   result.countryScore = best.countryScore;
   result.arterialShare = best.arterialShare;
   result.urbanShare = best.urbanShare;
+  // R25-U0: road-class truth + continuity + flow of the chosen route
+  result.classMix = best.routed.classMix ?? null;
+  result.backroadLongestM = best.routed.backroadLongestM ?? null;
+  result.backroadMeanM = best.routed.backroadMeanM ?? null;
+  result.hoodRunM = best.routed.hoodRunM ?? null;
+  result.turnsPer10min = best.routed.turnsPer10min ?? null;
   // R19 honest expectation-setting: when the chosen drive spends real time in
   // town before it opens up, SAY so (arterial-locked origins — the audit's
   // "20-30 min commute to the good stuff" finding, disclosed not hidden).
@@ -1255,8 +1440,11 @@ export async function runPlanner(
     if (target !== null && target > 0) {
       const err = (result.route.duration_s - target) / target;
       if (Math.abs(err) > RESIZE_TRIGGER) {
+        // R25-U7a: calling +93 % "a bit over" was a lie — past the hard bar
+        // the copy says "well". Same flag as the tier so OFF stays byte-identical.
+        const degree = DUR_HARD_TIER_ON && Math.abs(err) > DURATION_HARD_ERR ? 'well' : 'a bit';
         result.disclosures.push(
-          `about ${Math.round(result.route.duration_s / 60)} min — a bit ${
+          `about ${Math.round(result.route.duration_s / 60)} min — ${degree} ${
             err < 0 ? 'under' : 'over'
           } the ${Math.round(target / 60)} you asked; the roads here don’t form a cleaner loop at that exact length`,
         );

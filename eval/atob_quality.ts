@@ -56,6 +56,15 @@ interface Row {
   uturns: number | null;
   ms: number;
   note: string;
+  /** R25-U0 road-class truth (%, audit-v11 buckets). */
+  highwayPct: number | null;
+  mainPct: number | null;
+  backroadPct: number | null;
+  hoodPct: number | null;
+  /** R25-U0 continuity + flow. */
+  backroadLongestM: number | null;
+  hoodRunM: number | null;
+  turnsPer10min: number | null;
 }
 
 async function main(): Promise<void> {
@@ -89,6 +98,13 @@ async function main(): Promise<void> {
         note:
           (chained ? 'chained' : 'no-chain') +
           (res.disclosures.length > 0 ? `; ${res.disclosures.join(' / ')}` : ''),
+        highwayPct: res.classMix ? Math.round(res.classMix.highwayShare * 100) : null,
+        mainPct: res.classMix ? Math.round(res.classMix.mainShare * 100) : null,
+        backroadPct: res.classMix ? Math.round(res.classMix.backroadShare * 100) : null,
+        hoodPct: res.classMix ? Math.round(res.classMix.hoodShare * 100) : null,
+        backroadLongestM: res.backroadLongestM == null ? null : Math.round(res.backroadLongestM),
+        hoodRunM: res.hoodRunM == null ? null : Math.round(res.hoodRunM),
+        turnsPer10min: res.turnsPer10min == null ? null : Math.round(res.turnsPer10min * 10) / 10,
       };
     } catch (err) {
       row = {
@@ -102,6 +118,13 @@ async function main(): Promise<void> {
         uturns: null,
         ms: Math.round(performance.now() - t0),
         note: err instanceof Error ? err.message.slice(0, 80) : 'unknown',
+        highwayPct: null,
+        mainPct: null,
+        backroadPct: null,
+        hoodPct: null,
+        backroadLongestM: null,
+        hoodRunM: null,
+        turnsPer10min: null,
       };
     }
     rows.push(row);
@@ -127,6 +150,19 @@ async function main(): Promise<void> {
   console.log(`chain candidates generated: ${chainedCount}/${BRIEFS.length} briefs`);
   console.log(`arterial share of bests: mean ${Math.round(meanOf(arts))} %`);
   console.log(`curviness of bests: mean ${meanOf(curvs).toFixed(2)}`);
+  // R25-U0 road-class scoreboard
+  const num = (xs: Array<number | null>): number[] => xs.filter((v): v is number => v !== null);
+  const hw = num(ok.map((r) => r.highwayPct));
+  const mn = num(ok.map((r) => r.mainPct));
+  const bk = num(ok.map((r) => r.backroadPct));
+  const hd = num(ok.map((r) => r.hoodPct));
+  const t10 = num(ok.map((r) => r.turnsPer10min));
+  console.log(
+    `road class (R25): hwy mean ${meanOf(hw).toFixed(1)} % (${hw.filter((v) => v > 0).length} routes >0) · main mean ${Math.round(meanOf(mn))} % · backroad mean ${Math.round(meanOf(bk))} % · hood mean ${meanOf(hd).toFixed(1)} %`,
+  );
+  console.log(
+    `continuity/flow (R25): backroad longest mean ${Math.round(meanOf(num(ok.map((r) => r.backroadLongestM))))} m · hood run max ${Math.max(0, ...num(ok.map((r) => r.hoodRunM)))} m · turns/10min mean ${meanOf(t10).toFixed(1)}`,
+  );
   console.log(
     `u-turns in bests: ${ok.reduce((s, r) => s + (r.uturns ?? 0), 0)} across ${ok.length} routes`,
   );

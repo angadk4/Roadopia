@@ -639,3 +639,71 @@ export function corridorDoublingRatio(
   }
   return doubled / steps.length;
 }
+
+// --- R25-U11 Discover reversal detector --------------------------------------
+
+/** Window (m) of net travel measured on each side of a queried point. */
+export const REVERSAL_WINDOW_M = 300;
+/** Net-direction change beyond this = the route reverses at the point. */
+export const REVERSAL_ANGLE_DEG = 135;
+
+/**
+ * R25-U11 — the UNCOUNTED reversal (audit-v11): Discover routes its featured
+ * road with `middleType: 'through'`, which FORBIDS a u-turn at the point — so
+ * Valhalla circles a block to reverse instead, no `uturn_*` maneuver is ever
+ * emitted (`uturnCount` reads 0) and the block-circle is too small/legitimate
+ * for the microloop detector. This detector is pure GEOMETRY: for each queried
+ * point (a core's entry/exit), compare the route's NET displacement direction
+ * over the ~window before arriving vs after leaving; a change beyond
+ * REVERSAL_ANGLE_DEG is a reversal. Returns the indices (into `points`) that
+ * reverse. On an out-and-back a reversal is a SHAPE FACT to state, not a
+ * defect to fail — it sorts loop cores above out-and-backs, it never drops.
+ * Deterministic, engine-free; points too close to either end to fit half a
+ * window are skipped (unknown is never reported as a reversal).
+ */
+export function reversalPositions(
+  geometry: LineString,
+  points: ReadonlyArray<{ lat: number; lng: number }>,
+  windowM: number = REVERSAL_WINDOW_M,
+): number[] {
+  const pts = resample(
+    geometry.coordinates.map(([lon, lat]) => [lon, lat] as LonLat),
+    OVERLAP_RESAMPLE_M,
+  );
+  if (pts.length < 3 || points.length === 0) return [];
+  const latM = 111_320;
+  const lngM = 111_320 * Math.cos((43.2 * Math.PI) / 180);
+  const steps = Math.max(1, Math.round(windowM / OVERLAP_RESAMPLE_M));
+
+  const out: number[] = [];
+  for (let q = 0; q < points.length; q++) {
+    const p = points[q]!;
+    // nearest resampled vertex to the queried point (planar metres)
+    let best = 0;
+    let bestD2 = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const dx = (pts[i]![0] - p.lng) * lngM;
+      const dy = (pts[i]![1] - p.lat) * latM;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = i;
+      }
+    }
+    const i0 = best - steps;
+    const i1 = best + steps;
+    if (i0 < 0 || i1 >= pts.length) continue; // can't judge — never guess
+    // net displacement vectors: before (i0 → best) and after (best → i1)
+    const bx = (pts[best]![0] - pts[i0]![0]) * lngM;
+    const by = (pts[best]![1] - pts[i0]![1]) * latM;
+    const ax = (pts[i1]![0] - pts[best]![0]) * lngM;
+    const ay = (pts[i1]![1] - pts[best]![1]) * latM;
+    const nb = Math.hypot(bx, by);
+    const na = Math.hypot(ax, ay);
+    if (nb === 0 || na === 0) continue; // degenerate window (stationary snap)
+    const cos = (bx * ax + by * ay) / (nb * na);
+    const angleDeg = (Math.acos(Math.min(1, Math.max(-1, cos))) * 180) / Math.PI;
+    if (angleDeg > REVERSAL_ANGLE_DEG) out.push(q);
+  }
+  return out;
+}

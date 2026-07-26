@@ -25,8 +25,11 @@ export const K_CLUSTERS_DEFAULT = 8;
 export const N_CANDIDATES_DEFAULT = 20;
 /** Greedy cluster absorption radius (m) — segments this close join the seed's cluster. */
 export const CLUSTER_RADIUS_M = 2_500;
-/** Return anchor sits roughly at this fraction of the cluster distance from origin. */
-export const RETURN_ANCHOR_DISTANCE_FRACTION = 0.6;
+/** Return anchor sits roughly at this fraction of the cluster distance from
+ *  origin. R25-U20 (audit issue #8, loopiness mean 0.26): at 0.6 the single
+ *  return anchor DRAWS a wedge by construction — env-swept {0.75, 0.85, 0.95}
+ *  before any new code path (cheapest-first per the plan). */
+export const RETURN_ANCHOR_DISTANCE_FRACTION = Number(process.env['RETURN_ANCHOR_FRACTION'] ?? 0.6);
 
 // R16-fix: a DEFENSIVE sanity bound on how far an anchored stop may sit from its
 // aim point — the stop-aware repair pass (loop.ts) is what actually keeps stopped
@@ -69,6 +72,11 @@ export interface CandidateSpanRef {
   /** R18-4: a user-intent span ("through Forks of the Credit") — repair may
    *  NEVER move or drop it; presentation may only disclose. */
   pinned?: boolean;
+  /** R25-U6c: the span's chain value (curviness-priced) — value-aware repair
+   *  drops the worst detour-PER-UNIT-VALUE, not the most off-corridor span
+   *  (which is systematically the curviest: curvy roads are why you leave
+   *  the corridor). Absent → repair treats it as 1 (neutral). */
+  value?: number;
 }
 
 /** One anchored stop on a candidate (R16-3). waypointIndex points into

@@ -122,20 +122,61 @@ describe('nextRelaxation ladder (M3-T12)', () => {
     expect(outcomes[outcomes.length - 1]!.kind).toBe('redirect');
   });
 
-  it('R18-2 fast-forward: a zero-assembled iteration at rung ≥ 2 jumps to assembly-relax', () => {
+  it('R25-U3 fast-forward: zero-assembled with an avoid PENDING jumps to rung 4 (the avoid relax), not past it', () => {
+    // The R18-2 fast-forward jumped straight to assembly-relax, SKIPPING the
+    // avoid rung — but the avoid set reaches the Valhalla costing, so rung 4
+    // genuinely changes which routes exist. A highway-locked region whose
+    // assemblies all died could never shed its avoid (found in R25 planning).
     let params = initialParams(constraints());
-    // climb one rung normally (rung 1 → widen)
     const first = nextRelaxation(params, { assembledCount: 5 });
     expect(first.kind).toBe('retry');
     if (first.kind !== 'retry') return;
     params = first.params;
-    // pool died at Wall A → skip rungs 2-4 entirely
+    // pool died at Wall A with avoids still set → the avoid rung runs FIRST
+    const jumped = nextRelaxation(params, { assembledCount: 0 });
+    expect(jumped.kind).toBe('retry');
+    if (jumped.kind === 'retry') {
+      expect(jumped.params.relaxedConstraints.length).toBeGreaterThan(0); // an avoid dropped
+      expect(jumped.params.assemblyRelax).toBe(false); // rung 5 not yet burned
+      // θ untouched — rungs 2-3 were bypassed, not silently applied
+      expect(jumped.params.thetaCurvy).toBe(params.thetaCurvy);
+    }
+  });
+
+  it('R18-2 fast-forward: zero-assembled with NO avoid pending still jumps to assembly-relax', () => {
+    let params = initialParams(
+      constraints({ avoid: { highways: false, tolls: false, ferries: false, unpaved: false } }),
+    );
+    const first = nextRelaxation(params, { assembledCount: 5 });
+    if (first.kind !== 'retry') return;
+    params = first.params;
     const jumped = nextRelaxation(params, { assembledCount: 0 });
     expect(jumped.kind).toBe('retry');
     if (jumped.kind === 'retry') {
       expect(jumped.params.assemblyRelax).toBe(true);
-      // θ untouched — rungs 2-4 were bypassed, not silently applied
       expect(jumped.params.thetaCurvy).toBe(params.thetaCurvy);
+    }
+  });
+
+  it('R25-U3: an IMPOSED highway avoid relaxes with product-rule wording, a user ask keeps the broken-promise wording', () => {
+    const c = constraints({
+      avoid: { highways: true, tolls: false, ferries: false, unpaved: false },
+    });
+    // imposed: the fun profile set it, not the user
+    const imposed = { ...initialParams(c), rung: 4, imposedHighways: true };
+    const outI = nextRelaxation(imposed);
+    expect(outI.kind).toBe('retry');
+    if (outI.kind === 'retry') {
+      const d = outI.params.disclosures[outI.params.disclosures.length - 1]!;
+      expect(d).toContain('no non-highway route');
+      expect(d).not.toContain('RELAXED a hard constraint');
+    }
+    // user-asked: the original wording stands
+    const asked = { ...initialParams(c), rung: 4 };
+    const outA = nextRelaxation(asked);
+    if (outA.kind === 'retry') {
+      const d = outA.params.disclosures[outA.params.disclosures.length - 1]!;
+      expect(d).toContain('RELAXED a hard constraint');
     }
   });
 

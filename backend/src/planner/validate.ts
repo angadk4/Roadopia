@@ -63,6 +63,11 @@ export interface ValidationInput {
    *  relaxed rows when provided (run.ts passes them; older callers fall back
    *  to the honest blanket). */
   resolvedLocations?: readonly ResolvedLocation[];
+  /** R25-U3: the EFFECTIVE avoid set (constraints.avoid + profile-imposed
+   *  rules, minus ladder relaxations). When provided, the Tier-2 avoid scans
+   *  key on it — an imposed no-highway rule gets a REAL measured row instead
+   *  of the dishonest 'not_applicable / not requested'. Absent = legacy. */
+  effectiveAvoid?: ParsedConstraints['avoid'];
 }
 
 export interface ValidationVerdict {
@@ -117,8 +122,14 @@ export function validateCandidate(
     ['ferries', route.has_ferry, 'ferry'],
     ['unpaved', route.has_unpaved, 'unpaved'],
   ];
+  // R25-U3: scan against the EFFECTIVE avoid set when provided — an imposed
+  // no-highway rule (the fun profile's) gets a real measured row, and a
+  // rung-4-relaxed avoid keeps its row (as 'relaxed') instead of vanishing
+  // into 'not_applicable'.
+  const avoidSet = input.effectiveAvoid ?? constraints.avoid;
   for (const [key, present, label] of scans) {
-    if (!constraints.avoid[key]) {
+    const relaxedRow = relaxed.has(`avoid_${label}`);
+    if (!avoidSet[key] && !relaxedRow) {
       results.push({
         constraint: `avoid_${label}`,
         tier: 2,
@@ -127,11 +138,9 @@ export function validateCandidate(
       });
       continue;
     }
-    const status: ConstraintStatus = present
-      ? relaxed.has(`avoid_${label}`)
-        ? 'relaxed'
-        : 'violated'
-      : 'satisfied';
+    // imposed = active in the effective set but never asked by the user
+    const imposed = input.effectiveAvoid !== undefined && !constraints.avoid[key];
+    const status: ConstraintStatus = present ? (relaxedRow ? 'relaxed' : 'violated') : 'satisfied';
     results.push({
       constraint: `avoid_${label}`,
       tier: 2,
@@ -139,8 +148,12 @@ export function validateCandidate(
       detail: present
         ? status === 'relaxed'
           ? `${label} present — relaxed with disclosure`
-          : `route contains ${label} despite avoid request (result-scan)`
-        : `no ${label} in routed result`,
+          : imposed
+            ? `route contains ${label} — fun drives exclude ${label}s (result-scan)`
+            : `route contains ${label} despite avoid request (result-scan)`
+        : imposed
+          ? `no ${label} in routed result (fun drives exclude ${label}s)`
+          : `no ${label} in routed result`,
     });
   }
 

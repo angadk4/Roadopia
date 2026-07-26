@@ -275,3 +275,122 @@ describe('discoverDrives (R23-U4 golden fixture)', () => {
     expect(res.disclosures[0]).toMatch(/no standout drives/i);
   });
 });
+
+// --- R25-U11 Discover Stage 1: gates (report/strict; 'off' proven byte-
+// identical by every test above running with the default) ------------------
+
+/** Big named roads (over the gated 8 km floor), one near, one far. */
+const GATE_FIXTURE: CandidateSegment[] = [
+  seg('nearbig', 'Near Grand Rd', 'tertiary', 8500, 2.2, 43.56, -80.08),
+  seg('farbig', 'Far Grand Rd', 'tertiary', 8500, 2.4, 43.85, -80.25),
+];
+
+/** Polygon (non-retracing) pre-build so the pure detectors judge the GATES,
+ *  not the straight-line stub's artificial perfect retrace. */
+const polygonRouteFn = async (
+  _url: string,
+  { waypoints }: { waypoints: ReadonlyArray<readonly [number, number]> },
+): Promise<RouteThroughOutput> => {
+  const [o, entry, exit] = [waypoints[0]!, waypoints[1]!, waypoints[2]!];
+  const off = 0.03; // detour the return leg so nothing retraces
+  const coords: Array<[number, number]> = [
+    [o[0], o[1]],
+    [entry[0], entry[1]],
+    [exit[0], exit[1]],
+    [exit[0] - off, exit[1] - off],
+    [o[0], o[1]],
+  ];
+  let dist = 0;
+  for (let i = 1; i < coords.length; i++) dist += haversineMeters(coords[i - 1]!, coords[i]!);
+  return {
+    geometry: { type: 'LineString', coordinates: coords },
+    distance_m: dist,
+    duration_s: dist / MATRIX_SPEED_MS,
+    legs: [],
+    maneuvers: [],
+    has_highway: false,
+    has_toll: false,
+    has_ferry: false,
+    has_unpaved: false,
+  };
+};
+
+function gateDeps(
+  traceEdges: (routeLenM: number) => Array<{ roadClass: string; lengthM: number }>,
+  routeBuilder = polygonRouteFn,
+): DiscoverDeps {
+  return {
+    ...depsWith(GATE_FIXTURE, [
+      {
+        id: 'seed-x',
+        name: 'Classic X',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-80.02, 43.61],
+            [-80.0, 43.62],
+            [-79.98, 43.63],
+          ],
+        },
+        waypoints: [
+          { lat: 43.61, lng: -80.02 },
+          { lat: 43.63, lng: -79.98 },
+        ],
+        is_loop: false,
+        distance_m: 6000,
+        duration_s: 600,
+        curviness: 0,
+      },
+    ]),
+    routeFn: routeBuilder,
+    traceFn: async (_url, geometry) => {
+      const coords = geometry.coordinates as Array<[number, number]>;
+      let len = 0;
+      for (let i = 1; i < coords.length; i++) len += haversineMeters(coords[i - 1]!, coords[i]!);
+      return { edges: traceEdges(len), matchedShape: null };
+    },
+  };
+}
+
+describe('R25-U11 Discover gates (report/strict)', () => {
+  const cleanEdges = (len: number) => [{ roadClass: 'tertiary', lengthM: len }];
+
+  it('report: clean drives keep; classics leave the ranked menu; NO refill padding', async () => {
+    const res = await discoverDrives(ORIGIN, gateDeps(cleanEdges), { gates: 'report' });
+    expect(res.drives.length).toBeGreaterThan(0);
+    expect(res.drives.every((d) => d.source === 'auto')).toBe(true); // classics out
+    expect(res.drives.every((d) => d.length_m >= 8000)).toBe(true); // gated floor
+    // the menu is honestly short (2 big roads) — no refill to MENU_MIN
+    expect(res.drives.length).toBeLessThan(DISCOVER_MENU_MIN);
+  });
+
+  it('highway on the trip DROPS in BOTH modes, with the count disclosed', async () => {
+    const trunkEdges = (len: number) => [
+      { roadClass: 'trunk', lengthM: 1000 }, // over the 600 m floor
+      { roadClass: 'tertiary', lengthM: Math.max(0, len - 1000) },
+    ];
+    for (const gates of ['report', 'strict'] as const) {
+      const res = await discoverDrives(ORIGIN, gateDeps(trunkEdges), { gates });
+      expect(res.drives).toEqual([]);
+      expect(res.disclosures.join(' ')).toMatch(/highway on the way/);
+    }
+  });
+
+  it('a neighbourhood-heavy trip DROPS in both modes', async () => {
+    const hoodEdges = (len: number) => [{ roadClass: 'residential', lengthM: len }];
+    const res = await discoverDrives(ORIGIN, gateDeps(hoodEdges), { gates: 'report' });
+    expect(res.drives).toEqual([]);
+    expect(res.disclosures.join(' ')).toMatch(/neighbourhood/);
+  });
+
+  it('mostly-commute drives DEMOTE + disclose in report, DROP in strict', async () => {
+    // farbig: ~43 km out, 8.5 km of road → connector share ≈ 0.87 > 0.85;
+    // nearbig stays a genuine drive. Report keeps both (far one LAST, said
+    // plainly); strict keeps only the genuine one.
+    const report = await discoverDrives(ORIGIN, gateDeps(cleanEdges), { gates: 'report' });
+    expect(report.drives.map((d) => d.segmentId)).toEqual(['nearbig', 'farbig']);
+    expect(report.disclosures.join(' ')).toMatch(/getting-there|shown last/);
+    const strict = await discoverDrives(ORIGIN, gateDeps(cleanEdges), { gates: 'strict' });
+    expect(strict.drives.map((d) => d.segmentId)).toEqual(['nearbig']);
+  });
+});

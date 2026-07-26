@@ -65,6 +65,31 @@ describe('POST /discover (R23-U5)', () => {
     expect(body.drives[0]!.name).toBe('Test Road');
   });
 
+  it('R25-U14: absent `v` STAYS the v1 shape; v:2 routes to the core browse — the compat pin', async () => {
+    // Installed apps can't be force-updated: the day this test is deleted,
+    // every existing install shows "Discover returned an unexpected
+    // response." Deleting it must be a deliberate act (see route TODO).
+    let coresCalls = 0;
+    const app = appWith({
+      discoverCoresFn: async () => {
+        coresCalls++;
+        return { v: 2, drives: [], reachMinutes: 60, disclosures: ['none yet'] };
+      },
+    });
+    const v1 = await app.inject({ method: 'POST', url: '/discover', payload: { origin: ORIGIN } });
+    expect(v1.statusCode).toBe(200);
+    expect((v1.json() as DiscoverResult).drives[0]!.name).toBe('Test Road'); // legacy fn ran
+    expect(coresCalls).toBe(0);
+    const v2 = await app.inject({
+      method: 'POST',
+      url: '/discover',
+      payload: { origin: ORIGIN, v: 2 },
+    });
+    expect(v2.statusCode).toBe(200);
+    expect((v2.json() as { v: number }).v).toBe(2);
+    expect(coresCalls).toBe(1);
+  });
+
   it('out-of-region origin → 400 out_of_region', async () => {
     const app = appWith();
     const res = await app.inject({

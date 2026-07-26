@@ -85,6 +85,10 @@ const ErrorEventSchema = z.object({
 const ConstraintsEventSchema = z.object({
   type: z.literal('constraints'),
   constraints: ParsedConstraintsSchema,
+  /** R25-U16a — controls that CONTRADICTED the text, named (e.g. "road
+   *  character: the simple chip replaced the text's twisty ask"). Additive
+   *  optional: old installed apps' non-strict zod strips it silently. */
+  overrides: z.array(z.string()).optional(),
 });
 
 const DoneEventSchema = z.object({

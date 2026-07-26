@@ -14,7 +14,7 @@
 
 import { z } from 'zod';
 
-import type { AutoCostingOptions } from './route';
+import { realizeCostingOptions, type AutoCostingOptions } from './route';
 
 const MatrixCellSchema = z.object({
   time: z.number().nonnegative().nullable(),
@@ -56,7 +56,11 @@ export async function travelMatrix(baseUrl: string, req: MatrixRequest): Promise
     sources: locs,
     targets: locs,
     costing: 'auto',
-    ...(req.costingOptions ? { costing_options: { auto: req.costingOptions } } : {}),
+    // R25-U2: same avoid-intent translation as /route (matrix budgets must not
+    // be costed on roads the drive itself is forbidden from using)
+    ...(req.costingOptions
+      ? { costing_options: { auto: realizeCostingOptions(req.costingOptions) } }
+      : {}),
   };
   const res = await fetch(`${baseUrl.replace(/\/$/, '')}/sources_to_targets`, {
     method: 'POST',

@@ -133,6 +133,50 @@ describe('/plan discovery tap contract (R23-U0)', () => {
     expect(seen()).toBeNull();
   });
 
+  it('R25-U11: an out_and_back tap NEVER spends an LLM call on its synthetic brief', async () => {
+    // audit-v11: every Discover tap paid a Haiku parse whose output the
+    // out-and-back branch discarded whole. Pin the fix: with a live aiClient,
+    // the tap's PARSE must not touch it (parse LLM calls counted before the
+    // planner runs; the explain path after the route is separate, legitimate
+    // narration spend and not what this pins).
+    let parsePhase = true;
+    let parseLlmCalls = 0;
+    const app = buildServer({
+      plan: {
+        db: {} as unknown as Client,
+        valhallaUrl: 'http://127.0.0.1:8002',
+        region,
+        aiClient: {
+          call: async () => {
+            if (parsePhase) parseLlmCalls++;
+            return { text: '{}' };
+          },
+        },
+        guard: null,
+        ledger: new MemoryLedger(),
+        logFn: async () => null,
+        planFn: async () => okPlannerResult(),
+        outAndBackFn: async () => {
+          parsePhase = false; // anything after this is explain spend, not parse
+          return okPlannerResult();
+        },
+      } as never,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/plan',
+      payload: {
+        brief: 'Out and back to Hockley Road',
+        origin: ORIGIN,
+        out_and_back: { entry: NEAR, exit: { lat: 43.74, lng: -79.95 }, name: 'Hockley Road' },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(parseLlmCalls).toBe(0);
+    // the honest breadcrumb is on the wire too
+    expect(res.body).toContain('oab: no LLM spend');
+  });
+
   it('region-checks the out_and_back endpoints (Hard rule K)', async () => {
     const { app } = appCapturing();
     const res = await app.inject({

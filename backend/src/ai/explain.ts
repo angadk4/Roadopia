@@ -29,6 +29,16 @@ export interface RouteFacts {
   satisfied: string[];
   relaxed: string[];
   viewpointCount: number;
+  /** R25-U8b — character treatments that actually RAN on this request (from
+   *  the resolved bundle, never the ask). The prompt sees only this, so the
+   *  narration cannot claim a scenic/twisty handling that never happened.
+   *  Optional: absent when CHARACTER_APPLIED is off (byte-identical prompts). */
+  characterApplied?: string[];
+  /** R25-U16a — controls that CONTRADICTED the text ("road character: the
+   *  simple chip replaced the text's twisty ask"). The narration says the
+   *  chip won instead of pretending the text was honoured. Absent when text
+   *  and controls agree (byte-identical prompts for the common case). */
+  clientOverrides?: string[];
 }
 
 export interface Explanation {

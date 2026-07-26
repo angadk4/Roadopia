@@ -32,13 +32,25 @@ import {
 } from './overlap';
 import {
   arterialShareOf,
+  classRunStatsOf,
   countryScoreOf,
   maxClassRunInfo,
   maxResidentialRunInfo,
   pointAt,
+  RESIDENTIAL_GRACE_RADIUS_M,
   residentialShareOf,
 } from './residential';
 import type { CandidateSegment } from './retrieve';
+import {
+  BACKROAD_CLASSES,
+  classMixOf,
+  HOOD_CLASSES,
+  TRACE_HIGHWAY_FLOOR_M,
+  TRACE_HIGHWAY_TRUTH_ON,
+  tracedHighwayM,
+  turnsPer10minOf,
+  type ClassMix,
+} from './roadclass';
 
 /** Pin-snap sanity cap (R18-2): a "loop from X" whose nearest drivable road
  *  is further than this from the pin is dishonest to present. */
@@ -80,7 +92,23 @@ export const RETRACE_RUN_SOFT_M = 1_200;
  * subdivisions), presentation ranks ANY notable exposure below every clean
  * route, and the AC bar holds the presented best to ≤ the soft share.
  */
-export const RESIDENTIAL_SOFT_SHARE = 0.05;
+/**
+ * R25-U5ab recalibration — the soft bars are RULER-RELATIVE. 0.05 / 500 m
+ * were calibrated against the V1 measure (class === 'residential' only,
+ * 2.5 km origin grace). HOOD_MEASURE_V2 widens the classes (service /
+ * living_street / …) and tightens the grace to 700 m, so the SAME physical
+ * route measures more: paired Milton probe (2026-07-26, same winner id) —
+ * run 458 → 584 m, a 0 m pool-mate → 530 m (formerly-graced town-exit
+ * metres), share 1.5 → 3.5 % / 3.9 → 5.8 %. Keeping the old numbers under
+ * the new ruler would be an uncalibrated ~1.5-2× tightening nobody
+ * pre-registered — entire pools flip dirty at 530 m and selection goes
+ * chaotic (measured: AC 20→17). Under V2: run 800 m (≈ 500 V1-equivalent +
+ * the measured ~300 m exposed town-exit), share 8 % (0.05 × the measured
+ * ~1.6 share widening). V1 values byte-identical when the flag is off.
+ * The env literal mirrors residential.ts (no import cycle).
+ */
+const HOOD_V2 = process.env['HOOD_MEASURE_V2'] !== 'off'; // R25-U5 ADOPTED (BD-86)
+export const RESIDENTIAL_SOFT_SHARE = HOOD_V2 ? 0.08 : 0.05;
 export const RESIDENTIAL_HARD_SHARE = 0.2;
 /**
  * Longest contiguous residential run (m), presentation/AC soft cap (round 8b,
@@ -89,7 +117,7 @@ export const RESIDENTIAL_HARD_SHARE = 0.2;
  * (round-6 lesson: ratios cannot see contiguity). Presentation/AC only —
  * no assembly rejection (the 20 % share hard cap handles egregious cases).
  */
-export const RESIDENTIAL_RUN_SOFT_M = 500;
+export const RESIDENTIAL_RUN_SOFT_M = HOOD_V2 ? 800 : 500;
 
 /**
  * Boring-connector detector (owner round 11: 'prioritize fun back roads
@@ -159,6 +187,20 @@ export interface AssembledLoop {
   /** Raw trace result for scoring's class-aware curvature (round 15/FB-5);
    *  null = trace failed or not attempted (fail-open, tag-blind fallback). */
   trace: TraceResult | null;
+  /** R25-U0 road-class truth: length-weighted bucket shares of the traced
+   *  route (audit-v11 convention); null = trace failed/not attempted. */
+  classMix: ClassMix | null;
+  /** R25-U0 backroad CONTINUITY: longest contiguous backroad run (m), no
+   *  grace (a reward metric, not a penalty); null = trace failed. */
+  backroadLongestM: number | null;
+  /** Mean backroad run length (m); null = trace failed. */
+  backroadMeanM: number | null;
+  /** R25-U0 hood-run truth: longest contiguous neighbourhood-class run (m),
+   *  no grace (measurement; the GATE keeps its own grace); null = untraced. */
+  hoodRunM: number | null;
+  /** R25-U0 flow: total maneuvers per 10 driving minutes (always computed —
+   *  needs no trace). */
+  turnsPer10min: number | null;
   accepted: boolean;
   rejectReasons: string[];
 }
@@ -176,6 +218,8 @@ export async function assembleLoop(
     maxSpurs = 1,
     maxMicroloops = 1,
     residentialHardShare = RESIDENTIAL_HARD_SHARE,
+    residentialHardRunM = RESIDENTIAL_HARD_RUN_M,
+    avoidHighways = false,
   }: AssemblyOpts = {},
 ): Promise<AssembledLoop> {
   const waypoints: Array<[number, number]> = [
@@ -271,6 +315,10 @@ export async function assembleLoop(
   let arterialRunM: number | null = null;
   let arterialRunMid: [number, number] | null = null;
   let trace: TraceResult | null = null;
+  let classMix: ClassMix | null = null;
+  let backroadLongestM: number | null = null;
+  let backroadMeanM: number | null = null;
+  let hoodRunM: number | null = null;
   if (rejectReasons.length === 0) {
     try {
       trace = await traceRoadClasses(baseUrl, route.geometry);
@@ -281,10 +329,33 @@ export async function assembleLoop(
       // trace:null already marks the candidate unknown at presentation.
       const unpavedM = edges.reduce((acc, e) => acc + (e.unpaved === true ? e.lengthM : 0), 0);
       if (unpavedM > UNPAVED_MIN_M) route = { ...route, has_unpaved: true };
-      residentialShare = residentialShareOf(edges, route.geometry, origin);
+      // R25-U4: has_highway from the TRACE — the summary misses `trunk`
+      // (probed: summary false on 33 % trunk). Same pattern as has_unpaved.
+      if (TRACE_HIGHWAY_TRUTH_ON) {
+        route = { ...route, has_highway: tracedHighwayM(edges) > TRACE_HIGHWAY_FLOOR_M };
+      }
+      // R25-U3v2: the no-highway rule as a MEASURED reject — keeps `shortest`
+      // (the backroad lever) for every clean candidate instead of trading the
+      // whole region onto fastest+no-hwy (A/B: that cost −6 pp backroad).
+      if (avoidHighways && tracedHighwayM(edges) > TRACE_HIGHWAY_FLOOR_M) {
+        rejectReasons.push(`highway ${Math.round(tracedHighwayM(edges))}m`);
+      }
+      // R25-U5b: the residential gate gets its OWN grace (~700 m under V2 —
+      // 2,500 m exempted whole towns); arterial keeps 2,500 m below.
+      residentialShare = residentialShareOf(
+        edges,
+        route.geometry,
+        origin,
+        RESIDENTIAL_GRACE_RADIUS_M,
+      );
       // round 8b: the absolute run (same edges, no extra call) — the share
       // scales with route length, a subdivision weave does not
-      const runInfo = maxResidentialRunInfo(edges, route.geometry, origin);
+      const runInfo = maxResidentialRunInfo(
+        edges,
+        route.geometry,
+        origin,
+        RESIDENTIAL_GRACE_RADIUS_M,
+      );
       residentialRunM = runInfo.runM;
       residentialRunMid = runInfo.mid;
       countryScore = countryScoreOf(edges); // round 11 — same edges, no extra call
@@ -292,8 +363,25 @@ export async function assembleLoop(
       const artInfo = maxClassRunInfo(edges, route.geometry, ARTERIAL_CLASSES, origin);
       arterialRunM = artInfo.runM;
       arterialRunMid = artInfo.mid;
+      // R25-U0: road-class truth + backroad continuity + hood run — same
+      // edges, zero extra calls. Continuity/hood-run measure UNgraced (truth
+      // metrics; the residential GATE above keeps its own grace).
+      classMix = classMixOf(edges);
+      const backStats = classRunStatsOf(edges, route.geometry, BACKROAD_CLASSES, origin, 0);
+      backroadLongestM = backStats.longestM;
+      backroadMeanM = backStats.meanM;
+      hoodRunM = maxClassRunInfo(edges, route.geometry, HOOD_CLASSES, origin, 0).runM;
       if (residentialShare > residentialHardShare) {
         rejectReasons.push(`residential ${(residentialShare * 100).toFixed(0)}%`);
+      }
+      // R25-U5c: absolute run reject — a share gate scales with route length,
+      // a subdivision weave does not (flag-gated; relaxed cap on rung 5)
+      if (
+        RESIDENTIAL_HARD_RUN_ON &&
+        residentialRunM !== null &&
+        residentialRunM > residentialHardRunM
+      ) {
+        rejectReasons.push(`residential_run ${Math.round(residentialRunM)}m`);
       }
     } catch {
       residentialShare = null;
@@ -304,6 +392,10 @@ export async function assembleLoop(
       arterialRunM = null;
       arterialRunMid = null;
       trace = null;
+      classMix = null;
+      backroadLongestM = null;
+      backroadMeanM = null;
+      hoodRunM = null;
     }
   }
 
@@ -325,6 +417,11 @@ export async function assembleLoop(
     arterialRunMid,
     microloops,
     trace,
+    classMix,
+    backroadLongestM,
+    backroadMeanM,
+    hoodRunM,
+    turnsPer10min: turnsPer10minOf(route),
     accepted: rejectReasons.length === 0,
     rejectReasons,
   };
@@ -356,12 +453,30 @@ export interface AssemblyOpts {
   maxSpurs?: number;
   maxMicroloops?: number;
   residentialHardShare?: number;
+  /** R25-U5c: absolute hood-run reject (share-only gates let an 8.2 km
+   *  subdivision weave pass at 8 % share on a long route). */
+  residentialHardRunM?: number;
+  /** R25-U3v2: reject a candidate whose TRACE carries highway metres. Used
+   *  for the IMPOSED fun no-highway rule so the costing can keep `shortest`
+   *  (the backroad-character lever) — clean pool-mates win; the ladder
+   *  relaxes with disclosure where a region is highway-locked. */
+  avoidHighways?: boolean;
 }
 export const SELF_OVERLAP_RELAXED = 0.45;
 export const UTURNS_RELAXED_MAX = 2;
 export const SPURS_RELAXED_MAX = 2;
 export const MICROLOOPS_RELAXED_MAX = 2;
 export const RESIDENTIAL_HARD_RELAXED = 0.3;
+/**
+ * R25-U5c — a contiguous neighbourhood run beyond this is an assembly REJECT
+ * (flag HOOD_HARD_RUN; audit-v11 worst run 8,176 m passed every gate). 1,500 m
+ * is 3× the presentation soft cap, NOT the soft cap itself — the round-6
+ * hard-cap starvation lesson. The never-empty fallback + rung-5 relax exist
+ * now; the A/B watches pool survival (kill: assembled/brief < 75 % of base).
+ */
+export const RESIDENTIAL_HARD_RUN_ON = process.env['HOOD_HARD_RUN'] === 'on';
+export const RESIDENTIAL_HARD_RUN_M = 1_500;
+export const RESIDENTIAL_HARD_RUN_RELAXED_M = 3_000;
 /** Span-atomic DROP floor: a chain reduced below this many spans is gutted. */
 export const CHAIN_DROP_MIN_SPANS = 2;
 /** INSERT waypoint-count guard (was a literal 6; chains carry up to 15). */
@@ -373,6 +488,7 @@ export const RELAXED_ASSEMBLY_CAPS: AssemblyOpts = {
   maxSpurs: SPURS_RELAXED_MAX,
   maxMicroloops: MICROLOOPS_RELAXED_MAX,
   residentialHardShare: RESIDENTIAL_HARD_RELAXED,
+  residentialHardRunM: RESIDENTIAL_HARD_RUN_RELAXED_M, // R25-U5c
 };
 
 /** U-turn positions [lng, lat] recovered from cumulative maneuver distance
@@ -398,14 +514,30 @@ export function uturnPositions(route: RouteThroughOutput): Array<readonly [numbe
  *  self-overlap overflow dominates, then micro-loops/u-turns/spurs, then
  *  over-cap run metres). preferred() and the SHIFT keep-rule see improvement
  *  on every class the repair pass can now aim at. */
+/**
+ * R25-U5d — repair-aim scaling fix. Legacy scored residential/retrace overflow
+ * at 1 point per metre while one u-turn scored 8,000 — a 1.3 km subdivision
+ * weave weighed LESS than a single u-turn, so the repair pass aimed almost
+ * anywhere else first (audit-v11: 53/60 loops carried a hood run; repair never
+ * targeted them). Under V2 a 1 km overflow ≡ one u-turn (8 pts/m residential,
+ * 4 pts/m retrace). Changes REPAIR TARGETING + the SHIFT keep-rule +
+ * presentDirtyBest ordering — NOT presentation ranking (fallbackOffenceUnits
+ * is a separate function). OFF = byte-identical.
+ */
+export const OFFENCE_SCALE_V2_ON = process.env['OFFENCE_SCALE_V2'] !== 'off'; // R25-U5 ADOPTED (BD-86)
+export const RESIDENTIAL_OFFENCE_PER_M = 8;
+export const RETRACE_OFFENCE_PER_M = 4;
+
 function offenceScore(a: AssembledLoop): number {
+  const resPerM = OFFENCE_SCALE_V2_ON ? RESIDENTIAL_OFFENCE_PER_M : 1;
+  const retPerM = OFFENCE_SCALE_V2_ON ? RETRACE_OFFENCE_PER_M : 1;
   return (
     Math.max(0, a.selfOverlap - 0.15) * 20_000 * 5 +
     a.microloops * 10_000 +
     uturnCountOf(a.route) * 8_000 +
     a.spursWide * 6_000 +
-    Math.max(0, (a.residentialRunM ?? 0) - RESIDENTIAL_RUN_SOFT_M) +
-    Math.max(0, a.retraceRunM - RETRACE_RUN_SOFT_M)
+    Math.max(0, (a.residentialRunM ?? 0) - RESIDENTIAL_RUN_SOFT_M) * resPerM +
+    Math.max(0, a.retraceRunM - RETRACE_RUN_SOFT_M) * retPerM
   );
 }
 
@@ -421,6 +553,16 @@ function offencePosition(a: AssembledLoop, origin: LatLng): readonly [number, nu
   if (loops.length > 0) return loops[0]!;
   const uts = uturnPositions(a.route);
   if (uts.length > 0) return uts[0]!;
+  // R25-U5d: under V2 the residential run outranks spurs as a repair aim —
+  // it is now the heavier offence (see offenceScore) and the top-frequency
+  // owner complaint; legacy order preserved when the flag is off.
+  if (
+    OFFENCE_SCALE_V2_ON &&
+    (a.residentialRunM ?? 0) > RESIDENTIAL_RUN_SOFT_M &&
+    a.residentialRunMid !== null
+  ) {
+    return a.residentialRunMid;
+  }
   const spurs = spurPositions(
     a.route.geometry,
     origin,
