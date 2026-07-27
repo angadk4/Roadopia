@@ -1945,3 +1945,125 @@ per-span values, U0 truth metrics). It is the recorded headline unit of the next
 the program's least-certain rebuild at the tail of a 20-unit batch would produce neither an honest A/B
 nor a proper record. Both U19 and U20b (anchor-point ring seeding) go together: they are the same
 generation problem.
+
+**BD-93 — The connector rebuild: REFUSED on its pre-registered bars — the 5th and best-instrumented
+refusal of the family (R25-U19, 2026-07-26).** The one lever no attempt had cracked (~90-97 % of route
+metres are Valhalla-free glue; BD-39/40/81/82 all re-priced around it). BUILT IN FULL this time, with
+every discipline layer: (1) `connectors.ts` — dense (probe-frozen 3.5 km sampling) · monotone (snapped-
+point projection, not just the sample grid) · corpus-snapped single-via steering (never the four-times-
+refused span-forcing shape), backroad-class + effectiveCurviness-priced only, full stop/span index
+maintenance, 11 unit tests. (2) A 3-lens adversarial design review (20 agents, the BD-62 tradition
+scaled) CONFIRMED 5 real defects before integration — the same-segment "anti-zigzag" guard actually
+MANUFACTURED weave and under-steered the flagship one-road case (the pinning test even blocked the
+fix), cross-leg splices could produce the [P, w, P] block-circle 'through' hides from every detector,
+snapped-point order could invert inside swept params, repair-based re-runs cost up to 18 engine
+calls/finalist, and a strict presentKey keep-guard would have BLINDED the lever (the key has no share
+channel — BD-88). All five fixed before judgment. (3) The falsify-first probe (6 live pairs × 9 combos,
+the shipped code itself): RAW verdict REFUSED at the pre-registered median bar; GATED re-analysis
+(the shipped accept-gate applied) median +2 pp — bimodal by corpus density, with the planning
+prototype's −18 pp FAILURE case (Acton→Georgetown) flipped to **+14 pp at ×1.01 duration** — the
+mechanism is REAL where corpus parallels the corridor, and both verdicts are recorded, not blended.
+(4) Byte-identity: all new flags off reproduce the frozen hash e216d28335da10f8 exactly (also proving
+the scoring-closure extractions pure). (5) THE A/B (CONNECTOR_REFINE=on, diversify-kept finalists,
+plain assembleLoop, tolerance-guarded swap): backroad 28→29 % (bar ≥ +15 pp — missed by 14), longest
+run +232 m, AC 19 = IDENTICAL brief set, no-route 0, no offence blowup — and wall 8.6-9.3 → 11.9 s
+(bar ≤ +2 s — missed). Same shape as BD-81's "+1 pp vs +10 pp". ROOT CAUSE, now measured three ways:
+suite loops already route THROUGH the retrieved corpus, so their connector legs offer little to steer;
+the probe's big wins live on long bare corridors with dense parallel corpus. The integration stays in
+the tree behind the default-OFF flag with its tests — a future re-registration (e.g. corpus-density-
+gated refinement, or A→B-side application) is a product call the owner can make with these numbers.
+
+**BD-94 — Ring seeding + shoelace gate: REFUSED as registered — and the rings' REAL identity is
+recorded for owner re-registration (R25-U20b, 2026-07-26).** The generation half of the loop-shape
+attack (BD-62/BD-92's consistent verdict that shape is a generation problem). Built: ROUND-4 ring
+candidates (primary cluster span + two ANCHOR-POOL points near θ+120°/θ+240°, sparse rings skipped
+honestly, additive beyond the candidate cap) + a free pre-routing shoelace gate, both flag-gated,
+byte-identical off. MEASURED (fixed suite vs e216): (a) SHOELACE_GATE alone REFUSED outright — AC
+19→15, no-route 0→1 (the kill condition), loopiness flat: at fraction 0.04 it kills candidates that
+would have PASSED (the starvation risk its own comment pre-recorded). (b) RING_SEED alone: the
+PRE-REGISTERED PRIMARY missed — loopiness p20 flat 0.20, shape defects 6→7 — so per BD-40 the lever is
+REFUSED AS A SHAPE LEVER. But the honest record shows what it actually is: **the largest feasibility
+jump in program history — AC 19→25/48** (previous bests: 16→20 over two whole rounds), up-flips
+concentrated in the POOL-STARVED towns (Smithville, Port Perry, Campbellford, Georgetown, Erin,
+Ancaster, St. Thomas), no-route 0, curviness EXACTLY held, timing defects 3→1, hood p80 1468→1158,
+continuity p20 +383 m; costs: wall +1.1-1.8 s (over the ≤+1 s bar; RING_MAX=3 keeps AC 25 at ~+0.7-1.4 s),
+shape defects +1, CLEAN 1→0, backroad p20 −1, one down-flip (Hamilton no-highways, overlap-heavy ring
+pool). DISPOSITION: flags stay default OFF; adopting rings as a FEASIBILITY lever under a fresh
+registration (suggested bars: AC ≥ +4 · no-route 0 · curviness ≥ 99 % · wall ≤ +1.5 s · shape defects
+≤ +1, at RING_MAX=3) is the OWNER's one-word call — exactly the BD-81 "recorded for the human"
+precedent, now with the strongest candidate that precedent has ever held.
+
+**BD-95 (PRE-REGISTRATION, verdict pending) — Ring seeding, HOLDOUT confirmation on the random suite
+(R25-U20b re-registration, registered 2026-07-27 BEFORE the run).** Why a holdout: BD-94's ring numbers
+came from the FIXED suite, which I had already inspected — writing fresh bars against data already seen
+would be circular (HARKing), so the confirmation must come from briefs rings have never touched. The
+30-brief SUITE=random has never been run with RING_SEED on. Rings are re-registered here as a
+FEASIBILITY lever (their measured identity), NOT as the shape lever BD-94 refused.
+CONFIG UNDER TEST: RING_SEED=on, RING_MAX=3 (SHOELACE_GATE stays OFF — refused, BD-94).
+BASELINE (frozen-r25-v1, random suite, hash `1aee2533b8b6fa95`): AC 9/30 · no-route 3/30 · curvy share
+mean 0.12 · wall 10 646 ms · shape defects 7 · defects/route 2.00 · backroad mean 27 %.
+ADOPT IFF ALL FIVE HOLD:
+  1. PRIMARY — AC ≥ 12/30 (+3; the fixed suite gave +6/48, this is the conservative proportional ask);
+  2. KILL — no-route does NOT rise above 3/30;
+  3. KILL — curvy share mean ≥ 0.1164 (97 % of baseline — the BD-62 bar that killed every prior
+     shape lever; rings must not buy feasibility with the fun);
+  4. wall ≤ 12 146 ms (+1.5 s);
+  5. shape defects ≤ 9 (+2).
+ANY miss ⇒ rings stay default OFF and the fixed-suite gain is recorded as NOT GENERALIZING.
+
+**BD-96 — Ring seeding: REFUSED on the holdout; the fixed-suite gain did NOT generalize — and the
+mechanism is now understood (R25-U20b verdict + diagnosis, 2026-07-27).**
+
+**VERDICT against BD-95's pre-registered bars (random suite, 30 briefs, hash `5c6462e3b1cfba1f`):**
+1. PRIMARY AC ≥12/30 → **9/30. MISSED — literally zero gain** (the per-brief PASS/FAIL vector is
+   element-wise IDENTICAL to baseline: 30 rows, 9 PASS in both, not one brief changed status);
+2. no-route ≤3/30 → 3/30 ✓ (kill held);
+3. curvy share ≥0.1164 → 0.13 ✓ (kill held, improved);
+4. wall ≤12 146 ms → **12 755 ms. MISSED** (10 646 → 12 755, +20 %);
+5. shape defects ≤9 → 6 ✓ (improved from 7).
+Primary + wall missed ⇒ **RINGS STAY DEFAULT OFF.** Config unchanged; `frozen-r25-v1` untouched.
+This is exactly what the holdout existed to catch: adopting on BD-94's fixed-suite AC 19→25 would have
+shipped +2.1 s of latency for zero feasibility on unseen briefs.
+
+**DIAGNOSIS (26-agent investigation, findings adversarially verified; 5 confirmed):**
+- **The naive explanation is FALSIFIED.** Rings did not "fail to fire" on the holdout — they fired
+  MORE: mean gen delta +3.9 (random) vs +2.9 (fixed), mean survivors +3.2 vs +1.9; 77 % of briefs
+  perturbed on BOTH suites (23/30 random, 37/48 fixed rows byte-changed). The cost was paid in full;
+  the metric simply did not move.
+- **The real cause is THRESHOLD GEOMETRY, not suite bias.** The SPK-15 AC is a 13-clause conjunction
+  including `kept.length >= K_PRESENT_DEFAULT` (=4, diversify.ts:17). EVERY passing row in all six
+  reports has kept=4 — zero exceptions. Margin histograms: FIXED `{1:1, 2:4, 3:15, 4:28}` → **31 %
+  sit exactly ONE candidate below the bar**; RANDOM `{0:3, 1:3, 2:9, 3:3, 4:12}` → **10 % one-away,
+  50 % at kept ≤2**. **3.1× more one-away briefs on fixed.** An additive lever worth ~+2 distinct
+  survivors converts shallow deficits and cannot touch deep ones. Same mechanism, different distance
+  to the bar.
+- **NOT a systemic fixed-suite bias — the opposite, measured.** Across all of R25 the FIXED suite LOST
+  AC (20→19) while the RANDOM suite GAINED (7→9). And no adopted lever used AC-gain as its adoption
+  criterion (BD-85 = highway share · BD-86 = hood runs · BD-87 = byte-identical · BD-88 = continuity
+  metres · BD-90 = an invariant), so the ring failure mode cannot have contaminated them.
+- **Honest caveat, recorded:** three default-ON levers rest on fixed-suite-only evidence — BD-87
+  (a safety net proven not to fire on either suite), BD-90 (an identical-verdict invariant), and
+  **BD-88 (continuity), the only one with a real measured effect and no dedicated random leg**.
+  Post-hoc mitigation found in existing data: the random lineage `876cd5`→`1aee25` shows longest
+  backroad run 7 937→8 973 m (+1 036) and p20 3 533→4 142 (+609) — the continuity gain DOES reproduce
+  on random, it was simply never run as a labelled A/B leg.
+- **CORRECTION TO BD-94 (my own earlier characterization was wrong):** I described the fixed-suite
+  up-flips as "pool-starved towns". REFUTED — every flipped brief had SATURATED retrieval (segs=300).
+  They were not corpus-starved; they were sitting one candidate below the diversity bar. The correct
+  description of rings is: **a +1-distinct-corridor lever**, which pays only where a brief is exactly
+  one corridor short.
+- **Instrument limitation found (fix before any future re-registration):** the harness prints funnel /
+  resize / ladder notes ONLY on FAIL rows (loop_quality.ts:970), so the 7 fixed up-flips carry no
+  observable funnel data — every firing-rate figure above is computed on the FAIL∩FAIL subpopulation
+  or by byte-diffing rows. Emitting the funnel line unconditionally + a per-brief ring-emitted count
+  would turn this from inference into a printed number. NOT done now: notes participate in the
+  determinism hash, so it re-baselines `e216d28335da10f8` — an instrument change to make deliberately,
+  not as a side effect.
+- Minor, real: ring geometry is unbuildable at Great-Lakes shore origins (Goderich ×2, Cobourg ×2 —
+  half the bearing circle is water, `pickRingAnchor` returns null and skips honestly), ~25 % of the
+  holdout; and rings perturb the harness's resize/ladder retry triggers, which is where the +2.1 s
+  actually comes from.
+
+**PRODUCT FINDING worth more than the lever: 50 % of random-suite origins cannot produce 4 distinct
+drives at all (kept ≤2), and 3 produce none.** That — not loop shape — is the real "we couldn't find
+you options" failure, and it is a CORPUS/retrieval question, not a ranking or seeding one.

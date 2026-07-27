@@ -28,8 +28,56 @@ export const CLUSTER_RADIUS_M = 2_500;
 /** Return anchor sits roughly at this fraction of the cluster distance from
  *  origin. R25-U20 (audit issue #8, loopiness mean 0.26): at 0.6 the single
  *  return anchor DRAWS a wedge by construction — env-swept {0.75, 0.85, 0.95}
- *  before any new code path (cheapest-first per the plan). */
+ *  before any new code path (cheapest-first per the plan; sweep REFUSED,
+ *  BD-92 — loopiness p20 flat, 0.85 traded backroad for AC). */
 export const RETURN_ANCHOR_DISTANCE_FRACTION = Number(process.env['RETURN_ANCHOR_FRACTION'] ?? 0.6);
+
+/**
+ * R25-U20b — RING seeding (audit issue #8, the generation half BD-62 said the
+ * problem always was): a loop seeded as ONE cluster + ONE opposed anchor is a
+ * wedge by construction. Ring candidates seed THREE bearing-spread points —
+ * the primary cluster's span plus two ANCHOR-POOL points near θ+120° and
+ * θ+240° (BD-40's own post-mortem: pools hold clusters in ~2 of 4 sectors, so
+ * rings CANNOT be built from clusters — `retrieveAnchorPoints` on-road
+ * vertices are the material). No synthetic bearing points: a sparse ring is
+ * honestly SKIPPED, never faked. Additive candidates behind RING_SEED
+ * (default OFF; byte-identical off state; pre-registered A/B).
+ */
+export const RING_SEED_ON = process.env['RING_SEED'] === 'on';
+/** Ring anchors must sit within this bearing window of their target spoke. */
+export const RING_BEARING_WINDOW_DEG = 60;
+/** …and within this fraction of the primary cluster's distance (round ring). */
+export const RING_DISTANCE_TOLERANCE = 0.45;
+/** Ring candidates appended per pool (small — additive, never crowding). */
+export const RING_CANDIDATES_MAX = Number(process.env['RING_MAX'] ?? 6);
+/** Ring anchors keep this separation from each other and the primary (m). */
+export const RING_MIN_SEPARATION_M = 3000;
+
+/**
+ * R25-U20b — the FREE pre-routing shape gate: shoelace area of
+ * [origin, …waypoints] before any Valhalla call. A candidate whose seed
+ * polygon encloses ~nothing routes into an out-and-back sliver no matter what
+ * the router does — drop it at zero cost. Threshold is a small fraction of
+ * the ideal circle's area for the requested perimeter (fail-safe LOW so only
+ * true degenerates die; starvation is the recorded risk, the A/B watches
+ * no-route). Flag SHOELACE_GATE, default OFF.
+ */
+export const SHOELACE_GATE_ON = process.env['SHOELACE_GATE'] === 'on';
+export const SHOELACE_MIN_AREA_FRACTION = Number(process.env['SHOELACE_FRACTION'] ?? 0.04);
+
+/** Planar shoelace area (m²) of the polygon origin → pts… → origin. */
+export function seedPolygonAreaM2(origin: LatLng, pts: readonly LatLng[]): number {
+  const latM = 111_320;
+  const lngScale = latM * Math.cos((origin.lat * Math.PI) / 180);
+  const ring = [origin, ...pts];
+  let s = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!;
+    const b = ring[(i + 1) % ring.length]!;
+    s += a.lng * lngScale * (b.lat * latM) - b.lng * lngScale * (a.lat * latM);
+  }
+  return Math.abs(s / 2);
+}
 
 // R16-fix: a DEFENSIVE sanity bound on how far an anchored stop may sit from its
 // aim point — the stop-aware repair pass (loop.ts) is what actually keeps stopped
@@ -330,6 +378,9 @@ export interface GenerateOptions {
    *  three country corridors pin the loop and less connector length is left
    *  to the router's arterial preference. rq12 A/B decides the default. */
   tripleClusters?: boolean;
+  /** R25-U20b test seams (call sites use the env flags). */
+  ringSeed?: boolean;
+  shoelaceGate?: boolean;
   /** R22-1b — the TWISTY generation lever ("prefer the twistiest roads"): rank
    *  clusters + the within-cluster driven road by CURVINESS instead of weight
    *  (curviness × length). The default seeks the most backroad-km; twisty seeks
@@ -629,6 +680,7 @@ export function generateLoopCandidates(
     primary: Cluster,
     extraClusters: readonly Cluster[],
     returnSector: number,
+    ringPoints?: readonly LatLng[], // R25-U20b: replace the single return anchor
   ): WaypointCandidate => {
     // TRAVERSAL waypoints: both endpoints of the cluster's best segment — the
     // route must DRIVE the twisty road, not pass near its midpoint. A second
@@ -730,7 +782,13 @@ export function generateLoopCandidates(
         },
       });
     }
-    tagged.push({ p: anchor.centroid });
+    // R25-U20b ring candidates carry their own spread — the single return
+    // anchor (the wedge-drawing geometry) is replaced by the ring points
+    if (ringPoints && ringPoints.length > 0) {
+      for (const p of ringPoints) tagged.push({ p });
+    } else {
+      tagged.push({ p: anchor.centroid });
+    }
 
     // angular order around the origin (L4) so the loop sweeps one way round
     // (stable sort — equal bearings keep push order; determinism holds)
@@ -877,6 +935,62 @@ export function generateLoopCandidates(
       if (candidates.some((c) => c.id === id)) continue;
       candidates.push(makeCandidate(id, cluster, [], returnSector));
     }
+  }
+
+  // ROUND 4 (R25-U20b, flag RING_SEED) — ring candidates: the primary
+  // cluster's span + two anchor-pool points near θ+120° / θ+240°, ADDITIVE
+  // beyond the nCandidates cap (like chains — never crowding the proven
+  // rounds out). A sparse ring is skipped honestly, never synthesized.
+  if (options.ringSeed ?? RING_SEED_ON) {
+    const angDiff = (a: number, b: number): number => {
+      const d = Math.abs(a - b) % 360;
+      return Math.min(d, 360 - d);
+    };
+    const pickRingAnchor = (
+      targetBearing: number,
+      targetDist: number,
+      taken: readonly LatLng[],
+    ): LatLng | null => {
+      const found = anchorPool
+        .filter(
+          (a) =>
+            angDiff(bearingDeg(origin, a.centroid), (targetBearing + 360) % 360) <=
+              RING_BEARING_WINDOW_DEG / 2 &&
+            Math.abs(a.distanceM - targetDist) <= RING_DISTANCE_TOLERANCE * targetDist &&
+            taken.every((t) => distM(t, a.centroid) >= RING_MIN_SEPARATION_M),
+        )
+        .sort(
+          (x, y) =>
+            angDiff(bearingDeg(origin, x.centroid), (targetBearing + 360) % 360) -
+              angDiff(bearingDeg(origin, y.centroid), (targetBearing + 360) % 360) ||
+            Math.abs(x.distanceM - targetDist) - Math.abs(y.distanceM - targetDist) ||
+            x.key.localeCompare(y.key),
+        )[0];
+      return found ? found.centroid : null;
+    };
+    let ringBudget = RING_CANDIDATES_MAX;
+    for (const cluster of roundRobin) {
+      if (ringBudget <= 0) break;
+      const b0 = bearingDeg(origin, cluster.centroid);
+      const p1 = pickRingAnchor(b0 + 120, cluster.distanceM, [cluster.centroid]);
+      if (p1 === null) continue;
+      const p2 = pickRingAnchor(b0 + 240, cluster.distanceM, [cluster.centroid, p1]);
+      if (p2 === null) continue;
+      const id = `${pfx}loop-c${cluster.id}-ring`;
+      if (candidates.some((c) => c.id === id)) continue;
+      candidates.push(
+        makeCandidate(id, cluster, [], (cluster.sector + halfTurn) % nSectors, [p1, p2]),
+      );
+      ringBudget--;
+    }
+  }
+
+  // R25-U20b — the free pre-routing shape gate: drop seed polygons that
+  // enclose ~nothing (they can only route into slivers). Zero engine cost.
+  if (options.shoelaceGate ?? SHOELACE_GATE_ON) {
+    const perimeterM = ((options.durationS ?? 5400) / 3600) * (options.avgSpeedKmh ?? 55) * 1000;
+    const minAreaM2 = (SHOELACE_MIN_AREA_FRACTION * (perimeterM * perimeterM)) / (4 * Math.PI);
+    return candidates.filter((c) => seedPolygonAreaM2(origin, c.waypoints) >= minAreaM2);
   }
 
   return candidates;

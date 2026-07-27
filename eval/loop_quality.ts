@@ -29,6 +29,11 @@ import {
   CHAIN_MIN_SPANS,
   chainMatrixLocations,
 } from '../backend/src/planner/chain';
+import {
+  CONNECTOR_KEY_TOLERANCE,
+  CONNECTOR_REFINE_ON,
+  refineLoopFinalist,
+} from '../backend/src/planner/connectors';
 import { profileExcludesHighways, profileForRequest } from '../backend/src/planner/costing';
 import { measureCurvatureClassAware } from '../backend/src/planner/curvature';
 import {
@@ -38,6 +43,7 @@ import {
   TAU_OVERLAP_DEFAULT,
 } from '../backend/src/planner/diversify';
 import {
+  assembleLoop,
   assembleLoopWithRepair,
   RESIDENTIAL_RUN_SOFT_M,
   RESIDENTIAL_SOFT_SHARE,
@@ -430,7 +436,9 @@ async function evaluateBrief(
   if (durationFiltered.length < assembled.length) {
     notes.push(`duration-prefilter dropped ${assembled.length - durationFiltered.length}`);
   }
-  const scored = durationFiltered.map((a) => {
+  // R25-U19 mirror: named closure so connector refinement re-scores through
+  // the identical path (pure refactor, same as run.ts's scoreRoutedRow)
+  const scoreAssembled = (a: (typeof durationFiltered)[number]) => {
     const curv = measureCurvatureClassAware(a.route.geometry, a.trace); // parity with run.ts (FB-5)
     const breakdown = scoreCandidate(
       {
@@ -502,7 +510,8 @@ async function evaluateBrief(
       mixExempt: profile.id === 'simple',
     });
     return { a, curv, breakdown, presentKey };
-  });
+  };
+  const scored = durationFiltered.map(scoreAssembled);
 
   // R18-3 adoption diagnostic: pool countryScore variance (rq11 measured
   // ~0.007 — "every candidate rode the same arterials"; chains must raise it
@@ -522,6 +531,51 @@ async function evaluateBrief(
       payload: s,
     })),
   );
+
+  // R25-U19 mirror of run.ts: refine the diversify-kept finalists (plain
+  // assembleLoop, shared helper, same swap rule) — the adoption instrument
+  // must exercise the lever it judges. Flag off ⇒ untouched.
+  if (CONNECTOR_REFINE_ON) {
+    for (const k of kept) {
+      const s = (k as unknown as { payload: (typeof scored)[number] }).payload;
+      const refined = await refineLoopFinalist(
+        VALHALLA,
+        origin,
+        {
+          candidate: s.a.candidate,
+          route: s.a.route,
+          classMix: s.a.classMix ?? null,
+          backroadLongestM: s.a.backroadLongestM ?? null,
+        },
+        // union of every pass's retrieved segments (the eval accumulates
+        // candidates across ladder passes; run.ts refines with its current
+        // iteration's retrieval — the union is that pass's superset)
+        [...allSegments.values()],
+        (cand) =>
+          assembleLoop(
+            VALHALLA,
+            origin,
+            cand,
+            {
+              ...profile.options,
+              exclude_highways: constraints.avoid.highways,
+              exclude_tolls: constraints.avoid.tolls,
+              exclude_ferries: constraints.avoid.ferries,
+            },
+            {
+              avoidHighways: constraints.avoid.highways || profileExcludesHighways(profile),
+            },
+          ),
+      );
+      if (refined === null) continue;
+      const rescored = scoreAssembled(refined as (typeof durationFiltered)[number]);
+      if (rescored.presentKey + CONNECTOR_KEY_TOLERANCE < s.presentKey) continue;
+      (k as unknown as { payload: typeof rescored }).payload = rescored;
+      (k as unknown as { score: number }).score = rescored.presentKey;
+      (k as unknown as { geometry: typeof rescored.a.route.geometry }).geometry =
+        rescored.a.route.geometry;
+    }
+  }
 
   let feasible = 0;
   let best: (typeof scored)[number] | null = null;

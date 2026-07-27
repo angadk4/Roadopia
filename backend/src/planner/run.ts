@@ -46,10 +46,12 @@ import {
   CHAIN_MIN_SPANS,
   chainMatrixLocations,
 } from './chain';
+import { CONNECTOR_KEY_TOLERANCE, CONNECTOR_REFINE_ON, refineLoopFinalist } from './connectors';
 import { profileExcludesHighways, profileForRequest, type CostingMode } from './costing';
 import { measureCurvatureClassAware } from './curvature';
 import { diversify, prefilterByDuration } from './diversify';
 import {
+  assembleLoop,
   assembleLoopWithRepair,
   EPSILON_CLOSURE_M,
   RELAXED_ASSEMBLY_CAPS,
@@ -1100,7 +1102,10 @@ export async function runPlanner(
       constraints.duration_target_s,
       (r) => r.route.duration_s,
     );
-    const scored = durationFiltered.map((r) => {
+    // R25-U19: the scoring body is a NAMED closure so connector refinement can
+    // re-score a refined finalist through the IDENTICAL path (pure refactor;
+    // `scored` below is byte-identical to the old inline map)
+    const scoreRoutedRow = (r: (typeof routed)[number]) => {
       const curv = measureCurvatureClassAware(r.route.geometry, r.trace); // round 15/FB-5
       // per-type coverage (R16-3): coffee-covered/fuel-missing scores 0.5, not 1
       const coverage = stopCoverageOf(effectiveStops, r.candidate.stops);
@@ -1215,7 +1220,8 @@ export async function runPlanner(
         durOff,
         contextHeavy,
       };
-    });
+    };
+    const scored = durationFiltered.map(scoreRoutedRow);
     step(emit, 'score_rank', 'completed', `${scored.length} scored`);
     // R25-U6a observability: full decomposition per scored candidate (never
     // changes selection — a read-only snapshot for the loss diagnostic).
@@ -1257,6 +1263,83 @@ export async function runPlanner(
       })),
     );
     step(emit, 'diversify', 'completed', `${diversified.kept.length} distinct kept`);
+
+    // R25-U19 — corridor-following connector refinement on the DIVERSIFY-KEPT
+    // finalists only (~4/brief; plain assembleLoop, never repair — the review
+    // measured repair at up to 18 engine calls/finalist). The shared helper
+    // accepts only on measured material gain (backroad share/run) within the
+    // duration-growth cap and full assembly cleanliness; the swap needs
+    // presentKey within CONNECTOR_KEY_TOLERANCE (the key has no share channel
+    // — BD-88 cancelled it as pool-inert — so strict key-improve would blind
+    // the lever). Rows re-rank normally afterwards. Flag off ⇒ untouched.
+    if (CONNECTOR_REFINE_ON && isLoop && !outOfBudget()) {
+      let refinedCount = 0;
+      for (const kept of diversified.kept) {
+        if (outOfBudget()) break;
+        const s = (kept as { payload: (typeof scored)[number] }).payload;
+        const refined = await refineLoopFinalist(
+          deps.valhallaUrl,
+          origin,
+          {
+            candidate: s.r.candidate,
+            route: s.r.route,
+            classMix: s.r.classMix ?? null,
+            backroadLongestM: s.r.backroadLongestM ?? null,
+          },
+          retrieved.segments,
+          (cand) =>
+            assembleLoop(
+              deps.valhallaUrl,
+              origin,
+              cand,
+              {
+                ...profile.options,
+                exclude_highways: costingAvoidsHighways,
+                exclude_tolls: params.avoid.tolls,
+                exclude_ferries: params.avoid.ferries,
+                exclude_unpaved: params.avoid.unpaved,
+              },
+              {
+                avoidHighways: params.avoid.highways,
+                ...(params.assemblyRelax ? RELAXED_ASSEMBLY_CAPS : {}),
+              },
+            ),
+        );
+        if (refined === null) continue;
+        const rescored = scoreRoutedRow({
+          candidate: refined.candidate,
+          route: refined.route,
+          selfOverlap: refined.selfOverlap,
+          spursWide: refined.spursWide,
+          retraceRunM: refined.retraceRunM,
+          residentialShare: refined.residentialShare,
+          residentialRunM: refined.residentialRunM,
+          countryScore: refined.countryScore,
+          arterialShare: refined.arterialShare,
+          microloops: refined.microloops,
+          closureM: refined.closureM as number | null,
+          snapOffsetM: refined.snapOffsetM,
+          trace: refined.trace,
+          classMix: refined.classMix,
+          backroadLongestM: refined.backroadLongestM,
+          backroadMeanM: refined.backroadMeanM,
+          hoodRunM: refined.hoodRunM,
+          turnsPer10min: refined.turnsPer10min,
+          assemblyAccepted: refined.accepted,
+        });
+        if (rescored.presentKey + CONNECTOR_KEY_TOLERANCE < s.presentKey) continue;
+        // swap the WHOLE row + the wrapper's ranking/report fields (a stale
+        // wrapper geometry would misreport overlap — review finding)
+        (kept as { payload: typeof rescored }).payload = rescored;
+        (kept as { score: number }).score = rescored.presentKey;
+        (kept as { geometry: typeof rescored.r.route.geometry }).geometry =
+          rescored.r.route.geometry;
+        refinedCount++;
+      }
+      if (refinedCount > 0) {
+        step(emit, 'self_correct', 'completed', `connector refinement ×${refinedCount}`);
+      }
+    }
 
     step(emit, 'validate_route', 'started');
     let feasibleThisRound = 0;

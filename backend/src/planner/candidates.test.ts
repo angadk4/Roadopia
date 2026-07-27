@@ -7,6 +7,7 @@ import {
   generateAtoBCandidates,
   generateLoopCandidates,
   resizedSpeed,
+  seedPolygonAreaM2,
   sectorOf,
 } from './candidates';
 import type { CandidateSegment, CandidateSpot } from './retrieve';
@@ -380,5 +381,73 @@ describe('generateAtoBCandidates (M3-T06)', () => {
     expect(types.has('coffee')).toBe(true);
     expect(types.has('fuel')).toBe(true);
     expect(new Set(full.stops.map((s) => s.spotId)).size).toBe(2);
+  });
+});
+
+// --- R25-U20b: ring seeding + the shoelace pre-gate --------------------------
+
+describe('R25-U20b ring seeding + shoelace gate', () => {
+  const LAT_M = 111_320;
+  const LNG_M = 111_320 * Math.cos((43.5 * Math.PI) / 180);
+  const O = { lat: 43.5, lng: -80.0 };
+  const at = (xM: number, yM: number) => ({ lat: 43.5 + yM / LAT_M, lng: -80.0 + xM / LNG_M });
+  const segAt = (id: string, xM: number, yM: number): CandidateSegment => ({
+    id,
+    osmWayId: id,
+    name: `Rd ${id}`,
+    highway: 'tertiary',
+    lengthM: 2000,
+    curviness: 2.0,
+    urbanShare: 0,
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [at(xM - 1000, yM).lng, at(xM - 1000, yM).lat],
+        [at(xM, yM).lng, at(xM, yM).lat],
+        [at(xM + 1000, yM).lng, at(xM + 1000, yM).lat],
+      ],
+    },
+  });
+
+  it('rings are built from ANCHOR POINTS at θ+120/θ+240, skipped honestly when sparse', () => {
+    const segments = [segAt('east', 12_000, 0)]; // one cluster due east (θ≈90°)
+    // anchor points at ~bearing 210° and ~330°, ring-distance ≈ 12 km
+    const anchors = [at(-6600, -10_800), at(-6600, 10_800)];
+    const withRing = generateLoopCandidates(O, segments, [], {
+      ringSeed: true,
+      anchorPoints: anchors,
+      durationS: 5400,
+    });
+    const ring = withRing.find((c) => c.id.endsWith('-ring'));
+    expect(ring).toBeDefined();
+    expect(ring!.waypoints.length).toBeGreaterThanOrEqual(3); // span + two spokes
+    // sparse pool (no anchors) → NO ring candidate, nothing synthesized
+    const sparse = generateLoopCandidates(O, segments, [], { ringSeed: true, durationS: 5400 });
+    // anchorPool falls back to segment centroids — all due east, no 210°/330°
+    expect(sparse.some((c) => c.id.endsWith('-ring'))).toBe(false);
+    // flag off (explicit) → byte-identical: no ring ids at all
+    const off = generateLoopCandidates(O, segments, [], { ringSeed: false, durationS: 5400 });
+    expect(off.some((c) => c.id.endsWith('-ring'))).toBe(false);
+  });
+
+  it('seedPolygonAreaM2: a fat triangle measures, a straight line encloses nothing', () => {
+    expect(seedPolygonAreaM2(O, [at(10_000, 0), at(5000, 8000)])).toBeGreaterThan(30_000_000);
+    expect(seedPolygonAreaM2(O, [at(5000, 0), at(10_000, 0)])).toBeLessThan(1000);
+  });
+
+  it('the shoelace gate drops only near-degenerate seed polygons', () => {
+    const segments = [segAt('east', 12_000, 0)];
+    const all = generateLoopCandidates(O, segments, [], { durationS: 5400 });
+    const gated = generateLoopCandidates(O, segments, [], { shoelaceGate: true, durationS: 5400 });
+    // the gate only ever REMOVES candidates, never invents or reorders
+    expect(gated.length).toBeLessThanOrEqual(all.length);
+    const allIds = new Set(all.map((c) => c.id));
+    expect(gated.every((c) => allIds.has(c.id))).toBe(true);
+    // every survivor genuinely encloses area
+    const perimeterM = (5400 / 3600) * 55 * 1000;
+    const minArea = (0.04 * (perimeterM * perimeterM)) / (4 * Math.PI);
+    for (const c of gated) {
+      expect(seedPolygonAreaM2(O, c.waypoints)).toBeGreaterThanOrEqual(minArea);
+    }
   });
 });
