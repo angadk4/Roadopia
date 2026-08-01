@@ -63,11 +63,80 @@ export const SHORTEST_SIZING_SPEED_NO_HIGHWAY_KMH = 38;
 
 const SHORTEST_OPTIONS: AutoCostingOptions = { shortest: true, use_living_streets: 0 };
 
+/**
+ * R26-B2 (BD-99) — the TOP_SPEED connector profile. The B1 probe measured
+ * `shortest` OFF + `top_speed: 50` at median **+39 pp backroad, worst case
+ * 0 pp** across 8 live pairs, zero highway, zero hood change. `shortest`
+ * bypasses every soft factor, so today's fun profile cannot honour any
+ * use_* or penalty knob at all; dropping it re-arms them and a speed ceiling
+ * prices fast roads out without a hard exclusion. ts70 was inert, ts60 gave
+ * +22 pp, ts40 overshot into neighbourhood material (+7 pp hood) — 50 is the
+ * measured knee, not a guess.
+ *
+ * Sizing speeds are DERIVED FROM THE PROBE's own duration ratio (×1.42), not
+ * hand-picked: 50→35, 38→27 km/h. The resize ladder absorbs the remainder,
+ * and the A/B's durErr bar is what catches it if this is wrong.
+ */
+/**
+ * R27: DEFAULT FLIPPED TO OFF. BD-100 adopted this on eval evidence, but the
+ * eval has no wall-clock budget and production has 25 s: with the country tier
+ * also on, the planner exceeds it and ships a TRUNCATED `best_so_far`. The
+ * owner has been driving truncated routes. Re-registration must measure
+ * retrace and wall-clock, not just backroad share.
+ */
+export const CONNECTOR_TOPSPEED_ON = (process.env['CONNECTOR_TOPSPEED'] ?? 'off') !== 'off'; // R26-B2 ADOPTED (BD-100)
+export const TOPSPEED_KMH = Number(process.env['CONNECTOR_TOPSPEED_KMH'] ?? 50);
+/**
+ * R26-C1 (BD-101) — seconds added at transitions between unlike-named roads.
+ * Valhalla's default is 5. This knob has existed all along and has NEVER been
+ * usable: under `shortest` every soft factor is bypassed, which R25-U9b
+ * recorded explicitly as the reason turn density could not be attacked at the
+ * router. BD-100 removed `shortest`, so this is live for the first time.
+ * 0 = Valhalla default (knob absent from the payload).
+ */
+export const CONNECTOR_MANEUVER_PENALTY_S = Number(process.env['CONNECTOR_MANEUVER_PENALTY'] ?? 0);
+const TOPSPEED_OPTIONS: AutoCostingOptions = {
+  top_speed: TOPSPEED_KMH,
+  use_living_streets: 0,
+  ...(CONNECTOR_MANEUVER_PENALTY_S > 0 ? { maneuver_penalty: CONNECTOR_MANEUVER_PENALTY_S } : {}),
+};
+export const TOPSPEED_SIZING_SPEED_KMH = 35;
+export const TOPSPEED_SIZING_SPEED_NO_HIGHWAY_KMH = 27;
+
+/**
+ * R26 (BD-111, owner decision 2026-07-29) — `top_speed` is a LOOP lever only.
+ *
+ * BD-99 REFUSED this exact option for A→B on a duration blocker, and BD-100 then
+ * adopted it into `FUN_OPTIONS`/`FUN_SIZING`, which back both `FUN` and
+ * `BACKROADS` — and `profileForRequest` serves loops AND A→B. So an A→B request
+ * silently inherited a change its own suite had rejected, judged on loop
+ * evidence. Measuring it afterwards (BD-108) found the roads much better but a
+ * 3-of-14 duration tail (Barrie→Collingwood 76→129 min) — good numbers, but
+ * gathered AFTER the fact, which is not how anything else in this program was
+ * adopted. The owner chose to restore A→B to the state BD-99 actually judged and
+ * re-register it on its own bars with a duration guard.
+ *
+ * Discover is deliberately NOT reverted: it consumes `BACKROADS` directly and its
+ * drives ARE loops, and BD-109 measured it as neutral-to-better under the change.
+ *
+ * `TOPSPEED_ATOB=on` restores the leaked behaviour — it exists so the future A→B
+ * A/B has a flag to flip rather than a revert to re-apply.
+ */
+export const TOPSPEED_ATOB_ON = (process.env['TOPSPEED_ATOB'] ?? 'off') !== 'off';
+
+/** The fun/backroads connector shape under the adopted flag state. */
+const FUN_OPTIONS = (): AutoCostingOptions =>
+  CONNECTOR_TOPSPEED_ON ? TOPSPEED_OPTIONS : SHORTEST_OPTIONS;
+const FUN_SIZING = (): { kmh: number; noHwyKmh: number } =>
+  CONNECTOR_TOPSPEED_ON
+    ? { kmh: TOPSPEED_SIZING_SPEED_KMH, noHwyKmh: TOPSPEED_SIZING_SPEED_NO_HIGHWAY_KMH }
+    : { kmh: SHORTEST_SIZING_SPEED_KMH, noHwyKmh: SHORTEST_SIZING_SPEED_NO_HIGHWAY_KMH };
+
 const FUN: CostingProfile = {
   id: 'fun',
-  options: SHORTEST_OPTIONS,
-  sizingSpeedKmh: SHORTEST_SIZING_SPEED_KMH,
-  sizingSpeedNoHighwayKmh: SHORTEST_SIZING_SPEED_NO_HIGHWAY_KMH,
+  options: FUN_OPTIONS(),
+  sizingSpeedKmh: FUN_SIZING().kmh,
+  sizingSpeedNoHighwayKmh: FUN_SIZING().noHwyKmh,
 };
 
 /** The backroads (shortest) connector profile. Exported so R23 Discover sizes
@@ -75,10 +144,26 @@ const FUN: CostingProfile = {
  *  drive IS a backroads loop) — matrix.ts:11 warns the budget lies otherwise. */
 export const BACKROADS: CostingProfile = {
   id: 'backroads',
-  options: SHORTEST_OPTIONS,
-  sizingSpeedKmh: SHORTEST_SIZING_SPEED_KMH,
-  sizingSpeedNoHighwayKmh: SHORTEST_SIZING_SPEED_NO_HIGHWAY_KMH,
+  options: FUN_OPTIONS(),
+  sizingSpeedKmh: FUN_SIZING().kmh,
+  sizingSpeedNoHighwayKmh: FUN_SIZING().noHwyKmh,
 };
+
+/**
+ * A→B variants — identical to FUN/BACKROADS except they keep the pre-BD-100
+ * connector costing, because `top_speed` was never judged on an A→B bar.
+ */
+const atobVariant = (p: CostingProfile): CostingProfile =>
+  TOPSPEED_ATOB_ON || !CONNECTOR_TOPSPEED_ON
+    ? p
+    : {
+        ...p,
+        options: SHORTEST_OPTIONS,
+        sizingSpeedKmh: SHORTEST_SIZING_SPEED_KMH,
+        sizingSpeedNoHighwayKmh: SHORTEST_SIZING_SPEED_NO_HIGHWAY_KMH,
+      };
+const FUN_ATOB: CostingProfile = atobVariant(FUN);
+const BACKROADS_ATOB: CostingProfile = atobVariant(BACKROADS);
 
 /** Simple asked for FEWER turns — shortest ADDS turns; keep fastest-path. */
 const SIMPLE: CostingProfile = { ...LEGACY, id: 'simple' };
@@ -131,10 +216,13 @@ export const FUN_DEFAULT_ADOPTED = false;
 export function profileForRequest(c: ParsedConstraints, mode: CostingMode): CostingProfile {
   if (mode === 'legacy') return LEGACY;
   if (c.preset === 'simple' || c.preset === 'chill') return SIMPLE;
+  // BD-111: the connector costing is shape-dependent — see TOPSPEED_ATOB_ON.
+  const isLoop = c.shape === 'loop';
   if (c.preset === 'backroads' || c.preset === 'twisty' || (c.twistiness_pref ?? 0) >= 0.7) {
-    return BACKROADS;
+    return isLoop ? BACKROADS : BACKROADS_ATOB;
   }
-  return FUN_DEFAULT_ADOPTED ? FUN : LEGACY;
+  if (!FUN_DEFAULT_ADOPTED) return LEGACY;
+  return isLoop ? FUN : FUN_ATOB;
 }
 
 /**

@@ -30,6 +30,7 @@ import type { Client } from 'pg';
 
 import { getElevationProfile } from '../valhalla/elevation';
 import { travelMatrix } from '../valhalla/matrix';
+import { traceRoadClasses } from '../valhalla/trace';
 
 import { assembleAtoBWithRepair, ATOB_ASSEMBLY_RELAX_ON } from './atob';
 import { bundleForRequest } from './bundles';
@@ -50,6 +51,7 @@ import { CONNECTOR_KEY_TOLERANCE, CONNECTOR_REFINE_ON, refineLoopFinalist } from
 import { profileExcludesHighways, profileForRequest, type CostingMode } from './costing';
 import { measureCurvatureClassAware } from './curvature';
 import { diversify, prefilterByDuration } from './diversify';
+import { driveGeometry, splitLoopLegs, type LegSplit } from './legs';
 import {
   assembleLoop,
   assembleLoopWithRepair,
@@ -61,12 +63,13 @@ import {
   RETRACE_RUN_SOFT_M,
   SELF_OVERLAP_CAP,
 } from './loop';
+import { outAndBack } from './outandback';
 import { corridorDoublingRatio, loopiness } from './overlap';
 import { weightsForPreset } from './presets';
 import { initialParams, nextRelaxation, type SearchParams } from './relax';
 import { AVOID_DISC_RADIUS_M, resolveLocations, type ResolvedLocation } from './resolve_locations';
 import { retrieveAnchorPoints, retrieveCandidates } from './retrieve';
-import type { ClassMix } from './roadclass';
+import { classMixOf, type ClassMix } from './roadclass';
 import { buildScope } from './scope';
 import {
   ARTERIAL_SHARE_SOFT,
@@ -263,6 +266,8 @@ export interface ScoredDebugRow {
   arterialShare: number | null;
   classMix: ClassMix | null;
   backroadLongestM: number | null;
+  /** R27 — longest stretch driven twice, metres. */
+  outAndBackLongestM: number | null;
   traceNull: boolean;
 }
 
@@ -293,6 +298,26 @@ export interface PlannerResult {
   /** R25-U0 road-class truth of the chosen route (audit-v11 buckets);
    *  optional so minimal results (out-and-back, early exits) stay valid. */
   classMix?: ClassMix | null;
+  /**
+   * R27 — the three-leg split of a loop: getting there · THE DRIVE · getting
+   * home, with the drive's own measured road class. audit-v14 measured the
+   * escape from the door at 83 % main+urban against 34 % in the middle, and
+   * nearly HALF of a "90 minute loop" being the commute to and from it. Every
+   * number the app showed averaged those together, which is why the road-class
+   * figure could never be moved by any routing lever. null = not a loop, or no
+   * meaningful drive span (see splitLoopLegs' minDriveFrac).
+   */
+  legs?: {
+    therePct: number;
+    drivePct: number;
+    homePct: number;
+    thereM: number;
+    driveM: number;
+    homeM: number;
+    /** Road class of the DRIVE alone, % of its traced metres. */
+    driveBackroadPct: number | null;
+    driveMainPct: number | null;
+  } | null;
   /** R25-U0 backroad continuity of the chosen route (m). */
   backroadLongestM?: number | null;
   backroadMeanM?: number | null;
@@ -695,6 +720,7 @@ export async function runPlanner(
         retraceRunM: r.retraceRunM,
         residentialShare: r.residentialShare,
         residentialRunM: r.residentialRunM,
+        outAndBackLongestM: outAndBack(r.route.geometry).longestM,
         traceNull: r.trace === null,
         // R21-1: least-degenerate sliver wins the never-empty fallback too
         loopiness: SHAPE_QUALITY_ON && isLoop ? loopiness(r.route.geometry) : null,
@@ -1191,6 +1217,7 @@ export async function runPlanner(
         retraceRunM: r.retraceRunM,
         residentialShare: r.residentialShare,
         residentialRunM: r.residentialRunM,
+        outAndBackLongestM: outAndBack(r.route.geometry).longestM,
         traceNull: r.trace === null,
         loopiness: shapeLoopiness, // R21-1 (null → 0)
         corridorDoubling: shapeCorridor,
@@ -1206,7 +1233,10 @@ export async function runPlanner(
         durationS: r.route.duration_s,
         durationTargetS: constraints.duration_target_s,
         turnsPer10min: r.turnsPer10min ?? null, // R25-U9b (grade 0 while flag off)
-        backroadLongestM: r.backroadLongestM ?? null, // R25-U10 continuity (flag off → 0)
+        backroadLongestM: r.backroadLongestM ?? null,
+        // R27 — the owner's first-order rule finally reaches the ranking.
+        mainPct: r.classMix ? r.classMix.mainShare * 100 : null,
+        backroadPct: r.classMix ? r.classMix.backroadShare * 100 : null,
         mixExempt: profile.id === 'simple', // fast main roads are the ask
       });
       return {
@@ -1249,6 +1279,7 @@ export async function runPlanner(
         arterialShare: s.r.arterialShare,
         classMix: s.r.classMix ?? null,
         backroadLongestM: s.r.backroadLongestM ?? null,
+        outAndBackLongestM: outAndBack(s.r.route.geometry).longestM,
         traceNull: s.r.trace === null,
       })),
     );
@@ -1491,6 +1522,40 @@ export async function runPlanner(
   result.backroadMeanM = best.routed.backroadMeanM ?? null;
   result.hoodRunM = best.routed.hoodRunM ?? null;
   result.turnsPer10min = best.routed.turnsPer10min ?? null;
+  // R27 — the three-leg split. Computed on the CHOSEN route only (one extra
+  // trace, and only for loops), so the card can say "getting there 14 min ·
+  // the drive 62 · home 16" instead of averaging the commute into the drive.
+  result.legs = null;
+  if (isLoop && result.route !== null) {
+    const split: LegSplit | null = splitLoopLegs(result.route.geometry, result.waypoints);
+    if (split !== null) {
+      let driveBackroadPct: number | null = null;
+      let driveMainPct: number | null = null;
+      try {
+        const dt = await traceRoadClasses(
+          deps.valhallaUrl,
+          driveGeometry(result.route.geometry, split),
+        );
+        const dm = classMixOf(dt.edges);
+        if (dm !== null) {
+          driveBackroadPct = Math.round(dm.backroadShare * 100);
+          driveMainPct = Math.round(dm.mainShare * 100);
+        }
+      } catch {
+        // trace is best-effort; the split itself is still worth reporting
+      }
+      result.legs = {
+        therePct: split.therePct,
+        drivePct: split.drivePct,
+        homePct: split.homePct,
+        thereM: split.thereM,
+        driveM: split.driveM,
+        homeM: split.homeM,
+        driveBackroadPct,
+        driveMainPct,
+      };
+    }
+  }
   // R19 honest expectation-setting: when the chosen drive spends real time in
   // town before it opens up, SAY so (arterial-locked origins — the audit's
   // "20-30 min commute to the good stuff" finding, disclosed not hidden).

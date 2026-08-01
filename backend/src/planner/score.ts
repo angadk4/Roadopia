@@ -153,8 +153,23 @@ export interface OffenceInput {
    *  so existing callers and score.test.ts compile unchanged. */
   loopiness?: number | null;
   corridorDoubling?: number | null;
+  /**
+   * R27 — longest stretch driven twice in opposite directions (m).
+   *
+   * THE reason the out-and-back assembly reject alone did not fix the defect:
+   * when every candidate is rejected the planner still presents the LEAST BAD
+   * one (never-empty), and this ranking decided which that was — with no term
+   * for doubling at all. `retraceRunM` above does not cover it: it keys on
+   * named-road repetition and misses reversals that cross a name change or run
+   * on unnamed rural road, which is exactly the population audit-v13 found.
+   * Optional so existing callers stay byte-identical when absent.
+   */
+  outAndBackLongestM?: number | null;
 }
 
+/** R27: below this a reversal is junction furniture, not a drive defect
+ *  (mirrors OAB_MIN_RUN_M in outandback.ts; no import cycle). */
+export const OUT_AND_BACK_UNIT_FLOOR_M = 250;
 export const RETRACE_UNIT_SOFT_M = 1_200; // mirrors RETRACE_RUN_SOFT_M (no import cycle)
 // R25-U5ab: mirror loop.ts's ruler-relative recalibration (paired Milton
 // probe; see loop.ts RESIDENTIAL_SOFT_SHARE) — the graded units must start
@@ -207,6 +222,13 @@ export function fallbackOffenceUnits(d: OffenceInput): number {
   }
   if (d.corridorDoubling != null) {
     units += SHAPE_UNIT_CORRIDOR * Math.max(0, d.corridorDoubling - CORRIDOR_DOUBLING_SOFT);
+  }
+  // R27: a kilometre of road driven twice costs a full u-turn unit (1.0). A
+  // u-turn IS the cheapest possible out-and-back, so anything longer must cost
+  // at least as much, and the 15 km cases audit-v13 found now dominate the
+  // ranking instead of being invisible to it.
+  if (d.outAndBackLongestM != null) {
+    units += Math.max(0, d.outAndBackLongestM - OUT_AND_BACK_UNIT_FLOOR_M) / 1000;
   }
   if (d.traceNull) units += TRACE_NULL_STRICT_ON ? TRACE_NULL_UNITS_STRICT : 0.5;
   return Math.round(units * 100) / 100;
@@ -307,6 +329,20 @@ export interface PresentationInput {
   backroadLongestM?: number | null;
   /** R25-U10 — true for the `simple` profile (fast main roads are the ask). */
   mixExempt?: boolean;
+  /**
+   * R27 — MEASURED road-class shares of the routed drive (% of traced metres).
+   *
+   * The owner's rule, stated in his own words and never once encoded in the
+   * ranking until now: **backroads must be the MAJORITY of a fun drive.**
+   * R25-U10 designed a majority grade alongside the continuity grade; only the
+   * continuity half was ever wired (BD-88), so the planner has been ranking on
+   * "longest backroad-class run" with nothing at all rewarding backroad SHARE.
+   * audit-v14 measured the consequence: 59 of 90 routes are main-road majority.
+   * null/undefined → no contribution (byte-identical for callers that do not
+   * measure), which is safe here because the assembly path always traces.
+   */
+  mainPct?: number | null;
+  backroadPct?: number | null;
 }
 
 /**
@@ -351,8 +387,38 @@ export function turnGradeOf(turnsPer10min: number | null | undefined): number {
  * ask — the ARTERIAL_PRESENT_PENALTY precedent). Not loop-gated (U6e: A→B
  * needs it too).
  */
-export const MIX_GRADE_ON = process.env['MIX_GRADE'] !== 'off'; // R25-U10 ADOPTED (BD-88)
-export const CONTINUITY_GRADE_MAX = 6;
+export const MIX_GRADE_ON = process.env['MIX_GRADE'] !== 'off';
+/** R27 majority grade. OFF = byte-identical to the pre-R27 key. */
+export const MAJORITY_GRADE_ON = (process.env['MAJORITY_GRADE'] ?? 'off') !== 'off'; // R25-U10 ADOPTED (BD-88)
+/**
+ * R27 rebalance. Continuity was 6 against a `score` whose ENTIRE range is ~1
+ * (weights sum <1 over 0..1 terms; curviness, the dominant quality term for
+ * backroads, is weighted 0.4). So a within-tier "tie-breaker" was outweighing
+ * every quality signal by ~6-15x, and the planner could not see the difference
+ * between a good drive and a bad one — the owner's "there are clear better
+ * paths it doesn't take". Continuity is also a WEAK proxy: `backroadLongestM`
+ * measures a run of road CLASS, not of one road, so a zigzag through the
+ * concession grid scores as continuous. It stays, subordinate to majority.
+ */
+export const CONTINUITY_GRADE_MAX = 3;
+/**
+ * R27 — the majority grade. Zero at parity (a main road through fields is a
+ * legitimate connector — the owner's own concession), rising to the maximum
+ * when main road exceeds backroad by MAJORITY_SPAN_PP. Deliberately the largest
+ * within-tier term, because it is the owner's first-order product rule.
+ */
+export const MAJORITY_GRADE_MAX = 8;
+export const MAJORITY_SPAN_PP = 40;
+
+export function majorityGradeOf(
+  mainPct: number | null | undefined,
+  backroadPct: number | null | undefined,
+): number {
+  if (mainPct == null || backroadPct == null) return 0;
+  const excess = mainPct - backroadPct;
+  if (excess <= 0) return 0; // backroads already the majority — nothing owed
+  return MAJORITY_GRADE_MAX * Math.min(1, excess / MAJORITY_SPAN_PP);
+}
 /** Full marks at one unbroken backroad stretch of this length. 8000 (the
  *  ribbon-core floor) zeroes the gradient right where the pool mean already
  *  sits (9.5 km) — env-swept; the A/B picks the value. */
@@ -375,7 +441,8 @@ export const PRESENT_GRADE_BUDGET =
   ARTERIAL_PRESENT_PENALTY +
   DIRTY_GRADE_CAP +
   TURN_GRADE_MAX +
-  CONTINUITY_GRADE_MAX;
+  CONTINUITY_GRADE_MAX +
+  MAJORITY_GRADE_MAX;
 
 /**
  * R25-U7a — a SECOND duration tier for wild misses (audit-v11: 7/60 loops
@@ -400,10 +467,9 @@ export function presentationKey(
     i.durationTargetS > 0 &&
     Math.abs(i.durationS - i.durationTargetS) / i.durationTargetS > DURATION_HARD_ERR;
   const turnGrade = (opts?.turnGrade ?? TURN_GRADE_ON) ? turnGradeOf(i.turnsPer10min) : 0;
-  const continuityGrade =
-    (opts?.mixGrade ?? MIX_GRADE_ON) && i.mixExempt !== true
-      ? continuityGradeOf(i.backroadLongestM)
-      : 0;
+  const mixOn = (opts?.mixGrade ?? MIX_GRADE_ON) && i.mixExempt !== true;
+  const continuityGrade = mixOn ? continuityGradeOf(i.backroadLongestM) : 0;
+  const majorityGrade = mixOn && MAJORITY_GRADE_ON ? majorityGradeOf(i.mainPct, i.backroadPct) : 0;
   return (
     i.score -
     dirtyPenaltyOf(i.dirty, i.units) -
@@ -412,7 +478,8 @@ export function presentationKey(
     (i.contextHeavy ? ARTERIAL_PRESENT_PENALTY : 0) -
     durationGradeOf(i.durationS, i.durationTargetS) -
     turnGrade -
-    continuityGrade
+    continuityGrade -
+    majorityGrade
   );
 }
 

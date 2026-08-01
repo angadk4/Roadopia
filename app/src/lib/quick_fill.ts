@@ -72,19 +72,28 @@ export function computeAutoFill(c: ParsedConstraints): AutoFill {
   // style: only the presets the chips can SAY fill them; character/twistiness
   // signals CLEAR the chip so the text decides (see module header)
   let style: DriveStyle | null = DEFAULT_DRAFT.style;
-  if (c.preset === 'simple' || c.preset === 'chill') {
+  if (c.preset === 'simple' || c.intensity === 'chill') {
+    // R27: was `c.preset === 'chill'`, which parse_rules never emits — 'chill'
+    // arrives on `intensity`, so this branch was unreachable dead code and
+    // typing "chill drive" moved nothing.
     style = 'simple';
     fromText.push('style');
-  } else if (c.preset === 'backroads') {
-    style = 'backroads';
-    if (DEFAULT_DRAFT.style !== 'backroads') fromText.push('style');
   } else if (
+    c.preset === 'backroads' ||
     c.preset === 'twisty' ||
     c.preset === 'scenic' ||
     (c.twistiness_pref ?? 0) >= 0.7 ||
     c.character.some((t) => t === 'twisty' || t === 'backroad' || t === 'rural')
   ) {
-    style = null; // No preference — your own words decide
+    // R27 — THE "text box un-fills my chips" BUG. This used to set `style = null`
+    // for twisty/scenic/rural with the comment "No preference — your own words
+    // decide". But `null` is not a neutral no-op: it IS the third chip,
+    // "No preference". So the screen opened with Fun & Explorative lit, the user
+    // typed "twisty", and 600 ms later the app DE-SELECTED it and lit
+    // "No preference" instead — the exact opposite of quick-fill's promise.
+    // Every one of these asks is a fun/country drive, so they map to the chip
+    // that says so; the free text still carries the nuance to the planner.
+    style = 'backroads';
     fromText.push('style');
   }
 

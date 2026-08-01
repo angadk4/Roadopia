@@ -159,6 +159,12 @@ const BRIEFS: string[] = [
 interface BriefReport {
   brief: string;
   presented: number;
+  /**
+   * R26 (BD-110) — the WHOLE presented menu, not just the best drive. Excluded
+   * from the determinism hash (like `ms`) so every hash recorded across R25/R26
+   * stays comparable; it is derived from `kept`, which is already deterministic.
+   */
+  menu: { n: number; backroadPct: number; mainPct: number; clean: number } | null;
   feasible: number;
   maxPairOverlap: number;
   meanSelfOverlap: number;
@@ -492,6 +498,7 @@ async function evaluateBrief(
       retraceRunM: a.retraceRunM,
       residentialShare: a.residentialShare,
       residentialRunM: a.residentialRunM,
+      outAndBackLongestM: a.outAndBackLongestM,
       traceNull: a.trace === null,
       loopiness: shapeLoopiness, // R21-1 (null → 0)
       corridorDoubling: shapeCorridor,
@@ -506,7 +513,9 @@ async function evaluateBrief(
       durationS: a.route.duration_s,
       durationTargetS: durationS,
       turnsPer10min: a.turnsPer10min ?? null, // R25-U9b (grade 0 while flag off)
-      backroadLongestM: a.backroadLongestM ?? null, // R25-U10 continuity (flag off → 0)
+      backroadLongestM: a.backroadLongestM ?? null,
+      mainPct: a.classMix ? a.classMix.mainShare * 100 : null,
+      backroadPct: a.classMix ? a.classMix.backroadShare * 100 : null,
       mixExempt: profile.id === 'simple',
     });
     return { a, curv, breakdown, presentKey };
@@ -654,6 +663,7 @@ async function evaluateBrief(
         retraceRunM: best.a.retraceRunM,
         residentialShare: best.a.residentialShare,
         residentialRunM: best.a.residentialRunM,
+        outAndBackLongestM: best.a.outAndBackLongestM,
         traceNull: best.a.trace === null,
         loopiness: SHAPE_QUALITY_ON ? bestLoopiness : null, // R21-1 parity
         corridorDoubling: SHAPE_QUALITY_ON ? bestCorridorDoubling : null,
@@ -684,6 +694,52 @@ async function evaluateBrief(
         traced: best.a.trace !== null,
       })
     : null;
+  // R26 (BD-110 finding 2) — MENU-WIDE metrics. Every number above is computed
+  // on `best` ALONE, yet `feas == kept` on all 48 briefs, so drives 2..k are
+  // shown to the user and measured by NOTHING. That blind spot silently shaped
+  // this program's verdicts: U19 accepted material connector refinements on
+  // 12/48 briefs and moved the reported columns on 1, so its +10 pp bar was
+  // graded on a channel the lever reached once (BD-104's explanation had to be
+  // struck for exactly this reason).
+  // FREE: `a.classMix` is already carried by every kept candidate, so this costs
+  // no extra trace or engine call.
+  // Deliberately EXCLUDED from the determinism hash (see `hashable` below),
+  // like `ms`, so every hash recorded across R25/R26 stays comparable. These are
+  // derived from `kept`, which is itself deterministic, so nothing goes unguarded.
+  const menuDrives = kept
+    .map((k) => (k as unknown as { payload: (typeof scored)[number] }).payload)
+    .filter((sc) => sc.a.classMix !== null);
+  const menuClean = menuDrives.filter((sc) => {
+    const lp = loopiness(sc.a.route.geometry);
+    return cleanDriveVerdict({
+      mix: sc.a.classMix,
+      hoodRunM: sc.a.hoodRunM,
+      turnsPer10min: sc.a.turnsPer10min,
+      loopiness: lp,
+      durErrAbs:
+        durationS === null ? null : Math.abs(sc.a.route.duration_s - durationS) / durationS,
+      uturns: uturnCount(sc.a.route),
+      spursWide: sc.a.spursWide,
+      microloops: sc.a.microloops,
+      retraceRunM: sc.a.retraceRunM ?? 0,
+      traced: sc.a.trace !== null,
+    }).clean;
+  }).length;
+  const menu =
+    menuDrives.length === 0
+      ? null
+      : {
+          n: menuDrives.length,
+          backroadPct:
+            (menuDrives.reduce((t, sc) => t + sc.a.classMix!.backroadShare, 0) /
+              menuDrives.length) *
+            100,
+          mainPct:
+            (menuDrives.reduce((t, sc) => t + sc.a.classMix!.mainShare, 0) / menuDrives.length) *
+            100,
+          clean: menuClean,
+        };
+
   // R19 honest-composite axis: a best that "passes" by driving town streets
   // (urban > 20 %) is the disease, not a pass (owner 2026-07-18). Null share
   // (index unavailable) is fail-open.
@@ -742,6 +798,7 @@ async function evaluateBrief(
     bestLoopiness,
     bestCorridorDoubling,
     bestDirtyUnits,
+    menu,
     targetS: durationS,
     curviness: best ? best.curv.curviness : null,
     bestGeometry: best ? best.a.route.geometry : null,
@@ -787,6 +844,7 @@ async function main(): Promise<void> {
       r = {
         brief,
         presented: 0,
+        menu: null,
         feasible: 0,
         maxPairOverlap: 0,
         meanSelfOverlap: 0,
@@ -980,6 +1038,58 @@ async function main(): Promise<void> {
 
   console.log('\n-- summary --');
   console.log(`briefs passing all AC: ${passed}/${reports.length}`);
+
+  // R26-E1 — WHICH AC clause fails. Pure derivation from fields the report
+  // already carries: nothing is added to the report object, so the determinism
+  // hash is untouched (`hashable` below is unchanged). This exists because the
+  // AC verdict was a single boolean over 12 clauses, so every A/B could see AC
+  // move but never see WHY — BD-100's "AC -2" cost a separate diagnostic run to
+  // attribute, and BD-101 would have cost another. Attribution is now free.
+  const AC_CLAUSES: Array<{ name: string; fails: (r: BriefReport) => boolean }> = [
+    { name: 'diversity(kept<4)', fails: (r) => r.presented < K_PRESENT_DEFAULT },
+    {
+      name: 'urban>20%',
+      fails: (r) => r.bestUrbanPct !== null && r.bestUrbanPct > URBAN_AC_MAX_PCT,
+    },
+    { name: 'pairOverlap', fails: (r) => r.maxPairOverlap > TAU_OVERLAP_DEFAULT },
+    { name: 'infeasible', fails: (r) => r.feasible <= 0 },
+    { name: 'selfOverlap', fails: (r) => r.meanSelfOverlap > 0.15 || r.maxSelfOverlap > 0.3 },
+    { name: 'durErr>25%', fails: (r) => r.durErrPct === null || r.durErrPct > 25 },
+    { name: 'uturns', fails: (r) => r.bestUturns !== 0 },
+    { name: 'spurs', fails: (r) => r.bestSpurs !== 0 },
+    {
+      name: 'retrace',
+      fails: (r) => r.bestRetraceM === null || r.bestRetraceM > RETRACE_RUN_SOFT_M,
+    },
+    {
+      name: 'residential%',
+      fails: (r) =>
+        r.bestResidentialPct === null || r.bestResidentialPct > RESIDENTIAL_SOFT_SHARE * 100,
+    },
+    { name: 'microloops', fails: (r) => r.bestMicroloops !== 0 },
+    {
+      name: 'residentialRun',
+      fails: (r) =>
+        r.bestResidentialRunM === null || r.bestResidentialRunM > RESIDENTIAL_RUN_SOFT_M,
+    },
+  ];
+  const failing = reports.filter((r) => !r.pass);
+  const tally = new Map<string, number>();
+  let soleDiversity = 0;
+  for (const r of failing) {
+    const hit = AC_CLAUSES.filter((c) => c.fails(r)).map((c) => c.name);
+    for (const h of hit) tally.set(h, (tally.get(h) ?? 0) + 1);
+    if (hit.length === 1 && hit[0] === 'diversity(kept<4)') soleDiversity++;
+  }
+  const ranked = [...tally.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  console.log(
+    `AC failures by clause (${failing.length} failing briefs): ` +
+      (ranked.map(([k, v]) => `${k}×${v}`).join(' · ') || 'none'),
+  );
+  console.log(
+    `  briefs failing ONLY on diversity: ${soleDiversity}/${failing.length}` +
+      ` — the AC ceiling if diversity were solved: ${passed + soleDiversity}/${reports.length}`,
+  );
   console.log(`mean presented: ${meanKept.toFixed(1)} (target ≥ ${K_PRESENT_DEFAULT})`);
   console.log(`mean duration error of best: ${meanDurErr.toFixed(0)} %`);
   console.log(`mean wall time per brief: ${Math.round(meanMs)} ms`);
@@ -1016,7 +1126,49 @@ async function main(): Promise<void> {
     `urban share of bests:    mean ${fmt(mean(urb), 0)} % · p80 ${fmt(pct(urb, 0.8), 0)} % (R19)`,
   );
   console.log(`curvy share of bests:    mean ${fmt(mean(cvy))} · p20 ${fmt(pct(cvy, 0.2))}`);
+  // R26 audit finding — the ABSOLUTE curviness aggregate, printed for the first
+  // time. Every curviness figure and every curviness KILL verdict in R26 was a
+  // hand computation over this column because the harness never printed it, and
+  // BD-101 consequently registered its bar against the all-brief mean and then
+  // judged it against the measured-only mean — two different instruments, which
+  // flipped a kill (mp30 is 93.5 % of baseline on the registered one, not 98 %).
+  // Both are printed, and so is the gap between them, because neither alone is
+  // sound: `curviness === 0` on a loop is NOT a straight drive, it is
+  // UNMEASURABLE — computeCurvature skips closed rings, and a loop whose runs
+  // coalesce into one ring-spanning run measures nothing. Averaging those as 0
+  // understates; dropping them conditions on measurability, which correlates
+  // with junction density. State all three and let the reader see which is which.
+  const curvAll = vals((r) => r.curviness);
+  const curvMeasured = curvAll.filter((c) => c > 0);
+  console.log(
+    `curviness of bests:      all-brief mean ${fmt(mean(curvAll))} (n=${curvAll.length}) · ` +
+      `measured-only mean ${fmt(mean(curvMeasured))} (n=${curvMeasured.length}) · ` +
+      `UNMEASURABLE ${curvAll.length - curvMeasured.length}/${curvAll.length} ` +
+      `(closed-ring skip, not straight roads) — register which instrument a kill bar uses`,
+  );
   console.log(`loopiness of bests:      p20 ${fmt(pct(lpi, 0.2))}`);
+  // R26 (BD-110 finding 2) — the same axes across the WHOLE presented menu.
+  // A lever that improves drives 2..k moves these and leaves every "of bests"
+  // line above untouched; before this, such a lever was indistinguishable from
+  // one that did nothing at all.
+  const menus = reports.map((r) => r.menu).filter((m): m is NonNullable<typeof m> => m !== null);
+  if (menus.length > 0) {
+    const totalDrives = menus.reduce((t, m) => t + m.n, 0);
+    const wMean = (f: (m: NonNullable<(typeof menus)[number]>) => number): number =>
+      menus.reduce((t, m) => t + f(m) * m.n, 0) / totalDrives;
+    console.log(
+      `MENU-WIDE (all ${totalDrives} presented drives, not just the best): ` +
+        `backroad mean ${fmt(
+          wMean((m) => m.backroadPct),
+          0,
+        )} % · ` +
+        `main mean ${fmt(
+          wMean((m) => m.mainPct),
+          0,
+        )} % · ` +
+        `clean ${menus.reduce((t, m) => t + m.clean, 0)}/${totalDrives}`,
+    );
+  }
   console.log(`corridor doubling:       p80 ${fmt(pct(corD, 0.8))}`);
   console.log(`dirty units of bests:    mean ${fmt(mean(units))} · max ${fmt(pct(units, 1.0))}`);
 
@@ -1064,7 +1216,10 @@ async function main(): Promise<void> {
 
   // determinism hash: byte-stable across identical runs (ms stripped)
   const { createHash } = await import('node:crypto');
-  const hashable = reports.map((r) => ({ ...r, ms: 0 }));
+  // `menu` joins `ms` in being excluded: JSON.stringify drops undefined-valued
+  // keys, so stripping it here keeps every previously-recorded hash valid and
+  // this instrument stays purely additive.
+  const hashable = reports.map((r) => ({ ...r, ms: 0, menu: undefined }));
   const hash = createHash('sha256').update(JSON.stringify(hashable)).digest('hex').slice(0, 16);
   console.log(`determinism hash: ${hash}`);
 

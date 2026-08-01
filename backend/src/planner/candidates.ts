@@ -228,16 +228,54 @@ export function effectiveCurviness(seg: CandidateSegment): number {
 }
 
 /** Deterministic rank value of a segment: curviness · length · class factor. */
+/**
+ * R26-A3 — the value function that can CHOOSE a country road.
+ *
+ * The legacy form is MULTIPLICATIVE in curviness, so a straight concession road
+ * (curvature ~0.10, the class the owner keeps asking for) scores ~0 and can
+ * never become a waypoint even once retrieval admits it (BD-97 gate 3). Under
+ * COUNTRY_VALUE the shape becomes BASE + BONUS: class × length × rural-context
+ * carries the base, and curviness adds a bounded multiplier on top. A twisty
+ * road still beats an equally long straight one by up to (1 + COUNTRY_CURV_GAIN)×
+ * — the ranking still prefers fun, it just stops scoring "country but straight"
+ * as literally worthless.
+ *
+ * Deliberately a SHAPE change, not a scalar weight (BD-39 disproved scalars):
+ * there is no new tunable in the scoring vector, and the curvature term keeps
+ * the R24 de-switchback flow factor. OFF ⇒ byte-identical legacy value.
+ */
+/**
+ * R27: DEFAULT FLIPPED TO OFF. audit-v13 measured 47/60 loops driving a stretch
+ * of road twice. Root cause traced here: the `1 +` floor in the curvature bonus
+ * collapses curvature's dynamic range over the band retrieval actually sees
+ * (~8.6x -> ~2.4x), so LENGTH dominates segValue; `byValue[0]` then becomes a
+ * FORCED end-to-end traversal span, and the longest country road gets driven to
+ * its end and back. Retrieval admission (COUNTRY_TIER) was never the defect and
+ * stays ON — BD-97's diagnosis holds; BD-98's value function does not.
+ */
+export const COUNTRY_VALUE_ON = (process.env['COUNTRY_VALUE'] ?? 'off') !== 'off'; // R26-A3 ADOPTED (BD-98)
+/** How much a maximally-curvy road outscores an equally long straight one. */
+export const COUNTRY_CURV_GAIN = Number(process.env['COUNTRY_CURV_GAIN'] ?? 2.0);
+/** Curviness at which the bonus saturates (mirrors CURV_SATURATION intent). */
+export const COUNTRY_CURV_REF = 3.0;
+
+/** R26-A3 test seam: the value shape, callable with the flag forced either way
+ *  so the OFF-identity and the base+bonus behaviour are both pinned. */
+export function segValueOf(seg: CandidateSegment, countryValue: boolean): number {
+  const ruralContext = 1 - 0.7 * (seg.urbanShare ?? 0);
+  if (countryValue) {
+    const curvBonus =
+      1 + COUNTRY_CURV_GAIN * Math.min(1, effectiveCurviness(seg) / COUNTRY_CURV_REF);
+    return seg.lengthM * countryClassFactor(seg.highway) * ruralContext * curvBonus;
+  }
+  return effectiveCurviness(seg) * seg.lengthM * countryClassFactor(seg.highway) * ruralContext;
+}
+
 function segValue(seg: CandidateSegment): number {
   // R19: town-context material is LAST-RESORT (refilled only when the area is
   // thin) — a curvy subdivision collector must never outrank a country road.
   // R24: effectiveCurviness saturates + flow-discounts switchbacks (OFF = raw).
-  return (
-    effectiveCurviness(seg) *
-    seg.lengthM *
-    countryClassFactor(seg.highway) *
-    (1 - 0.7 * (seg.urbanShare ?? 0))
-  );
+  return segValueOf(seg, COUNTRY_VALUE_ON);
 }
 
 /**

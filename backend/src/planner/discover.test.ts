@@ -7,6 +7,7 @@ import type { SeedDriveRow } from '../db/planner_reads';
 import type { MatrixCell } from '../valhalla/matrix';
 
 import {
+  DISCOVER_GATED_MIN_ROAD_M,
   DISCOVER_MENU_MAX,
   DISCOVER_MENU_MIN,
   DISCOVER_MIN_ROAD_M,
@@ -282,7 +283,7 @@ describe('discoverDrives (R23-U4 golden fixture)', () => {
 /** Big named roads (over the gated 8 km floor), one near, one far. */
 const GATE_FIXTURE: CandidateSegment[] = [
   seg('nearbig', 'Near Grand Rd', 'tertiary', 8500, 2.2, 43.56, -80.08),
-  seg('farbig', 'Far Grand Rd', 'tertiary', 8500, 2.4, 43.85, -80.25),
+  seg('farbig', 'Far Grand Rd', 'tertiary', 5500, 2.4, 43.72, -80.31),
 ];
 
 /** Polygon (non-retracing) pre-build so the pure detectors judge the GATES,
@@ -359,7 +360,7 @@ describe('R25-U11 Discover gates (report/strict)', () => {
     const res = await discoverDrives(ORIGIN, gateDeps(cleanEdges), { gates: 'report' });
     expect(res.drives.length).toBeGreaterThan(0);
     expect(res.drives.every((d) => d.source === 'auto')).toBe(true); // classics out
-    expect(res.drives.every((d) => d.length_m >= 8000)).toBe(true); // gated floor
+    expect(res.drives.every((d) => d.length_m >= DISCOVER_GATED_MIN_ROAD_M)).toBe(true);
     // the menu is honestly short (2 big roads) — no refill to MENU_MIN
     expect(res.drives.length).toBeLessThan(DISCOVER_MENU_MIN);
   });
@@ -384,9 +385,12 @@ describe('R25-U11 Discover gates (report/strict)', () => {
   });
 
   it('mostly-commute drives DEMOTE + disclose in report, DROP in strict', async () => {
-    // farbig: ~43 km out, 8.5 km of road → connector share ≈ 0.87 > 0.85;
-    // nearbig stays a genuine drive. Report keeps both (far one LAST, said
-    // plainly); strict keeps only the genuine one.
+    // farbig: ~35 km out (inside the 60-min reach) with only 5.5 km of road →
+    // connector share ~0.87, over the 0.85 cap; nearbig ~0.49 stays a genuine
+    // drive. Sized to express "mostly getting-there" in BOTH connector states:
+    // R26-B2 moved the profile sizing speed 38→27 km/h, which lengthens the
+    // modelled road traverse and LOWERS connector share, so the old fixture
+    // was rescued by an arithmetic side-effect rather than by its own intent.
     const report = await discoverDrives(ORIGIN, gateDeps(cleanEdges), { gates: 'report' });
     expect(report.drives.map((d) => d.segmentId)).toEqual(['nearbig', 'farbig']);
     expect(report.disclosures.join(' ')).toMatch(/getting-there|shown last/);

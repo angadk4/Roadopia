@@ -67,6 +67,34 @@ export async function plannerFindCurvyRoads(
   return res.rows;
 }
 
+/**
+ * R26-A2 — the COUNTRY tier (migration 0017). Selects on CLASS with its own low
+ * curvature floor and orders by class-weighted LENGTH, so long country roads
+ * actually reach the limit. Deliberately NOT a relaxation of the curvy tier —
+ * ordering by curviness is precisely what made this material unreachable even
+ * at a zero floor (BD-97).
+ */
+export async function plannerFindCountryRoads(
+  db: Client,
+  params: {
+    polygonGeoJson: string;
+    minCurviness: number;
+    limit: number;
+    maxUrbanShare?: number;
+  },
+): Promise<CurvySegmentRow[]> {
+  const res = await db.query<CurvySegmentRow>(
+    `select id::text, osm_way_id, name, highway, length_m,
+            circum_curvature_per_km as curviness, urban_share,
+            significant_turns_per_km,
+            st_asgeojson(geom) as geometry
+     from planner_find_country_roads(p_polygon := $1::jsonb, p_min_curviness := $2,
+                                     p_limit := $3, p_max_urban_share := $4)`,
+    [params.polygonGeoJson, params.minCurviness, params.limit, params.maxUrbanShare ?? 1.0],
+  );
+  return res.rows;
+}
+
 /** Vertex points of segments in Ω at any curviness (return-anchor material). */
 export async function plannerFindAnchorPoints(
   db: Client,

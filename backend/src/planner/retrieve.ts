@@ -18,6 +18,7 @@ import type { Client } from 'pg';
 
 import {
   plannerFindAnchorPoints,
+  plannerFindCountryRoads,
   plannerFindCurvyRoads,
   plannerFindSpots,
 } from '../db/planner_reads';
@@ -27,6 +28,19 @@ import { URBAN_CONTEXT_ON } from './urban';
 
 /** Candidate curvature θ (SPK-10; frozen at M4 [GATE-C]). */
 export const THETA_CURVY_DEFAULT = 0.6;
+/**
+ * R26-A2 — the COUNTRY tier. BD-97 measured a mean 1 465 km of reachable rural
+ * tertiary/unclassified road per origin that today's retrieval cannot see
+ * (curvature floor + `order by curviness desc limit N`). This admits it as a
+ * SECOND tier with its own seats, so the curvy pool is never crowded out.
+ * Floor is the sweep parameter: the invisible set is 80 % dead-flat (<0.15),
+ * 11 % gentle, 8 % moderate — how far down we go is decided by the A/B's
+ * curviness kill condition, not by fiat.
+ */
+export const COUNTRY_TIER_ON = process.env['COUNTRY_TIER'] !== 'off'; // R26-A2 ADOPTED (BD-98)
+export const COUNTRY_THETA = Number(process.env['COUNTRY_THETA'] ?? 0.35); // swept 0.35/0.15/0.05 — 0.35 won on every axis
+/** Own seats — additive, so the curvy tier keeps its full limit. */
+export const COUNTRY_LIMIT_PER_RING = Number(process.env['COUNTRY_LIMIT'] ?? 200);
 export const SEGMENT_LIMIT_PER_RING = 300;
 export const SPOT_LIMIT_PER_RING = 100;
 /**
@@ -153,6 +167,11 @@ export async function retrieveCandidates(
     thetaCurvy?: number;
     segmentLimit?: number;
     spotLimit?: number;
+    /** R26-A2: per-caller override for the country tier (review finding — the
+     *  module-scope env flag otherwise changes Discover and the offline core
+     *  sweep too, neither of which the loop A/B measures). Defaults to the
+     *  env flag so production behaviour stays one decision. */
+    countryTier?: boolean;
   } = {},
 ): Promise<RetrievedCandidates> {
   const theta = options.thetaCurvy ?? THETA_CURVY_DEFAULT;
@@ -193,6 +212,18 @@ export async function retrieveCandidates(
         if (seg.length >= segmentLimit) break;
         if (!have.has(row.id)) seg.push(row);
       }
+    }
+    // R26-A2: the COUNTRY tier — its own query, its own seats, class-ordered.
+    // Unioned by id, so a road already retrieved as "curvy" is never doubled.
+    if (options.countryTier ?? COUNTRY_TIER_ON) {
+      const country = await plannerFindCountryRoads(db, {
+        polygonGeoJson: polygon,
+        minCurviness: COUNTRY_THETA,
+        limit: COUNTRY_LIMIT_PER_RING,
+        maxUrbanShare: URBAN_CONTEXT_ON ? URBAN_SEGMENT_MAX_SHARE : 1.0,
+      });
+      const have = new Set(seg.map((r) => r.id));
+      for (const row of country) if (!have.has(row.id)) seg.push(row);
     }
     for (const row of seg) {
       segments.set(row.id, {

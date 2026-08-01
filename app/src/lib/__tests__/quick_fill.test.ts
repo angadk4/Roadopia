@@ -71,10 +71,36 @@ describe('computeAutoFill (R25-U16d)', () => {
     );
   });
 
-  it('a twisty ask CLEARS the chip to No preference — the text decides (issue #9 fix)', () => {
-    // pre-U16b the backroads default preset silently ATE the twisty ask
+  it('a twisty ask FILLS the fun chip — it must never DE-SELECT it (R27)', () => {
+    // THIS TEST PREVIOUSLY ASSERTED THE DEFECT. It expected `style` to become
+    // null on a twisty ask, reasoning that "No preference" would let the free
+    // text decide. But null is not neutral in the UI: it is the third chip, and
+    // DEFAULT_DRAFT.style is 'backroads', so the screen opened with
+    // "Fun & Explorative" lit and typing "twisty" visibly turned it OFF. The
+    // owner reported exactly that as "the text box isn't filling in the options
+    // properly" (2026-07-29). The expectation was wrong, not the code, so the
+    // test is corrected rather than the behaviour re-broken.
     const auto = computeAutoFill(constraints({ twistiness_pref: 0.9, character: ['twisty'] }));
-    expect(auto.style).toBeNull();
+    expect(auto.style).toBe('backroads');
+    expect(auto.fromText).toContain('style');
+  });
+
+  it('a plain "backroads" ask still marks the chip as coming from the text', () => {
+    // The old guard only pushed 'style' when the parsed value DIFFERED from the
+    // default, so an explicit "backroads drive" could never show its
+    // "from your text" marker — the marker means "your text chose this", not
+    // "your text changed this".
+    const auto = computeAutoFill(constraints({ preset: 'backroads' }));
+    expect(auto.style).toBe('backroads');
+    expect(auto.fromText).toContain('style');
+  });
+
+  it('a "chill" ask reaches the Direct chip — the old branch was unreachable', () => {
+    // parse_rules emits chill on `intensity`, never on `preset`, so the previous
+    // `c.preset === 'chill'` test could not fire and typing "chill drive" moved
+    // nothing at all.
+    const auto = computeAutoFill(constraints({ intensity: 'chill' }));
+    expect(auto.style).toBe('simple');
     expect(auto.fromText).toContain('style');
   });
 

@@ -45,7 +45,10 @@ const scope: Scope = { rings: [hamiltonRing()], tauOutS: 2970, shape: 'loop' };
 describe('retrieveCandidates (M3-T04)', () => {
   it('returns curvy segments inside Ω, all ≥ θ, with parsed geometry', async (ctx) => {
     if (!db) return ctx.skip();
-    const out = await retrieveCandidates(db, scope);
+    // R26-A2: pin the CURVY tier explicitly (countryTier: false). Before this,
+    // the θ assertion below passed only because country rows happen to be
+    // appended last — an undeclared ordering dependency, not a check.
+    const out = await retrieveCandidates(db, scope, { countryTier: false });
     expect(out.segments.length).toBeGreaterThan(10);
     for (const s of out.segments.slice(0, 25)) {
       expect(s.curviness).toBeGreaterThanOrEqual(0.6);
@@ -88,5 +91,50 @@ describe('retrieveCandidates (M3-T04)', () => {
     expect(tight.segments.length).toBeLessThan(loose.segments.length);
     const looseIds = new Set(loose.segments.map((s) => s.id));
     expect(tight.segments.every((s) => looseIds.has(s.id))).toBe(true);
+  });
+});
+
+// --- R26-A2: the country tier ------------------------------------------------
+
+describe('retrieveCandidates — country tier (R26-A2)', () => {
+  it('OFF by default: every segment still clears the curvy floor', async (ctx) => {
+    if (!db) return ctx.skip();
+    const out = await retrieveCandidates(db, scope, { countryTier: false });
+    expect(out.segments.every((s) => s.curviness >= 0.6)).toBe(true);
+  });
+
+  it('ON: admits country-class material BELOW the curvy floor, and only country class', async (ctx) => {
+    if (!db) return ctx.skip();
+    const off = await retrieveCandidates(db, scope, { countryTier: false });
+    const on = await retrieveCandidates(db, scope, { countryTier: true });
+    expect(on.segments.length).toBeGreaterThan(off.segments.length);
+    const admitted = on.segments.filter((s) => s.curviness < 0.6);
+    expect(admitted.length).toBeGreaterThan(0); // the whole point of the tier
+    // every newly-admitted row is a COUNTRY road — never residential/main
+    for (const s of admitted) expect(['tertiary', 'unclassified']).toContain(s.highway);
+    // the curvy tier is preserved intact, never crowded out
+    const offIds = new Set(off.segments.map((s) => s.id));
+    const onIds = new Set(on.segments.map((s) => s.id));
+    for (const id of offIds) expect(onIds.has(id)).toBe(true);
+  });
+
+  it('never re-admits closed rings — the 0013 guarantee holds through BOTH doors', async (ctx) => {
+    if (!db) return ctx.skip();
+    // the pre-A/B review caught 0017 missing `not st_isclosed`; this is the pin.
+    const on = await retrieveCandidates(db, scope, { countryTier: true });
+    const closed = on.segments.filter((s) => {
+      const c = s.geometry.coordinates as Array<[number, number]>;
+      const a = c[0]!;
+      const b = c[c.length - 1]!;
+      return c.length > 2 && a[0] === b[0] && a[1] === b[1];
+    });
+    expect(closed).toEqual([]);
+  });
+
+  it('is deterministic: identical calls return identical ids in identical order', async (ctx) => {
+    if (!db) return ctx.skip();
+    const a = await retrieveCandidates(db, scope, { countryTier: true });
+    const b = await retrieveCandidates(db, scope, { countryTier: true });
+    expect(a.segments.map((s) => s.id)).toEqual(b.segments.map((s) => s.id));
   });
 });

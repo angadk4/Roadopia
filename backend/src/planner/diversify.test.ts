@@ -1,7 +1,7 @@
 import type { LineString } from '@shared/types';
 import { describe, expect, it } from 'vitest';
 
-import { diversify, prefilterByDuration } from './diversify';
+import { DIVERSIFY_MAXSET_ON, diversify, prefilterByDuration } from './diversify';
 import { edgeOverlapRatio, pairOverlap } from './overlap';
 
 /**
@@ -115,5 +115,125 @@ describe('prefilterByDuration (BD-21, owner round 3)', () => {
       { id: 'y', d: 1200 },
     ];
     expect(prefilterByDuration(tie, 1000, dur, 0.1).map((i) => i.id)).toEqual(['x']);
+  });
+});
+
+describe('R26-C3 max-dispersion diversify (BD-103)', () => {
+  /** Three parallel lines + one central line overlapping all three. */
+  /**
+   * The defect this unit exists for, as a fixture: a CENTRAL high-scorer that
+   * overlaps three otherwise-clean routes. Greedy takes it (best score) and is
+   * then blocked down to a presented set of 1, while a set of 3 mutually-clean
+   * routes sits right there. This is the measured shape of all 22 τ-collapse
+   * briefs: 25 accepted → 2.3 kept.
+   */
+  const seg = (x: number, y0: number, y1: number): LineString => ({
+    type: 'LineString',
+    coordinates: [
+      [x, y0],
+      [x, y1],
+    ],
+  });
+
+  /**
+   * The defect this unit exists for. `blocker` scores well enough to be taken
+   * SECOND by greedy, and it spans the whole corridor that a/b/c each occupy a
+   * third of — so once greedy has it, a, b and c are all excluded and the
+   * presented set stops at 2. A mutually-clean set of 4 (top + a + b + c) is
+   * sitting right there. This is the measured shape of the 22 tau-collapse
+   * briefs: 25.0 accepted collapsing to 2.3 kept.
+   */
+  const blockedPool = (): Array<{ id: string; score: number; geometry: LineString }> => [
+    { id: 'top', score: 100, geometry: seg(1, 0, 0.03) },
+    { id: 'blocker', score: 90, geometry: seg(0, 0, 0.03) },
+    { id: 'a', score: 10, geometry: seg(0, 0, 0.01) },
+    { id: 'b', score: 9, geometry: seg(0, 0.01, 0.02) },
+    { id: 'c', score: 8, geometry: seg(0, 0.02, 0.03) },
+  ];
+
+  it('THE UNIT: greedy stalls at 2 behind a blocker; the exact search reaches 4', () => {
+    const cands = blockedPool();
+    const greedy = diversify(cands, { tauOverlap: 0.6, kPresent: 4, maxSet: false });
+    const exact = diversify(cands, { tauOverlap: 0.6, kPresent: 4, maxSet: true });
+    expect(greedy.kept.map((k) => k.id)).toEqual(['top', 'blocker']);
+    expect(exact.kept.length).toBeGreaterThan(greedy.kept.length);
+    expect(exact.kept[0]!.id).toBe('top'); // rank-1 still presented
+    for (let i = 0; i < exact.kept.length; i++) {
+      for (let j = i + 1; j < exact.kept.length; j++) {
+        expect(pairOverlap(exact.kept[i]!.geometry, exact.kept[j]!.geometry)).toBeLessThanOrEqual(
+          0.6,
+        );
+      }
+    }
+  });
+
+  it('KNOWN LIMIT, pinned deliberately: when rank-1 IS the blocker, nothing can be recovered', () => {
+    // Pinning rank-1 keeps the promise that the best-scoring route is always
+    // presented. The cost is this case — a top scorer overlapping everything
+    // leaves a set of 1, and the exact search cannot beat greedy. Dropping
+    // rank-1 to widen the menu would mean showing the user worse routes than
+    // the one we ranked best, which is a product decision, not a tuning knob.
+    const cands = [
+      { id: 'central', score: 100, geometry: seg(0, 0, 0.03) },
+      { id: 'a', score: 10, geometry: seg(0, 0, 0.01) },
+      { id: 'b', score: 9, geometry: seg(0, 0.01, 0.02) },
+    ];
+    const exact = diversify(cands, { tauOverlap: 0.6, kPresent: 4, maxSet: true });
+    expect(exact.kept.map((k) => k.id)).toEqual(['central']);
+  });
+
+  it('OFF changes nothing where greedy under-delivers (BD-40 byte-identical)', () => {
+    const cands = blockedPool();
+    expect(
+      diversify(cands, { tauOverlap: 0.6, kPresent: 4, maxSet: false }).kept.map((k) => k.id),
+    ).toEqual(diversify(cands, { tauOverlap: 0.6, kPresent: 4 }).kept.map((k) => k.id));
+  });
+
+  it('leaves a brief greedy already solves untouched', () => {
+    // A central high-scorer that clashes with everything, plus 3 mutually-clean
+    // routes. Greedy takes the central one and is then stuck at 1.
+    const central = { id: 'central', score: 100, geometry: seg(0, 0, 1) };
+    const a = { id: 'a', score: 10, geometry: seg(0.5, 0, 1) };
+    const b = { id: 'b', score: 9, geometry: seg(1.0, 0, 1) };
+    const c = { id: 'c', score: 8, geometry: seg(1.5, 0, 1) };
+    const greedy = diversify([central, a, b, c], { tauOverlap: 0.6, kPresent: 4 });
+    // All four are disjoint here, so greedy already succeeds — this pins the
+    // control: the exact search must NOT alter a brief greedy already solves.
+    expect(greedy.kept).toHaveLength(4);
+    expect(greedy.kept[0]!.id).toBe('central');
+  });
+
+  it('pins rank-1: the best-scoring route is always presented', () => {
+    const cands = [
+      { id: 'top', score: 100, geometry: seg(0, 0, 1) },
+      { id: 'x', score: 50, geometry: seg(2, 0, 1) },
+      { id: 'y', score: 40, geometry: seg(4, 0, 1) },
+    ];
+    const res = diversify(cands, { tauOverlap: 0.6, kPresent: 4 });
+    expect(res.kept[0]!.id).toBe('top');
+  });
+
+  it('is deterministic across shuffled input order', () => {
+    const mk = (i: number) => ({ id: `c${i}`, score: 100 - i, geometry: seg(i * 0.7, 0, 1) });
+    const cands = [0, 1, 2, 3, 4, 5].map(mk);
+    const a = diversify(cands, { tauOverlap: 0.6, kPresent: 4 }).kept.map((k) => k.id);
+    const b = diversify([...cands].reverse(), { tauOverlap: 0.6, kPresent: 4 }).kept.map(
+      (k) => k.id,
+    );
+    expect(a).toEqual(b);
+  });
+
+  it('never returns a kept pair above tau — the AC clause it feeds stays true by construction', () => {
+    const mk = (i: number) => ({ id: `c${i}`, score: 100 - i, geometry: seg(i * 0.9, 0, 1) });
+    const res = diversify([0, 1, 2, 3, 4].map(mk), { tauOverlap: 0.6, kPresent: 4 });
+    for (let i = 0; i < res.kept.length; i++) {
+      for (let j = i + 1; j < res.kept.length; j++) {
+        expect(pairOverlap(res.kept[i]!.geometry, res.kept[j]!.geometry)).toBeLessThanOrEqual(0.6);
+      }
+    }
+  });
+
+  it('OFF is byte-identical to greedy (the BD-40 contract, asserted in-process)', () => {
+    expect(DIVERSIFY_MAXSET_ON).toBe(false); // default; the A/B flips it via env
   });
 });

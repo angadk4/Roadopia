@@ -8,6 +8,8 @@ import {
   generateLoopCandidates,
   resizedSpeed,
   seedPolygonAreaM2,
+  segValueOf,
+  COUNTRY_CURV_GAIN,
   sectorOf,
 } from './candidates';
 import type { CandidateSegment, CandidateSpot } from './retrieve';
@@ -449,5 +451,61 @@ describe('R25-U20b ring seeding + shoelace gate', () => {
     for (const c of gated) {
       expect(seedPolygonAreaM2(O, c.waypoints)).toBeGreaterThanOrEqual(minArea);
     }
+  });
+});
+
+// --- R26-A3: the value function that can choose a country road ---------------
+
+describe('segValueOf (R26-A3)', () => {
+  const road = (
+    over: Partial<CandidateSegment> & { highway: string; lengthM: number; curviness: number },
+  ): CandidateSegment => ({
+    id: over.id ?? 'x',
+    osmWayId: 'x',
+    name: 'Rd',
+    urbanShare: 0,
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [-80, 43.5],
+        [-79.99, 43.51],
+      ],
+    },
+    ...over,
+  });
+
+  it('LEGACY is multiplicative — a straight country road is worth ~nothing', () => {
+    const straight = road({ highway: 'unclassified', lengthM: 8000, curviness: 0.1 });
+    const twisty = road({ highway: 'unclassified', lengthM: 8000, curviness: 3.0 });
+    // 30x apart: this is gate 3 — why admitting the material alone was inert
+    expect(segValueOf(twisty, false) / segValueOf(straight, false)).toBeGreaterThan(20);
+  });
+
+  it('COUNTRY_VALUE is base+bonus — the straight country road is worth REAL value…', () => {
+    const straight = road({ highway: 'unclassified', lengthM: 8000, curviness: 0.1 });
+    expect(segValueOf(straight, true)).toBeGreaterThan(0.3 * segValueOf(straight, false) + 1);
+    expect(segValueOf(straight, true)).toBeGreaterThan(1000); // not a rounding artifact
+  });
+
+  it('…but twisty STILL wins, bounded by the gain — fun is not traded away', () => {
+    const straight = road({ highway: 'unclassified', lengthM: 8000, curviness: 0.1 });
+    const twisty = road({ highway: 'unclassified', lengthM: 8000, curviness: 3.0 });
+    const ratio = segValueOf(twisty, true) / segValueOf(straight, true);
+    expect(ratio).toBeGreaterThan(1); // still prefers the fun road
+    expect(ratio).toBeLessThanOrEqual(1 + COUNTRY_CURV_GAIN + 1e-9); // bounded
+  });
+
+  it('class order is preserved under BOTH shapes — mains never outrank country', () => {
+    for (const on of [false, true]) {
+      const country = road({ highway: 'unclassified', lengthM: 5000, curviness: 1.0 });
+      const main = road({ highway: 'secondary', lengthM: 5000, curviness: 1.0 });
+      expect(segValueOf(country, on)).toBeGreaterThan(segValueOf(main, on));
+    }
+  });
+
+  it('urban context still discounts under the new shape', () => {
+    const rural = road({ highway: 'tertiary', lengthM: 5000, curviness: 0.5, urbanShare: 0 });
+    const town = road({ highway: 'tertiary', lengthM: 5000, curviness: 0.5, urbanShare: 1 });
+    expect(segValueOf(rural, true)).toBeGreaterThan(segValueOf(town, true));
   });
 });

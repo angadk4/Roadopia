@@ -23,7 +23,7 @@ export const K_PRESENT_DEFAULT = 4;
  * round 6, "increase time accuracy"): with the resize retry recentring pools,
  * the presented set can afford the tighter band. M4 tunes.
  */
-export const DURATION_PREFILTER = 0.35;
+export const DURATION_PREFILTER = Number(process.env['DURATION_PREFILTER'] ?? 0.35);
 
 /**
  * Drop wrong-duration candidates ahead of dedup. `duration` extracts seconds from
@@ -69,6 +69,80 @@ export interface DiversifyResult<T extends Diversifiable> {
 }
 
 /**
+ * R26-C3 (BD-103) — exact max-dispersion selection when greedy under-delivers.
+ * OFF = byte-identical (greedy alone).
+ */
+export const DIVERSIFY_MAXSET_ON = (process.env['DIVERSIFY_MAXSET'] ?? 'off') !== 'off';
+/**
+ * Candidates considered by the exact search, top-scored first. Bounds the
+ * pairwise-overlap matrix at C(24,2)=276 comparisons on the ONLY briefs that
+ * run it. Measured mean accepted-per-brief is 25.0, so this covers a typical
+ * pool whole; when it truncates, `truncated` is reported rather than hidden
+ * (a silent cap reads as "considered everything" when it did not).
+ */
+export const DIVERSIFY_MAXSET_POOL = 24;
+
+/**
+ * Largest mutually-compatible subset containing the top-scored candidate.
+ *
+ * WHY exact rather than another heuristic: greedy is already MAXIMAL — it
+ * admits every candidate compatible with everything it has kept — so no
+ * add-only pass can improve it. The only route to a bigger presented set is to
+ * change WHICH candidates fill slots 2..k, which is a max-clique problem on the
+ * compatibility graph. At k=4 that is a search over triples, and the graph is
+ * built once from a memoized overlap matrix, so exactness is affordable here
+ * and needs no tuning constant to defend later.
+ *
+ * Rank-1 is PINNED: the best-scoring route is always presented, unchanged.
+ * Deterministic throughout — candidates enter in (score desc, id asc) order and
+ * ties break on size, then summed score, then that same index order.
+ */
+function maxCompatibleSet<T extends Diversifiable>(
+  sorted: T[],
+  tauOverlap: number,
+  kPresent: number,
+): { kept: T[]; truncated: number } {
+  const pool = sorted.slice(0, DIVERSIFY_MAXSET_POOL);
+  const truncated = sorted.length - pool.length;
+  const n = pool.length;
+  if (n === 0 || kPresent <= 0) return { kept: [], truncated };
+
+  // Compatibility adjacency, computed once. compat[i][j] ⇔ overlap ≤ τ.
+  const compat: boolean[][] = Array.from({ length: n }, () => new Array<boolean>(n).fill(false));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const ok = pairOverlap(pool[i]!.geometry, pool[j]!.geometry) <= tauOverlap;
+      compat[i]![j] = ok;
+      compat[j]![i] = ok;
+    }
+  }
+
+  let bestSet: number[] = [0];
+  let bestScore = pool[0]!.score;
+  const current: number[] = [0];
+
+  const extend = (from: number, score: number): void => {
+    if (
+      current.length > bestSet.length ||
+      (current.length === bestSet.length && score > bestScore)
+    ) {
+      bestSet = [...current];
+      bestScore = score;
+    }
+    if (current.length >= kPresent) return;
+    for (let i = from; i < n; i++) {
+      if (!current.every((c) => compat[c]![i])) continue;
+      current.push(i);
+      extend(i + 1, score + pool[i]!.score);
+      current.pop();
+    }
+  };
+  extend(1, pool[0]!.score);
+
+  return { kept: bestSet.map((i) => pool[i]!), truncated };
+}
+
+/**
  * Greedy overlap dedup. Input order does not matter — candidates are sorted by
  * score (desc) then id (deterministic ties) before the greedy walk.
  */
@@ -77,7 +151,8 @@ export function diversify<T extends Diversifiable>(
   {
     tauOverlap = TAU_OVERLAP_DEFAULT,
     kPresent = K_PRESENT_DEFAULT,
-  }: { tauOverlap?: number; kPresent?: number } = {},
+    maxSet = DIVERSIFY_MAXSET_ON,
+  }: { tauOverlap?: number; kPresent?: number; maxSet?: boolean } = {},
 ): DiversifyResult<T> {
   const sorted = [...candidates].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
   const kept: T[] = [];
@@ -97,6 +172,29 @@ export function diversify<T extends Diversifiable>(
       dropped.push({ candidate, overlapWith: clash.id, overlap: clash.overlap });
     } else {
       kept.push(candidate);
+    }
+  }
+
+  // Only pay for the exact search where greedy actually under-delivered; a
+  // brief that already reaches kPresent is untouched, which is what keeps the
+  // OFF/ON diff confined to the failing population.
+  if (maxSet && kept.length < kPresent && sorted.length > kept.length) {
+    const { kept: maxKept } = maxCompatibleSet(sorted, tauOverlap, kPresent);
+    if (maxKept.length > kept.length) {
+      const keptIds = new Set(maxKept.map((c) => c.id));
+      return {
+        kept: maxKept,
+        dropped: sorted
+          .filter((c) => !keptIds.has(c.id))
+          .map((c) => {
+            let worst = { id: maxKept[0]!.id, overlap: 0 };
+            for (const k of maxKept) {
+              const o = pairOverlap(c.geometry, k.geometry);
+              if (o > worst.overlap) worst = { id: k.id, overlap: o };
+            }
+            return { candidate: c, overlapWith: worst.id, overlap: worst.overlap };
+          }),
+      };
     }
   }
   return { kept, dropped };

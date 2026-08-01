@@ -60,6 +60,15 @@ export interface AutoCostingOptions {
   use_ferry?: number;
   /** 0..1; near 0 avoids living_street edges (Valhalla default 0.1). */
   use_living_streets?: number;
+  /** 0..1; near 0 avoids `track` edges (farm/forestry tracks). Probed at
+   *  R26-B1 as a guard on the country tier's new material. */
+  use_tracks?: number;
+  /** km/h ceiling the router costs against. R26-B1 probes this as the
+   *  road-CLASS proxy nobody had tried: a low ceiling makes fast roads
+   *  unattractive without a hard exclusion. Like every soft factor it is
+   *  BYPASSED under `shortest` — which is precisely why the fun profile has
+   *  never honoured one. */
+  top_speed?: number;
   /** Seconds added at transitions between unlike-named roads (default 5) —
    *  discourages subdivision rat-runs (round 7). */
   maneuver_penalty?: number;

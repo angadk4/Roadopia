@@ -144,7 +144,22 @@ function stopRequestsOf(rows: readonly StopRow[]): StopRequest[] {
 /** Draft → POST /plan body. Origin is REQUIRED here by design: the planner
  *  cannot resolve "current location" itself (BD-27 — the app always sends
  *  device-resolved coordinates). */
-export function buildPlanRequest(draft: PlanDraft): BuildResult {
+/**
+ * R27 — `autoFilled` names the chips quick-fill set FROM THE TEXT rather than
+ * the user tapping them.
+ *
+ * Why it matters: the chips are filled by the RULES parser (`POST /parse`), but
+ * `POST /plan` runs the LLM parse, which this project's own gate measures as
+ * strictly better (0.916 vs 0.852). Sending an auto-filled chip made the server
+ * treat a regex guess as the user's explicit control and overwrite the better
+ * parse with it — so the weaker parser won every request, which is what the
+ * owner experienced as "this removed half our AI integration" (2026-07-29).
+ *
+ * A chip the user actually TAPPED is still authoritative and still sent. Only
+ * values quick-fill guessed from the same brief the server is about to parse
+ * properly are withheld.
+ */
+export function buildPlanRequest(draft: PlanDraft, autoFilled?: ReadonlySet<string>): BuildResult {
   const problems: string[] = [];
   const brief = draft.brief.trim();
 
@@ -185,17 +200,21 @@ export function buildPlanRequest(draft: PlanDraft): BuildResult {
     ...(draft.routeOptions.pavedOnly ? { unpaved: true } : {}),
   };
 
+  // Withhold only what the TEXT filled — never what the user tapped.
+  const guessed = (f: string): boolean => autoFilled?.has(f) === true;
   const request: PlanRequest = {
     brief,
     origin: draft.origin.point,
-    shape: draft.shape,
+    ...(guessed('shape') ? {} : { shape: draft.shape }),
     ...(draft.shape === 'a_to_b' && draft.destination ? { destination: draft.destination } : {}),
-    ...(preset ? { preset } : {}),
-    ...(twistiness !== undefined ? { twistiness_pref: twistiness } : {}),
+    ...(preset && !guessed('style') ? { preset } : {}),
+    ...(twistiness !== undefined && !guessed('style') ? { twistiness_pref: twistiness } : {}),
     ...(stops.length > 0 ? { stops } : {}),
     ...(Object.keys(avoid).length > 0 ? { avoid } : {}),
-    ...(character.length > 0 ? { character } : {}),
-    ...(draft.durationTargetS !== null ? { duration_target_s: draft.durationTargetS } : {}),
+    ...(character.length > 0 && !guessed('style') ? { character } : {}),
+    ...(draft.durationTargetS !== null && !guessed('duration')
+      ? { duration_target_s: draft.durationTargetS }
+      : {}),
   };
   return { ok: true, request };
 }

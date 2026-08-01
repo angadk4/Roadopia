@@ -2067,3 +2067,920 @@ shipped +2.1 s of latency for zero feasibility on unseen briefs.
 **PRODUCT FINDING worth more than the lever: 50 % of random-suite origins cannot produce 4 distinct
 drives at all (kept ≤2), and 3 produce none.** That — not loop shape — is the real "we couldn't find
 you options" failure, and it is a CORPUS/retrieval question, not a ranking or seeding one.
+
+**BD-97 — R26-A1 country-road census: BUILD, unanimously (2026-07-27).** The build-or-cancel gate for
+the R26 backlog. For all 78 origins BOTH suites are judged on (48 fixed + 30 random fixture), using the
+REAL planner reach (buildScope isochrone, not a straight-line proxy), measured inside the polygon:
+rural country road (tertiary+unclassified, urban_share <0.3) per origin **mean 1 828 km / median
+1 360 km**, of which retrieval can see **363 km — 20 %**; **INVISIBLE mean 1 465 km / median 1 071 km**.
+For contrast, reachable MAIN road averages 1 788 km — there is as much rural country road in reach as
+main road, and today's gates show the planner a fifth of it. **78/78 origins (100 %) clear the 25 km
+bar; the pre-registered BUILD threshold was 40 %.** The ceiling is NOT the corpus or the SPK-08
+extract — it is the three retrieval gates (curvature floor · `order by curviness desc limit N` ·
+multiplicative `segValue`). Phase A proceeds.
+HONEST CAVEAT THAT SETS AN A2 PARAMETER: the invisible set is **80 % dead-flat** (curvature <0.15),
+11 % gentle (0.15-0.35), 8 % moderate (0.35-0.6). Admitting everything would hand the planner mostly
+straight concession grid — "country roads not main roads" ✓ but "twisty" ✗. The country-tier floor is
+therefore a SWEEP PARAMETER {0.35, 0.15, 0.05}, not a fiat: at 0.35 the rural material grows ~1.3×,
+at 0.15 ~1.8×, at 0.05 ~5× but grid-dominated. The curviness KILL condition decides how far is too far.
+
+**BD-98 — The country-road tier + value reform: the pre-registered bars were MISSED, the effect
+REPRODUCED on three independent suites, and the adoption call is the owner's (R26-A2/A3, 2026-07-27).**
+
+**WHAT WAS BUILT.** Migration 0017 `planner_find_country_roads` (class-selected tertiary/unclassified,
+own low curvature floor, ordered by class-weighted LENGTH — the gate-2 fix, since ordering by curviness
+is what made this material unreachable even at a zero floor) + a per-caller retrieval union
+(`COUNTRY_TIER`) + `segValue` reformed from MULTIPLICATIVE to BASE+BONUS (`COUNTRY_VALUE`): class ×
+length × rural carries the base, curviness adds a bounded ≤3× multiplier. All three BD-97 gates
+addressed together, because any one alone is inert.
+
+**PRE-A/B ADVERSARIAL REVIEW (23 agents) — 4 confirmed findings, all fixed before judgment:**
+(1) BLOCKING — 0017 omitted `not st_isclosed(cs.geom)`, silently voiding migration 0013's closed-ring
+(cul-de-sac/Standish Court) guarantee through the new door; verified on the live corpus (753 rings
+stored; 20 qualified at EVERY sweep floor — a ring is maximal-curvature by construction, so the floor
+never protects); fixed, RPC now returns 0 rings of 3 075, cost 0.23 % of the pool. (2) The lever was a
+module-scope flag reaching Discover and the offline core sweep, neither of which the loop A/B measures
+— added a per-caller override. (3) Hard rule J — no tests landed with the code; added 9 (country tier
+admits only country class below the floor · curvy tier preserved · zero rings · determinism · the
+value shape's OFF-identity, boundedness and class order), and pinned `retrieve.test.ts`'s θ assertion
+which passed only by an undeclared append-order accident. (4) MEASUREMENT TRAP: the harness's
+"curvy share" is computed against the RETRIEVED POOL, so it moves with a lever that changes retrieval —
+judging the curviness KILL on it would have been meaningless. All curviness figures below are the
+ABSOLUTE per-brief measure.
+
+**THE SWEEP (fixed suite, vs `e216d28335da10f8`).** θ=0.35 won and the shape matches BD-97's prediction
+exactly — the moderate band carries the value, the dead-flat 80 % is bulk:
+| θ | AC | backroad | main | clean | contP20 | curviness |
+|---|----|----|----|----|----|----|
+| baseline | 19 | 28 % | 69 % | 1 | 5 989 m | 100 % |
+| **0.35** | **22** | **35 %** | **63 %** | **4** | **8 411 m** | **101.4 %** |
+| 0.15 | 22 | 34 % | 63 % | 3 | 7 415 m | 99.5 % |
+| 0.05 | 23 | 33 % | 64 % | 3 | 7 415 m | 98.6 % |
+
+**IT REPRODUCED — the BD-96 test this time passes.** Rings gained on fixed and delivered literally zero
+on the holdout; this moves the same amount everywhere:
+| suite | backroad | main | curviness | feasible | no-route | wall |
+|---|---|---|---|---|---|---|
+| fixed 48 | 28→35 (+7) | 69→63 (−6) | 101.4 % | AC 19→22 | 0=0 | +122 ms |
+| random 30 (HOLDOUT) | 27→33 (+6) | 69→63 (−6) | 97.2 % | AC 9=9 | 3=3 | −15 ms |
+| A→B 15 | 24→31 (+7) | 71→68 (−3) | 0.95→0.97 | routed **12→14** | 3→1 | — |
+Plus: fixed clean drives 1→**4** (the metric stuck at 0-1 all project); continuity p20 +2 422 m fixed /
++3 702 m random / longest +2 911 m A→B; A→B highway 3.4 %→**0.1 %**; random main p80 90→79; hood down
+on both. OFF state re-verified byte-identical AFTER every review fix: `e216d28335da10f8`.
+
+**VERDICT AGAINST THE PRE-REGISTRATION — the primary bars MISSED.** backroad +10 pp asked, +6/+7 pp
+delivered; main −8 pp asked, −6/−3 pp delivered. Every KILL passed (curviness ≥95 % — it went UP on
+fixed and A→B), AC/no-route/wall all fine. Per BD-40 discipline I do NOT self-adopt on a missed bar —
+that is exactly the exception I refused to make for rings four hours ago, and consistency is the
+discipline's entire value. **RECORDED FOR THE OWNER** (the BD-81/BD-94 precedent): the bars were
+written before any data existed and were aspirational; the lever is the first thing in this project's
+history to move main-road share at all, it reproduced across three independent suites, it costs
+nothing (faster on two of three), and it improves rather than trades away the fun. Adoption is a
+one-word owner decision. Flags stay default OFF until then; nothing downstream (A4 re-baseline, Phases
+B-D) can proceed honestly until the material question is settled.
+
+**BD-99 — R26-B1 connector costing probe: REFUSED on A→B as registered; `top_speed` found to be a
+very large road-class lever, re-registered for the LOOP surface (2026-07-27).** ~90-97 % of route
+metres are Valhalla glue and no lever has ever moved them. Probed 8 live pairs × 7 arms, verdict rule
+written first. RESULT — no combo qualified, so B1 REFUSES and B2 does not run **as an A→B change**.
+But the measurement is emphatic and must not be buried: dropping `shortest` and setting
+**`top_speed: 50` gives median +39 pp backroad, worst case 0 pp (it never regressed a single pair),
+zero highway metres, zero hood change.** The sole blocker was duration: median ×1.42, worst ×1.68
+against bars of ≤1.15/≤1.30. Mechanism: `shortest` bypasses every soft factor (BD-21/R18-1 documents
+this), so today's fun profile cannot honour ANY use_*/penalty knob; dropping it re-arms them, and a
+speed ceiling then prices fast roads out without a hard exclusion. Sweep shape: ts70 inert, ts60
++22 pp, **ts50 +39 pp**, ts40 +19 pp with hood +7 pp (too far — it starts buying neighbourhood).
+`use_tracks`/`use_living_streets` were inert on top of ts50 (identical cells) — no guard needed.
+WHY A→B'S BAR IS THE WRONG BAR FOR LOOPS, and why this is a re-registration rather than goalpost-
+moving: an A→B route must cover fixed ground, so slower costing = a longer drive the user pays for.
+A LOOP is sized to a duration TARGET by the sizing speed + resize ladder — slower costing yields a
+geographically smaller loop of the SAME duration, not a longer one. Different product surface,
+different failure mode, therefore its own pre-registration:
+**BD-99-L (registered BEFORE the loop run), flag `CONNECTOR_TOPSPEED`, fun+backroads profiles,
+`{top_speed: 50, use_living_streets: 0}` replacing `{shortest: true, ...}`, sizing speeds derived from
+the probe's own ×1.42 (50→35, 38→27 km/h) rather than guessed:**
+ADOPT IFF — backroad share **+10 pp** (from 35 % fixed / 33 % random) · main **−8 pp** ·
+KILL curviness (ABSOLUTE measure) ≥95 % of baseline · KILL no-route not up (0 fixed / 3 random) ·
+|durErr| p80 ≤ +3 pp (from 19 %) · AC not down >2 · wall ≤ +2 s. Confirmed on BOTH suites or refused.
+
+**BD-100 — R26-B2 `top_speed` connector costing: ADOPTED (2026-07-27).** The first lever ever to move
+the ~90-97 % of route metres that are Valhalla glue. Replaces `{shortest: true}` with
+`{top_speed: 50}` on the fun + backroads profiles; sizing speeds 50→35 / 38→27 km/h DERIVED from the
+B1 probe's own ×1.42 duration ratio (not guessed — the rq18 convention).
+MEASURED, both suites, vs the A4 baselines (`eb5ee5dd61d5a565` / `56ca2adc571a6a9a`):
+| | fixed 48 | random 30 (holdout) |
+|---|---|---|
+| backroad | 35→**40 %** (+5) | 33→**38 %** (+5) |
+| main | 63→**58 %** (−5) | 63→**58 %** (−5) |
+| curviness (ABSOLUTE) | **104.6 %** | 98.7 % |
+| clean drives | 4→**6** | 0→**1** |
+| defects/route | 1.88→**1.73** | 2.03→2.07 |
+| durErr p80 | 19=19 | 18=18 |
+| no-route | 0=0 | 3=3 |
+| wall | −271 ms | +141 ms |
+VERDICT AGAINST BD-99-L: the +10 pp / −8 pp magnitude bars were MISSED (+5/−5), every KILL PASSED
+(curviness UP on fixed), and the effect REPRODUCED to the point identically on both suites. Adopted on
+the basis the owner endorsed for BD-98: when a lever moves THE REGISTERED METRIC in THE REGISTERED
+DIRECTION, reproducibly across a holdout, with every kill and cost bar satisfied, a missed aspirational
+magnitude is not grounds to discard it. Stated explicitly, not silently — the standing rule remains
+that a lever which misses its metric, fails a kill, or does not reproduce is REFUSED (BD-93/96/99).
+THE HONEST TRADE, diagnosed rather than assumed: AC fell 2 on BOTH suites, and the per-brief diff shows
+it is the DIVERSITY clause, not quality — 4 of 5 lost briefs dropped their distinct-candidate count
+(kept 4→3, 4→1, 4→2, 4→3) while clean drives ROSE and defects FELL. A speed ceiling funnels candidates
+onto the same slow-road network, so more of them dedup away. Better individual drives, fewer distinct
+options. This makes the `kept >= 4` starvation (BD-96's finding: 50 % of random origins already sit at
+kept ≤2) the binding constraint on the AC metric, and promotes R26-C3 from a follow-up to the next
+structural unit.
+CUMULATIVE R26 SO FAR (pre-R26 `e216d28335da10f8` → now): main **69→58 %**, backroad **28→40 %**,
+clean drives **1→6**, curviness **+6.2 %**, A→B routed 12→14, highway 0.3→0.4 % (flat).
+
+**BD-101 (PRE-REGISTRATION) — R26-C1 `maneuver_penalty`, the turn-density lever that only became
+possible today (registered 2026-07-27 BEFORE the run).** The owner's verbatim complaint — "way too many
+goddam turns… stop signs and lights every 2 minutes" — has been unattackable for the whole project for
+a documented mechanical reason: `shortest` bypasses every soft factor, and R25-U9b's own note recorded
+that a turn penalty "cannot be attacked at the router while `shortest` is the fun mechanism" (BD-90
+then REFUSED the presentation-side TURN_GRADE because the turn-heavy pools contained no clean
+alternative). BD-100 removed `shortest`. `maneuver_penalty` (seconds added at transitions between
+unlike-named roads) is now live for the first time.
+CONFIG UNDER TEST: `CONNECTOR_MANEUVER_PENALTY` seconds ∈ {15, 30, 60} on the fun/backroads connector
+(Valhalla default 5).
+BASELINE (post-BD-100, fixed `25895a0544443f2f` / random `b6d7168438c45b3c`): turns/10min mean 3.3 ·
+p80 3.9 · max 8.1 · briefs over 5/10min 5/48 · backroad 40 % · curviness 0.816 · AC 20 · clean 6.
+ADOPT IFF (both suites): briefs over 5 turns/10min **≤3/48** · p80 **≤3.5** · KILL curviness ≥95 % ·
+KILL backroad share not down >2 pp · KILL no-route not up · AC not down >2 · wall ≤ +1.5 s.
+Any miss ⇒ refused and recorded; the tail belongs to generation, not the router.
+
+**BD-101 (BASELINE CORRECTION, logged before the verdict).** The baseline quoted in the
+pre-registration above (turns mean 3.3 · p80 3.9 · max 8.1 · >5 5/48) is the **pre-B2** baseline —
+I copied it from the R26 A-phase run, not from the post-BD-100 run the A/B actually compares against.
+The TRUE post-BD-100 fixed-suite baseline is **mean 3.0 · p80 3.8 · max 5.4 · >5 2/48**.
+Consequence, stated plainly: the registered primary bar "≤3/48" **was already satisfied by the
+baseline**, so it is vacuous and cannot be claimed as a win. The only non-vacuous registered bar is
+**p80 ≤3.5**. The verdict below is judged on that bar and the kill bars only.
+This is itself the finding: **removing `shortest` (BD-100) already fixed most of the turn density** —
+max 8.1→5.4, >5 5/48→2/48 — because `shortest` adds turns by design, exactly as R25-U9b predicted.
+The owner's "a turn every 2 minutes" was mean 3.6/10min at audit-v11 (a manoeuvre every 2.8 min) and
+is now 3.0/10min (every 3.3 min) with no turn lever adopted at all.
+
+**BD-101 — VERDICT: REFUSED. `maneuver_penalty` buys turn-tail improvement by trading away backroad
+share, monotonically. The turn problem was already solved by BD-100.** Fixed suite, three doses vs the
+true post-BD-100 baseline (AC 20 · clean 6 · backroad 40 % p20 22 · main 58 % · abs curviness 1.004 ·
+turns mean 3.0 p80 3.8 max 5.4 >5 2/48 · wall 10 049 ms):
+
+| dose | turns p80 | >5 | backroad | main | clean | AC | abs curv | verdict |
+|---|---|---|---|---|---|---|---|---|
+| 15 s | 3.8 (=) | 2 | **40 %** | 58 % | 6 | 21 | 1.031 | INERT on the registered metric |
+| 30 s | **3.4** ✔ | 1 | 38 % (−2) | 60 % | 5 | 19 | 0.989 | passes literally, refused on trade |
+| 60 s | **3.3** ✔ | 1 | **37 % (−3)** | 60 % | 4 | 21 | 1.011 | **KILLED** (backroad −3 pp > −2 bar) |
+
+THE MECHANISM, confirmed by dose-response rather than argued: the penalty is monotone in BOTH
+directions — every second of turn penalty buys turn-tail and pays for it in backroad share
+(15 s: 0/40 · 30 s: −0.4 p80/−2 pp · 60 s: −0.5 p80/−3 pp), and main road rises by exactly what
+backroad loses. That is causal, not noise: a country road network is a grid of concession junctions, so
+penalising manoeuvres steers the router back onto long continuous arterials **by construction**. This is
+BD-62's refusal in a new coat — a taste lever fighting the thing the owner actually asked for — except
+it now reproduces at the ROUTER, which is where R25-U9b predicted the fix would have to live. Both
+places have now been tried and both refuse; the finding is that turn density and backroad share are
+genuinely coupled in this corpus, not that the lever was wrongly built.
+NOT ADOPTED. `CONNECTOR_MANEUVER_PENALTY` ships at 0 (knob absent from the payload, byte-identical);
+CURVINESS WAS NEVER THE COST (0.989–1.031, all ≥98 % of baseline) — so this refusal is on road class
+alone, and I am not hiding behind the twistiness kill bar.
+**What actually fixed the owner's complaint:** BD-100. Turn density went mean 3.6→3.0 /10 min
+(a manoeuvre every 2.8 min → every 3.3 min), max 8.1→5.4, briefs over the bar 5/48→2/48 — by REMOVING
+`shortest`, with no turn lever at all. The remaining tail is generation, not routing, and C1 closes.
+
+**BD-102 — R26-C2 loop shape, RE-MEASURED on post-BD-100 material (measurement, no lever).** The
+owner's "it barely ever looks like a loop, sometimes just a bunch of lines" is the one complaint R26
+did NOT move, and this records that plainly rather than letting the road-class wins imply it did.
+Fixed suite: loopiness mean **0.431 → 0.434**, briefs under 0.15 **9/49 → 7/49**, under 0.25 20→19.
+R26 changed WHICH ROADS the drive is built from; it did not change SHAPE, and there was no reason to
+expect it to.
+NO NEW LEVER IS PROPOSED, because shape now has four recorded refusals: BD-62 (ranking demote —
+"a generation problem attacked with a presentation tool"), BD-92 (`RETURN_ANCHOR_DISTANCE_FRACTION`
+sweep — p20 flat at 0.75/0.85, and 0.85 traded backroad −2 pp for AC +3), BD-94/95/96 (ring seeding
++ shoelace gate — zero AC gain on a pre-registered holdout, verdicts element-wise identical, wall
++20 %). A fifth attempt with no new mechanism would be a fifth refusal, and I would rather say so than
+spend the engine time. Shape stays a KNOWN OPEN ITEM at mean 0.434 with 7/49 poor loops; the honest
+next move is the one the D-phase drive-core index does by construction (generate many offline, keep
+only what MEASURES round) — not another live-planner ranking or seeding tweak.
+
+**BD-103 (PRE-REGISTRATION) — R26-C3 max-dispersion diversify. Registered BEFORE the run.**
+E1's attribution (new this session, console-only, hash-preserving) makes the AC ceiling legible for the
+first time: of 28 failing briefs, **diversity(kept<4)×22**, and **8 briefs fail on that clause and
+NOTHING ELSE** — so AC 20/48 has a ceiling of **28/48** behind one clause.
+DIAGNOSIS (measured, not assumed): of the 22 briefs with kept<4, **22 are τ-collapse and 0 are
+starvation** — mean **25.0 accepted** candidates per brief collapse to **2.3 kept**. The planner is not
+short of routes; its routes are near-duplicates of each other (pairwise overlap > τ=0.6). This kills the
+"pool-starved" reading I have twice reached for (and BD-96's diagnostic already corrected once).
+MECHANISM: `diversify()` is greedy by score, and greedy is suboptimal for max-dispersion subset
+selection — one high-scoring CENTRAL route blocks every route near it, so a set of 4 mutually-distinct
+routes can exist while greedy finds 2. Greedy is already maximal (it admits every compatible candidate
+it meets), so the ONLY way to keep more is to change composition. Exact search, rank-1 pinned.
+CONFIG: `DIVERSIFY_MAXSET_ON` (default OFF, byte-identical). Runs ONLY when greedy under-delivers, so
+the 26 briefs that already reach k=4 are untouched by construction.
+HONEST CAVEAT, registered up front: pinning rank-1 preserves "the best-scoring route is always
+presented", but the eval's `best` is the top presentKey among **feasible** kept — so where rank-1 is
+INFEASIBLE the best can change. I am NOT claiming this lever is quality-free; the A/B must show it.
+ADOPT IFF (fixed AND random): AC **+4** or better · briefs with kept<4 **22 → ≤12** ·
+KILL best-route curviness ≥95 % · KILL backroad not down >2 pp · KILL no-route not up ·
+KILL maxPairOverlap still ≤ τ on every brief · wall ≤ +1.5 s.
+
+**BD-103 — VERDICT: REFUSED, and the DIAGNOSIS I registered it on was itself WRONG. Correcting both.**
+Result vs the pre-registered bars (AC +4 · kept<4 ≤12):
+· fixed suite AC **20 → 21** (+1, bar +4) · kept<4 **22 → 20** (bar ≤12) · hash a44a22e7683d8faa
+· random holdout AC **7/30 → 7/30 (ZERO)** · every quality metric byte-identical (backroad 38 %, main
+  58 %, hood 2.7 %, clean 1, defects 2.07, hwy 0.6 %) · hash cf9d6248346c7853
+· no kill bar tripped: backroad 40 %/38 % unchanged, clean 6/1 unchanged, no-route unchanged,
+  wall 10 049→9 929 ms (faster). The lever is HARMLESS and very nearly INERT.
+The quality metrics being byte-identical is the design working exactly as specified — rank-1 pinning
+means the presented best cannot move — so this is a clean refusal on effect size, not a trade.
+
+**THE CORRECTION (this is the actual finding).** BD-103's registration claimed "22/22 τ-collapse,
+0 starvation, mean 25.0 accepted → 2.3 kept". That measured the pool at the WRONG STAGE: 25.0 is the
+count of ASSEMBLY-ACCEPTED candidates, but `prefilterByDuration` runs BEFORE `diversify`. Re-measured
+at the correct stage:
+  accepted **25.7** → duration prefilter drops **15.9 (62 %)** → pool entering diversify **9.8** → kept 2.6
+and among the 22 kept<4 briefs, **6 enter diversify with fewer than 4 candidates** — they CANNOT reach
+k=4 by any selection algorithm. So it was never "0 starvation": it is ~6 starved + ~16 genuinely
+over-similar, and of those 16 the exact max-clique search recovered only 2. That is now the third time
+in this program I have reached for a pool-starvation story and had to correct it against measurement
+(BD-94's "pool-starved towns", corrected by BD-96; and now this) — recording the pattern, not just the
+instance.
+WHAT THE CORRECTED NUMBERS SAY: with a mutually-clean bar of τ=0.6 (i.e. two routes may share 60 % of
+their edges and still count as DIFFERENT), a pool of ~10 survivors still cannot yield 4 distinct drives.
+**The planner is generating one drive about ten times.** That is the same defect the owner reports from
+the other end — a menu that all looks the same — and no selection-side lever can fix it, which is
+precisely what this refusal demonstrates rather than assumes.
+NOT ADOPTED. `DIVERSIFY_MAXSET` ships OFF. The code and its 8 tests stay (they encode the measured
+failure shape and the known limit — when rank-1 is itself the blocker, pinning it makes the set
+unrecoverable by construction, which is a deliberate product choice: never show the user worse routes
+than the one we ranked best).
+**PROMOTED to the next structural unit — and it is the OWNER'S CALL, not mine:** the duration prefilter
+at 0.35 discards 62 % of the pool before diversity is even attempted. That constant is 0.5→0.35 by an
+explicit owner decision ("increase time accuracy", round 6). Loosening it trades TIME ACCURACY for MENU
+DIVERSITY in exactly the proportion above. I am not flipping an owner decision on my own reading; the
+measurement goes to him with both numbers.
+
+**BD-104 (PRE-REGISTRATION) — R26-B3: re-test the U19 connector refinement on post-A/B material.**
+WHY THIS IS A PRINCIPLED RETEST AND NOT A SECOND ROLL OF THE DICE: BD-93 refused U19 and recorded its
+own root cause — *"suite loops already route THROUGH the retrieved corpus, so their connector legs
+offer little to steer; the probe's big wins live on long bare corridors with DENSE PARALLEL CORPUS."*
+Phase A (BD-98) changed precisely that variable: `planner_find_country_roads` adds up to 200
+tertiary/unclassified roads per ring — the exact class U19 snaps to — so corridors that were bare when
+U19 was judged now have parallel corpus. The refused lever is unchanged; the input it operates on is
+not. If it still refuses, that is a stronger result than the first refusal, because the stated cause
+will have been removed and the lever will still not have moved.
+BAR, and it is DERIVED not softened: BD-93's "+15 pp" targeted the owner's decision #1 — backroad must
+be the MAJORITY of a fun drive (backroad % > main %) — from a 28 % base. The post-BD-100 base is
+**backroad 40 % vs main 58 %**, so the same product criterion now needs **+10 pp**. That is the bar.
+ADOPT IFF (fixed, then confirmed on random): backroad **+10 pp** · KILL curviness ≥95 % · KILL no-route
+not up · KILL hood not up >1 pp · AC not down >2 · wall **≤ +2.5 s** (BD-93 used ≤ +2 s and measured
++3 s; refinement costs engine calls by construction, and a lever that cannot fit the latency budget
+cannot ship however good its road mix).
+
+**BD-105 — R26-C3b: the duration-prefilter tradeoff, MEASURED and handed to the owner undecided.**
+BD-103's correction showed `prefilterByDuration` discards 62 % of the assembled pool before diversity
+is attempted, leaving 6 of 22 failing briefs structurally unable to reach k=4. The constant is 0.35 by
+an explicit owner decision (0.5→0.35, round 6, "increase time accuracy"). Measured both ways on the
+fixed suite, everything else frozen:
+
+| | prefilter 0.35 (today) | prefilter 0.5 (pre-round-6) |
+|---|---|---|
+| briefs with a full 4-drive menu | 26/48 | **32/48** (kept<4: 22 → 16) |
+| briefs passing all AC | 20/48 | **21/48** |
+| briefs missing requested time by >25 % | **6** | 8 |
+| clean drives · defects/route | 6 · 1.73 | 6 · **1.71** |
+| backroad / main / hood | 40 / 58 / 2.0 % | 40 / 58 / 2.0 % (identical) |
+| no-route | 0 | 0 |
+
+Exactly the 6 structurally-starved briefs are recovered, and the price is exactly what the owner bought
+in round 6: **+6 briefs get four distinct drives to choose from; +2 briefs return a drive more than
+25 % off the requested time.** Road quality does not move at all either way.
+NOT ADOPTED, DELIBERATELY. This reverses a decision the owner made explicitly and for a stated reason,
+and the eval cannot rank "a fuller menu" against "the time I asked for" on his behalf. `DURATION_PREFILTER`
+is now env-overridable (default 0.35, byte-identical — hash 25895a0544443f2f re-verified) so the choice
+is a one-line change whenever he makes it.
+
+**BD-104 — VERDICT: REFUSED. The 6th refusal of the connector family, and the most conclusive.**
+Fixed suite, `CONNECTOR_REFINE=on`, vs the post-BD-100 base (backroad 40 % p20 22 · main 58 · AC 20 ·
+clean 6 · hood 2.0 · no-route 0 · wall 10 049 ms):
+backroad **40 % → 40 % (+0 pp against a +10 pp bar)** · main 58 → 57 · AC 20 → 20 · clean 6 → 6 ·
+hood 2.0 → 2.0 · no-route 0 → 0 · wall 10 049 → **9 860 ms** (no latency cost this time, unlike BD-93's
++3 s) · hash 8f8e96b8abc3aea9.
+WHY THIS REFUSAL IS WORTH MORE THAN THE FIRST: BD-93 refused U19 and attributed it to a property of the
+input — "suite loops already route THROUGH the retrieved corpus; the big wins live on long bare
+corridors with dense parallel corpus." Phase A then put up to 200 tertiary/unclassified roads per ring
+into that corpus, changing exactly that property, and the lever moved backroad share by **zero**. The
+stated cause has been removed and the effect did not appear, so the explanation is now the mechanism
+itself, not the material: on LOOP suites the connector legs are short and already corpus-adjacent, and
+via-steering has nothing left to buy. The probe's genuine wins (BD-93 recorded +14 pp at ×1.01 on
+Acton→Georgetown) live on long point-to-point corridors — which is an **A→B** shape, not a loop shape.
+`CONNECTOR_REFINE` stays OFF with its 11 tests. If it is ever re-registered it should be on the A→B
+path, where the geometry that made it work in the probe actually occurs — and that is a product call,
+not something to keep re-rolling on loops.
+
+**BD-106 — R26-D1: the drive-core sweep re-run on the new corpus. The kill condition fires AGAIN —
+but the BINDING BAR HAS CHANGED, and that is the result.** 12 representative cells spanning the region
+(a sample, not the ~250-cell full sweep — stated so this is not read as complete coverage),
+`GENERATOR_VERSION=r26-d1`:
+cores kept **10** (9 loops, 1 ribbon) · cells with ≥3 cores **2/12** · **KILL: <3 cores in 10/12 (>40 %)**.
+Per-bar rejection histogram, in order:
+**loopiness×64** · main_share×51 · assembly_rejected×47 · backroad_share×38 · hood_share×37 ·
+turns×13 · microloops×8 · spurs×7 · uturns×1 · route_failed×1.
+THE CHANGE: the previous sweep's binding bars were **`main_share×15 · backroad_share×13`** — road class.
+After Phases A and B, road class has fallen behind **loopiness**, which is now the single largest
+rejection cause by a wide margin (64 vs 51). Phase A/B did what they were built to do and the
+constraint moved. It did not disappear.
+CROSS-VALIDATION, from an instrument that shares no code path with this one: BD-102 measured the live
+eval suite and found R26 moved road class (backroad 28→40 %) and left shape flat (loopiness 0.431→0.434,
+7/49 under 0.15). The offline sweep now independently names shape as its top blocker. Two instruments,
+one conclusion: **shape is the remaining product defect, and it is a GENERATION problem** — which is
+exactly what BD-62's own adversarial review concluded before four subsequent shape levers refused.
+CONSEQUENCE FOR THE PHASE: D2 (ship the written-and-waiting Discover v2 index) is NOT unblocked — 2/12
+cells filled cannot stock a regional menu. The pre-registered fallback is D3 `bar_profile='cell_relaxed'`
+per ACP-001: relax the ONE named binding bar (now **loopiness**, not road class) to each cell's own
+measured p75, sort those cores below every strict core, and state the number on the card. That path was
+pre-approved in the plan for exactly this outcome, but WHICH bar it relaxes is a product question the
+owner should answer knowing it is now shape — "this is the best drive around here, and it's more of a
+long ribbon than a loop" is a different promise from the road-class version he approved.
+
+**BD-105 — CLOSED BY OWNER (2026-07-29): duration prefilter STAYS at 0.35.** Presented the measured
+tradeoff (+6 briefs get a full 4-drive menu and +1 AC, against +2 briefs landing >25 % off the requested
+time; road quality identical). Owner chose **time accuracy**. Rationale on the record: "menu size" is the
+eval's own instrument, not something the owner ever complained about, whereas a 2-hour ask returning
+~30 minutes long is a promise broken to the user's face. `DURATION_PREFILTER` remains 0.35; the env
+override stays so the decision is reversible in one line, and the AC ceiling of 28/48 is understood to be
+partly self-imposed BY THIS CHOICE rather than a planner defect.
+
+**BD-107 — R26-D1-full: the full sweep was AUTHORIZED, and pre-launch verification found FOUR defects
+in the path it depends on — three of them mine.** The owner chose "run the full sweep before deciding
+cell_relaxed" over shipping on a 12-cell sample. Because that commits ~20 unattended hours, the path was
+verified before launch rather than after, and the checks paid for themselves:
+1. **PRE-EXISTING, BLOCKING: the full-sweep code path had never once executed and would have crashed
+   instantly.** `build_drive_cores.ts` derived the region grid with `st_extent(geometry::geometry)`, but
+   the column is `geom`. Every prior sweep (including D1/BD-106) passed `CELLS=`, so the
+   derive-from-extent branch was dead code carrying a fatal typo.
+2. **MINE: the live-cell prefilter was ANISOTROPICALLY WRONG and would have silently REDUCED coverage.**
+   `squareScope` takes its longitude half-width as `halfM / (111 320 · cos(lat))` — at 44 °N that is
+   0.150 ° against 0.108 ° in latitude. My probe expanded equally in both axes, making it NARROWER than
+   the scope it stood in for, so a cell whose only corpus sat in that longitude margin would be dropped
+   as dead — shrinking both coverage and the kill-condition denominator with no error. Found by reading
+   `squareScope` rather than by trusting the comment I had just written. Fixed by taking the longitude
+   half-width at the region's highest latitude, making the probe a provable superset.
+3. **MINE: binding EWKT strings as `geometry[]` does not parse** (Postgres `ReadArrayToken`) — it would
+   have crashed at the prefilter. Coordinates now cross as two `double precision[]` and the point is
+   built in SQL. Measured, not assumed.
+4. **MINE: resume would have reported a FALSE kill condition.** `liveCells`, `filledCells` and the
+   rejection histogram only incremented inside the loop, so a resumed run would have computed its
+   >40 % kill over only the newly-processed cells and silently discarded every earlier rejection —
+   i.e. produced a confident, wrong headline. Now each checkpoint record carries its cell's filled flag
+   and histogram delta, and resume rebuilds all three (every record is provably a live cell: both
+   `continue` paths precede `liveCells++`).
+VERIFICATION, all real output: refactor **behaviour-preserving** — the 12-cell D1 sweep re-run reproduces
+`de00aa5b78e89121` exactly · **resume validated end-to-end** — 6 cells (`f7f250711c7a281f`) then resumed
+to 12 reproduces `de00aa5b78e89121` with `live cells: 12`, `filled: 2` and a histogram identical to the
+single run · **prefilter superset proven empirically** — 1 528 grid cells, probe live 1 185, exact-scope
+live 1 184, **exact-but-missed-by-probe = 0**.
+SCOPE CORRECTION: the plan estimated "~250 live cells, 6-9 h". The measured region is **1 184 live
+cells**, so the full sweep is **~20 h**, not 6-9. Running detached with `RESUME=on` so it survives an
+interruption; a resumed run is now proven to produce the byte-identical artifact.
+
+**BD-108 — PROCESS FAILURE, caught after the fact and recorded as such: BD-100 changed SHARED costing
+helpers and I judged it on LOOP suites only. A→B and Discover inherited it unmeasured.**
+`FUN_OPTIONS()` / `FUN_SIZING()` (costing.ts:104-109) back BOTH the `FUN` and `BACKROADS` profiles.
+`profileForRequest` (costing.ts:176-183) is shared by loops and A→B, and only the highway avoid at
+run.ts:550 is `isLoop`-gated — `profile.options` reaches the A→B routing at run.ts:998 ungated. Discover
+uses `BACKROADS` directly (discover.ts:353, 475). So adopting `top_speed:50` on loop evidence silently
+re-costed two other products, one of which (**A→B**) had the SAME change explicitly REFUSED by BD-99 on
+a ×1.42 median duration-growth blocker. BD-100 should have carried the A→B suite the moment it touched a
+shared helper. It did not. That is my error, not a surprise about the world.
+
+**MEASURED NOW** (atob-quality, vs the pre-BD-100 baseline `ee07cc6c2cd1fc77`; new `777f2154a6f4e0fa`.
+Wall-clock is NOT judged — the 20 h core sweep was running concurrently and contaminates it. Every
+metric below is deterministic and unaffected):
+· routed 14/15 → **14/15** (unchanged) · arterial 68 % → **61 %** · main 68 % → **60 %** ·
+  backroad 31 % → **38 %** · curviness 0.97 → **1.07** · highway routes **1 → 0** ·
+  backroad longest 14 603 → **18 574 m** · turns/10 min 3.4 → 3.4
+· **hood run max 1 260 → 3 498 m — a REGRESSION**, and on one of the owner's named complaints
+  ("random deviations into neighbourhoods").
+· duration: **median per-route growth ×1.000**, total ×1.112 — so **BD-99's ×1.42 median does NOT
+  reproduce** in the shipped combination (the isolated probe lacked Phase A's country tier and the A→B
+  detour cap). But there is a TAIL: Barrie→Collingwood **76 → 129 min (×1.70)**, Hamilton→Simcoe ×1.34,
+  Guelph→Orangeville ×1.32.
+**THE MECHANISM behind the tail, and it is a real defect worth its own unit:** Barrie→Collingwood grew
+**+8 % in DISTANCE but +70 % in DURATION**. The A→B detour cap is a *distance ratio* — it is structurally
+blind to time. `top_speed:50` buys road quality by making fast roads unattractive, which costs TIME, not
+kilometres, so the one guard A→B has cannot see the cost this lever imposes. A duration-growth guard is
+the principled fix and needs its own pre-registered A/B.
+NOT UNILATERALLY REVERTED. On the owner's stated priority (backroads over main roads) this is a strong
+A→B win — main −8 pp, backroad +7 pp, curviness +10 %, highway eliminated — and the median user sees no
+extra time at all. But three of fourteen routes take 11-70 % longer and neighbourhood exposure rose, and
+"your drive to Collingwood is now 53 minutes longer" is exactly the kind of cost the owner just told me
+(BD-105) he weights above menu quality. It goes to him with both columns.
+**Discover remains UNMEASURED against this change** — `discover_quality` has not been re-run since
+BD-98/BD-100. That is the next measurement, not a conclusion.
+
+**BD-109 — Discover measured against the same unmeasured propagation (BD-108's second half).**
+`discover-quality`, post-Phase-A + BD-100 vs the pre-R26 baseline. Origins passing all bars **6/7 → 6/7**,
+but the composition changed and one of the changes is on a complaint the owner raised by name:
+· **FIXED — Dunnville**: FAIL → PASS (its failing bar was `built 5/6`; now 6/6). Phase A's country tier
+  gave a flat-corpus origin enough material to build every drive it offered.
+· **BROKEN — Caledon**: PASS → **FAIL** on `onRoad 90 % → 75 %` (bar ≥80 %). A quarter of that menu's
+  drive length is no longer on the road the card names. This is a genuine regression and the only hard
+  failure introduced.
+· **FIXED, and it is the owner's own complaint — "Discover serves the same pre-built routes"**:
+  repetition pairs **1/2 → 2/2**. Erin↔Belfountain went from **jaccard 1.00 (all 6 drives identical,
+  FAIL)** to **0.50**. Two origins 5 km apart no longer return the same menu.
+· top3curv moved both ways (Kimberley 2.93→2.79, Stratford 2.95→2.57, Hockley 1.95→1.72 down;
+  Dunnville 1.66→1.87, Caledon 1.26→1.58 up) — no directional claim is supportable from that.
+Net: Discover is **not** the regression risk BD-108 flagged it as; it is roughly neutral on the origin bar
+and better on menu repetition. **Caledon's onRoad drop is a real defect and is now on the record as
+open** — it is not covered by the D-phase index work (that replaces the ranked menu, but `onRoad` measures
+whether a served drive follows its named road, which the index inherits).
+
+**BD-110 — CORRECTIONS TO BD-101, BD-104 AND BD-106, forced by an adversarial audit of my own verdicts
+(12 agents, 5 independent lenses, every finding put to a skeptic instructed to refute it; 18 raised,
+7 verified, 3 survived). The outcomes of all three decisions stand; the REASONS I recorded for two of
+them do not, and the instrument that produced them was broken.**
+
+**(1) BD-101's curviness claim is STRUCK. The registered kill bar actually FAILS.**
+BD-101 registered `KILL curviness ≥95 %` against a baseline of **0.816** — the all-48-brief mean of the
+`curv` column — and then judged the verdict against **1.004**, the mean of the 39 rows with curv>0. Two
+different instruments. On the REGISTERED one the arms are mp15 **105.4 %**, mp30 **93.5 %**, mp60
+**98.1 %**, so the 30 s arm **trips the curviness kill** it was recorded as passing. The all-brief mean
+was the standing convention, not a registration slip: all three of BD-100's curviness figures reproduce
+only on it (104.6 %, 98.7 %, +6.2 %) and none reproduce on the measured-only subset. So the instrument
+changed, undisclosed, inside the very entry that made a show of correcting other baselines.
+**Struck:** "CURVINESS WAS NEVER THE COST (0.989-1.031, all ≥98 % of baseline) — so this refusal is on
+road class alone, and I am not hiding behind the twistiness kill bar." That sentence is false against the
+registered instrument and unauditable as written. **The honest statement: `maneuver_penalty` at 30 s trips
+BOTH the backroad and the curviness kill.** C1 remains REFUSED — more firmly, and for one more reason.
+**(1b) And BOTH instruments are unsound, which is the deeper finding.** `curviness === 0` on a loop is
+**not a straight drive — it is UNMEASURABLE**: `computeCurvature` skips closed rings, and a loop whose
+kept runs coalesce into one ring-spanning run measures nothing (evidence: Waterdown, ctry 0.83 / cvy 54 %,
+prints curv 0.00). The all-brief mean scores those gaps as zero; the measured-only subset conditions on
+measurability, which correlates with junction density. mp30's entire all-brief shift is zero-count churn
+(9→11 zeros). **Root cause: no eval output has ever PRINTED a curviness aggregate**, so every curviness
+figure and every curviness kill in R26 — including BD-104's, which registered a curviness kill and then
+reported no curviness at all — was an undocumented hand computation over a column with a silent gap.
+**FIXED:** `loop_quality.ts` now prints all-brief mean, measured-only mean, AND the unmeasurable count,
+with the requirement that a kill bar name its instrument. Console-only; the hash is untouched.
+
+**(2) BD-104's REFUSAL stands; its CAUSAL EXPLANATION is struck.** I wrote that the lever refused because
+"on LOOP suites the connector legs are short and already corpus-adjacent, and via-steering has nothing
+left to buy." The run's own output contradicts that: **12 of 48 briefs had at least one ACCEPTED connector
+refinement** (geometry is mutated only inside the `CONNECTOR_REFINE` block, and `refineLoopFinalist`
+returns non-null only on a MEASURED material gain of +2 pp share or +250 m longest run). Via-steering
+found and assembled real improvements on a quarter of the suite. **Only brief 7 moved the best-route
+columns** — because every road-class, continuity, hood, clean-drive and defect number in the report is
+computed on `best` ALONE. So the lever's measured effect reached the instrument **exactly once in 48**,
+and a +10 pp bar on that channel could not have detected it. Worse for my wording: those other 11 rows
+are **not** "non-presented" — `feas == kept` on all 48 briefs, so they are drives the user IS shown.
+**THE REAL FINDING, which outranks the verdict: the eval scores only the top-ranked drive, so any lever
+that improves the 2nd-4th drives in the menu is invisible to every R26 A/B.** That is an instrument
+limitation affecting the whole program, not a fact about U19.
+
+**(3) BD-106's "binding bar" is an OVERREACH.** `verdict.failures.forEach(bump)` makes the histogram a
+**marginal** count — every failed bar bumps for every candidate — so "loopiness×64 > main_share×51"
+identifies the **most-often-failed** bar, not a binding one, while ACP-001 relaxes exactly ONE named bar.
+It should have read: *"the largest marginal rejection count moved from road class to loopiness."*
+The conclusion nevertheless survives on the right instrument, derived from BD-107's own per-cell
+histogram deltas at zero extra cost: on the in-flight sweep at 295 cells, **sole-loopiness ≥102
+candidates and 19 unfilled cells would reach ≥3 cores on loopiness relaxation alone, against 4
+candidates / 1 cell for main_share.** Note also that by 295 cells the MARGINAL ordering had already
+flipped back (main_share×1597 vs loopiness×1530) — which is precisely why the marginal histogram must not
+be read as causal. **The full sweep will settle it per-cell, not by aggregate count.**
+
+**Also fixed in the sweep, from the same audit, mid-run:** `catch { continue }` was swallowing EVERY
+retrieval failure as "out-of-corpus cell" — after the live-cell prefilter has already PROVEN corpus is
+present, so anything thrown there is an infrastructure error being silently counted as a dead cell,
+corrupting the kill condition's own denominator over a multi-hour run. Errors are now collected, printed,
+and excluded from both numerator and denominator with a stated warning. The checkpoint also carries a
+`generator|cells|size|scope|keep` **stamp** (resuming a mismatched checkpoint now throws instead of
+blending configurations) and a **torn final line** — the normal result of killing a run mid-append — is
+skipped with a notice instead of aborting the resume. Sweep restarted on the hardened code: 453 completed
+cells replayed from checkpoint, continuing from 457.
+
+**BD-111 — OWNER DECISION (2026-07-29): `top_speed` is gated to LOOPS. A→B is restored to the state
+BD-99 actually judged and will be re-registered on its own bars.**
+Presented the choice with both columns: keeping it gave A→B main 68→60 %, backroad 31→38 %, curviness
+0.97→1.07, highway routes 1→0 and an unchanged median duration, against a 3-of-14 tail
+(Barrie→Collingwood 76→129 min) and hood run 1 260→3 498 m. The owner chose to gate. The deciding
+argument was not the numbers: A→B was shipping on evidence gathered AFTER the change leaked in through a
+shared helper, which is the after-the-fact pattern this whole program refuses — every other adoption in
+R26 had to clear a bar registered BEFORE the run.
+IMPLEMENTATION: `profileForRequest` now resolves shape-dependently — loops get `FUN`/`BACKROADS`
+(top_speed adopted), A→B gets `FUN_ATOB`/`BACKROADS_ATOB`, which are the same profiles with the
+pre-BD-100 connector costing restored (`shortest`, sizing 50/38). `TOPSPEED_ATOB=on` restores the leaked
+behaviour, so the future A→B re-registration flips a flag instead of re-applying a revert.
+**Discover deliberately NOT reverted** — it consumes `BACKROADS` directly, its drives ARE loops, and
+BD-109 measured it neutral-to-better under the change.
+VERIFICATION, both directions, real output:
+· **A→B returned to `ee07cc6c2cd1fc77` — byte-identical to the pre-BD-100 baseline.** Every metric
+  matches exactly: routed 14/15, arterial 68 %, curviness 0.97, main 68 %, backroad 31 %, hood run
+  1 260 m, turns 3.4. The revert is exact, not approximate.
+· **Loops UNCHANGED at `25895a0544443f2f`** — AC 20/48, clean 6, backroad 40 %, main 58 %. The adopted
+  win is untouched, which is the whole point of gating rather than reverting.
+· 399 backend tests green (4 new, pinning both sides of the split and that `simple`/`chill` are
+  shape-insensitive), whole-repo `tsc` clean.
+**The BD-110 curviness instrument is now live and immediately reproduced the audit's hand computation:**
+`all-brief mean 0.82 (n=48) · measured-only mean 1.00 (n=39) · UNMEASURABLE 9/48 (closed-ring skip, not
+straight roads)`. The two instruments that BD-101 silently swapped between are now printed side by side
+with the gap named, so no future kill bar can be judged against an unregistered baseline.
+**OPEN, carried forward as the highest-value instrument work (BD-110 finding 2): every R26 A/B scored
+the top-ranked drive ONLY.** `feas == kept` on all 48 briefs, so drives 2-4 are shown to the user and
+measured by nothing. U19 accepted material refinements on 12/48 briefs and moved the reported numbers on
+1. Any lever that improves the rest of the menu has been invisible to this entire program.
+
+**BD-112 — R26-D1-FULL COMPLETE (1 177 live cells, artifact `1816fad8d7834245`, zero errored cells).
+The kill condition fires at full scale, the per-cell instrument REVERSES the marginal one, and the
+honest conclusion is that NEITHER D2 NOR D3 is viable — the index is GENERATION-limited, not
+bar-limited.**
+RESULT: cores kept **508** (484 loops, 24 ribbons) across **1 177** live cells. Cells with ≥3 cores:
+**39 (3.3 %)**. Cells with ZERO cores: **846 (71.9 %)**. Distribution: 0→846, 1→206, 2→86, 3→26, 4→13.
+**KILL: <3 cores in 1 138/1 177 cells.**
+
+**BD-106's 12-cell reading does not survive, in BOTH directions — exactly as BD-110 predicted.**
+· The MARGINAL histogram at full scale is `assembly_rejected×5538 (22.0 %) · main_share×5093 (20.2 %) ·
+  loopiness×4967 (19.7 %)` — so the 12-cell headline "loopiness×64 is now the binding bar, ahead of
+  main_share×51" **inverts** at scale. Had I shipped `cell_relaxed` on that reading I would have relaxed
+  a bar chosen by a 12-cell sample the full sweep contradicts.
+· But the PER-CELL sole-failure instrument (BD-110's remedy, computed free from BD-107's checkpoint
+  deltas) says loopiness IS nevertheless the right single bar — and by 7:1: relaxing **loopiness alone
+  unlocks 35 cells** (≥162 sole-failure candidates) against **main_share 5** (≥21). Every other bar
+  unlocks **zero**. So the conclusion survives while the instrument that produced it is discredited —
+  the marginal count ranks how often a bar is *touched*, the per-cell bound ranks what relaxing it
+  *buys*, and only the second is a decision.
+
+**WHY D2 AND D3 BOTH FAIL, which is the finding that matters:**
+· D2 (ship the index as specified): **3.3 % of cells fill.** Not arguable.
+· D3 (`cell_relaxed` on the one binding bar): **6.3 %** (39→74). The pre-approved fallback does not
+  rescue it. Relaxing loopiness AND main_share together reaches 27.5 %, but that is no longer
+  "relax the ONE named binding bar" per ACP-001 — it is abandoning two of the four quality promises the
+  index exists to keep, and it would still leave ~72 % of the region without a menu.
+· **The largest single rejection cause is `assembly_rejected` (22 %), which is NOT A BAR.** It is the
+  generator failing to build a valid loop at all. **71.9 % of live cells produce zero cores.** No bar
+  policy can fix a generator that does not assemble — which is why relaxing bars tops out where it does.
+**RECOMMENDATION (owner's call): do NOT ship D2 or D3.** The drive-core index is sound as a mechanism
+and its offline hard-measured selection is still the right architecture; it is starved by loop
+GENERATION in an 8 km cell, which is the same root cause as BD-102 (shape flat, four refused shape
+levers) and the same one the ring-seeding family kept hitting. The honest options are to enlarge the
+cell / relax the 8 km scoping so the generator has room, or to accept Discover stays on its Stage-1
+gated path until loop generation improves. Both are scope decisions, not tuning.
+SCOPING OF THIS RESULT, stated: full-artifact determinism was NOT re-verified by a second 5.5 h run.
+It was proven on the 12-cell subset twice (`de00aa5b78e89121`) and by the resume-equivalence test
+(6 cells → resume → identical artifact and histogram); the full sweep also reported **zero errored
+cells**, so the hardened error path never had to exclude anything from the denominator.
+
+**BD-113 — The menu-wide instrument is LIVE, and its first reading is a product finding in its own
+right.** BD-110's second surviving finding was that every R26 A/B scored the top-ranked drive only,
+while `feas == kept` on all 48 briefs — so drives 2..k are shown to users and measured by nothing.
+Fixed: `loop_quality.ts` now aggregates road class and the clean-drive verdict across the WHOLE
+presented menu. Cost: **zero extra engine calls** — `a.classMix` was already carried by every kept
+candidate, which is itself part of why the gap went unnoticed for so long. Excluded from the
+determinism hash exactly as `ms` is (JSON.stringify drops undefined-valued keys), so every hash recorded
+across R25/R26 remains comparable — verified: `25895a0544443f2f` unchanged.
+FIRST READING (fixed suite, adopted config):
+`MENU-WIDE (all 152 presented drives): backroad 36 % · main 61 % · clean 10/152`
+against `bests: backroad 40 % · main 58 % · clean 6/48`.
+· Ranking demonstrably works — the top drive is better than its menu on both axes.
+· But **only 10 of 152 presented drives are clean**, and stripping out the bests leaves **4 clean out of
+  104 (3.8 %)** versus 12.5 % for the bests. **The user is offered roughly three drives per brief and,
+  past the first one, almost none of them are good.** That is invisible in every metric this program has
+  reported to date, and it is a plausible part of what the owner experiences as an inconsistent app.
+· It also means the AC's `kept>=4` diversity clause (BD-103's ceiling of 28/48) has been demanding four
+  DISTINCT drives from a pool where the non-top drives are overwhelmingly defective — the clause and the
+  quality problem are the same problem seen from two ends.
+IMMEDIATE USE: B3/U19 is being re-judged on this instrument. BD-104 refused it because the best-route
+backroad share moved +0 pp, but the audit proved the lever accepted MEASURED material refinements on
+12/48 briefs and reached the reported columns on 1 — precisely the signature of a lever that acts on
+the menu rather than the winner. That re-read is now possible for the first time.
+
+**BD-114 — B3/U19 RE-JUDGED on the menu-wide instrument: REFUSED on BOTH channels. The audit's own
+hypothesis is falsified by measurement, and the connector family is now closed.**
+BD-110 struck BD-104's causal explanation and raised a specific, testable alternative: the lever
+accepted MEASURED material refinements on 12/48 briefs but reached the reported columns on 1, which is
+the signature of something that improves the MENU rather than the winner. BD-113 built the instrument
+that can see that. Result (`CONNECTOR_REFINE=on`, hash `8f8e96b8abc3aea9` — so the routes genuinely did
+change):
+· MENU-WIDE backroad **36 % → 36 %** · main **61 % → 61 %** · clean **10/152 → 10/152**
+· bests backroad 40 % → 40 % · main 58 % → 57 % · AC 20 → 20 · curviness all-brief 0.82, unchanged
+The menu aggregate does not move at printed precision, which bounds the true effect at **<0.5 pp against
+a +10 pp bar**. That is consistent with the audit's own arithmetic rather than contradicting it: ~12
+drives out of 152 improving by the acceptance threshold (+2 pp share) is ~0.16 pp on the aggregate —
+**real, measurable at the individual-drive level, and negligible at the product level.**
+So the honest close is neither BD-104's original claim (which I struck) nor the audit's alternative:
+via-steering DOES find and assemble genuine improvements on a quarter of the suite, and they are simply
+**too small to matter on any channel a user experiences**. Six refusals across R25/R26, now tested on
+both the winner and the whole menu. `CONNECTOR_REFINE` stays OFF with its 11 tests. **I am not
+re-registering this family again without a new mechanism** — re-testing the same lever on a third
+instrument would be looking for a result rather than a fact.
+
+**BD-115 (CORRECTION to BD-112 + PRE-REGISTRATION of R26-D5, registered BEFORE the probe).**
+**CORRECTION FIRST.** BD-112 concluded "the index is GENERATION-limited, not bar-limited" on the
+strength of `assembly_rejected` being the largest single rejection category (22 %). Decomposed
+properly, that was too coarse: of the **846 zero-core cells, only 51** failed exclusively at
+assembly/routing — the other **793 DID reach the quality bars** and were rejected there. The accurate
+decomposition over 18 832 candidate slots is:
+· **31 % never assemble or route at all**
+· the remaining ~12 917 assembled candidates carry 19 290 bar-failures = **~1.5 quality bars failed
+  EACH**
+So candidates are **not marginal-by-one-bar — they fail several simultaneously**, which is the actual
+reason the per-cell sole-failure analysis unlocked so little (loopiness 35 cells, everything else ≤5).
+"Generation-limited" survives as a conclusion, but the mechanism is *candidates that are broadly
+defective*, not *candidates that fail to build*. Recording the correction rather than letting the
+tidier version stand.
+**WHAT THIS POINTS AT.** The index's entire thesis is GENERATE MANY AND KEEP ONLY WHAT MEASURES CLEAN.
+Measured: it generates **16 candidates per cell (2 origins × 6 + 4 ribbons) and keeps 0.4.** A
+selection-under-a-hard-bar design run at N=16 is not being given the chance its own premise assumes.
+The owner approved "give loop generation room"; the diagnosis says that means WIDENING THE GENERATOR,
+not loosening a bar — and notably it keeps every quality promise intact, which `cell_relaxed` would not.
+**PROBE (D5), 40 stratified cells chosen deterministically from the full-sweep checkpoint — 30
+currently-zero, 6 partial (1-2 cores), 4 already-filled. Baseline on this sample: 4/40 filled.** Arms:
+`base` · `gen×4` (4 origins × 12 candidates) · `scope18` (CELL_SCOPE_HALF_M 12 000→18 000) · `both`.
+PROCEED TO A FULL SWEEP IFF an arm reaches **≥12/40 filled** (3× baseline) with **no already-filled cell
+losing its fill** and **no quality bar relaxed** — the point is more good drives, not lower standards.
+If no arm clears it, D5 REFUSES and Discover holds on the Stage-1 path, recorded as such.
+
+**BD-116 — R26-D5 VERDICT: REFUSED on both pre-registered bars. And the lever the owner and I BOTH
+picked is measurably the wrong one.** 40 stratified cells, baseline 4/40 filled (reproduced exactly by
+the `base` arm — clean control):
+
+| arm | candidate slots/cell | cores | cells filled | filled cells lost |
+|---|---|---|---|---|
+| base | 16 | 23 | **4/40** | — |
+| gen×4 (4 origins × 12) | 52 | 46 | **8/40** | **0** |
+| scope18 (12 km → 18 km) | 16 | 21 | **1/40** | — |
+| both | 52 + 18 km | 50 | **11/40** | **1** |
+
+Bar was **≥12/40 with no filled cell lost**. Best arm reaches **11** *and* loses a previously-filled
+cell — it misses both bars. **REFUSED.** Eleven against twelve is close enough to be tempting, which is
+exactly why the bar was written down before the run.
+
+**THE FALSIFICATION, and it is mine to own.** The owner approved "give loop generation room" on MY
+recommendation, and I phrased it as "bigger cell / relax the 8 km scoping." Measured alone, **widening
+the retrieval scope makes things WORSE: 4/40 → 1/40.** A wider window dilutes the pool — the top-ranked
+segments are drawn from further out, so pseudo-origins and material get worse, not better. Had this
+shipped on the strength of the recommendation it would have *reduced* Discover's coverage. The probe
+cost under an hour.
+
+**WHAT IS REAL.** Generator width works cleanly: 3.25× the candidate slots doubles both cores (23→46)
+and fills (4→8) with **zero regressions**, which is the index's own premise (generate many, keep what
+measures clean) finally being given a real N. There is also a genuine **interaction**: scope helps ONLY
+once the generator is wide enough to exploit it (`both` 11 > `gen4` 8, while `scope18` alone is 1) —
+but that same width is what costs a filled cell, since a wider window can displace a good local core.
+
+**BOTTOM LINE FOR DISCOVER.** Even the best arm extrapolates to ~27 % of cells region-wide, leaving
+~73 % with no menu, at ~3× the sweep cost (~17 h). Widening generation is a real effect and not a
+sufficient one. **Recommendation: Discover HOLDS on the Stage-1 gated path.** `gen×4` is the only
+change worth keeping in reserve — it is strictly positive and regression-free — but it does not earn a
+17-hour rebuild on its own, and I am not proposing one. Defaults unchanged (`LOOP_ORIGINS_PER_CELL=2`,
+`LOOP_CANDIDATES_PER_ORIGIN=6`, `CELL_SCOPE_HALF_M=12000`); all three are now env-overridable so any
+future attempt starts from measured ground rather than a fresh guess.
+
+**BD-117 — audit-v13 (90 runs, owner-commissioned): THE OWNER WAS RIGHT AND EVERY EVAL IN THIS REPO WAS
+WRONG. The u-turn detector has been measuring maneuver LABELS, not driving.**
+60 loops (40 region + 10 Brampton + 10 Southfields) · 20 A→B · 30 Discover, every route traced
+edge-by-edge, plus an INDEPENDENT geometric out-and-back detector built specifically because the shipped
+detectors were on trial. Detector pinned by 6 unit tests including the two that would have invalidated
+the finding (same road same direction → 0; sub-250 m reversals → 0).
+**RESULT: 47 of 60 loops drive a stretch of road twice in opposite directions, up to 19 441 m on one
+route. Across those same 60 loops the shipped detector reported 4 u-turns.** Southfields — the owner's
+own neighbourhood — is 8/10. Defect tally over 90 runs: doubles-back ×52 · main-majority ×43 ·
+not-a-loop ×14 · neighbourhood ×13 · wrong-length ×9 · highway ×7 · turn-soup ×5.
+Worst single case: Southfields 1 asked for 90 minutes and returned **314 minutes / 217 km**.
+**ROOT CAUSE:** `uturnCount` counts Valhalla maneuver labels; loops are assembled with
+`middleType: 'through'` (loop.ts:216), which route.ts:124 documents as "pass through without stopping
+or U-turning" — so the router is FORBIDDEN to u-turn at the waypoint, doubles back along the road
+instead, and never emits a `uturn_*` label. The AC clause `bestUturns === 0` has therefore passed on
+routes full of reversals for the entire life of the project. Every "0 u-turns" claim in this log is void.
+CONTRAST WORTH KEEPING: Discover's pre-built cores measure **86 % backroad with 1 of 179 doubling back**.
+The offline generate-many-and-hard-reject pipeline produces good drives; the live assembly path does not.
+That gap is the strongest evidence that the defect is in live assembly, not in the corpus or retrieval.
+
+**BD-118 — MY HYPOTHESIS WAS WRONG, AND I PUBLISHED IT BEFORE TESTING IT.** I told the owner that
+COUNTRY_VALUE's length-dominance (segValueOf's `1 +` floor collapsing curvature's dynamic range, forcing
+`byValue[0]` into an end-to-end traversal) CAUSED the doubling-back. It does not. Measured on the same
+24 loops: reverting it moved out-and-back 20/24 → 17/24, the WORST case got worse (10 616 → 16 650 m),
+and per-route it was better on 7, unchanged on 11, worse on 6. **The doubling-back is structural and
+PREDATES R26.** I had a plausible code-level story and presented it as a cause before running the test —
+the same failure mode that produced the rest of this mess. Recorded because the pattern matters more
+than the instance.
+
+**BD-119 — CONNECTOR_TOPSPEED and COUNTRY_VALUE both REVERTED TO OFF (owner approved 2026-07-30). The
+eval that adopted them has no wall-clock budget; production has 25 s, and the owner has been driving
+TRUNCATED routes.** Three-way on 24 identical loops:
+
+| config | truncated (`best_so_far`) | doubles back | backroad | clean |
+|---|---|---|---|---|
+| R26 as shipped (both on) | **14/24** | 20/24 | 48.4 % | 1 |
+| **both OFF (adopted)** | **2/24** | **17/24** | 37.6 % | 1 |
+| COUNTRY_VALUE on, TOPSPEED off | 2/24 | 22/24 | 36.5 % | 0 |
+
+· **`CONNECTOR_TOPSPEED` is the timeout culprit** — off drops truncation 14→2 in both configurations.
+  `best_so_far` means the planner hit the wall and shipped whatever it had: fewer candidates considered,
+  worse selection. That is exactly the owner's "clear better paths it doesn't take" and "better 10
+  commits ago", and `eval/loop_quality.ts` models no wall clock, so BD-100's +13 pp backroad was bought
+  with latency the instrument could not see.
+· **`COUNTRY_VALUE` earns nothing alone** — 36.5 % vs 37.6 % backroad and MORE doubling (22 vs 17). Its
+  apparent gain existed only in combination with the lever that was timing the app out.
+· **`COUNTRY_TIER` STAYS ON.** BD-97's diagnosis (133 k roads loaded, indexed and never offered) was the
+  one genuinely correct finding of R26 and is untouched by this.
+COST, stated plainly: backroad share ~48 % → ~38 %. Accepted, because a completed search beats a
+richer-looking route that gave up. `frozen-r26-v1` is superseded and must be re-cut once the suites
+confirm.
+
+**BD-119 (VERIFICATION, both standard suites).** Fixed `a9525828b17c3a67` · random `67685293c218a58e` ·
+A→B `ee07cc6c2cd1fc77` (unchanged — BD-111 had already gated A→B).
+
+| | R26 as shipped | reverted (adopted) |
+|---|---|---|
+| **truncated results** (audit, real `/plan` entry) | **14/24** | **2/24** |
+| briefs passing all AC (fixed) | 20/48 | **25/48** |
+| briefs passing all AC (random holdout) | 7/30 | 7/30 |
+| clean drives (fixed) | 6/48 | 2/48 |
+| backroad / main (fixed) | 40 / 58 % | 35 / 63 % |
+| no-route | 0 | 1/48 |
+
+THE TRADE, stated without spin: **AC +5 on the fixed suite and truncation cut by 86 %**, against
+**backroad −5 pp and clean drives −4**. Adopted, for one reason: the clean-drive and backroad figures
+were partly MANUFACTURED BY THE TRUNCATION they came with — a `best_so_far` ships a raw mid-search
+candidate that happens to be country-heavy, without the selection pass that would have judged it. AC
+is the composite that actually gates on u-turns, spurs, retrace, residential and duration, and it moved
+the right way by 5 briefs. A completed search beats a richer-looking route that gave up.
+NOTE ON THE INSTRUMENT, which is the lesson: `eval/loop_quality.ts` re-implements the pipeline and
+therefore never sees the 25 s budget, while `eval/audit_v13.ts` calls `runPlanner` — the real production
+entry — and does. Two harnesses, one blind. Every future planner adoption must be judged through
+`runPlanner`, not around it.
+The right way to win the 5 pp of backroad back is the country TIER plus a genuine continuity objective —
+not a costing lever that exhausts the budget.
+
+**BD-120 — ADOPTED: out-and-back is now an assembly REJECT. The owner's loudest complaint, fixed and
+measured, on the instrument that can actually see it.**
+audit-v13 found 47/60 loops driving a stretch of road twice while the three shipped detectors reported
+4 u-turns between them (BD-117). `outAndBack` (backend/src/planner/outandback.ts, 6 unit tests including
+the two false-positive cases that would have invalidated it) measures the defect from geometry, so it
+does not depend on maneuver labels or road names — the two things that made the existing detectors blind.
+Wired into `assembleLoop` following the SAME two-tier shape the file already documents for u-turns and
+spurs, and for the same recorded reason (round-6: a blanket hard cap rejected 687 candidates and left
+0/40 briefs alive): only an egregious doubling dies at assembly, everything shorter is carried.
+`OUT_AND_BACK_REJECT_M = 2500`.
+MEASURED (24 identical loops, real `runPlanner` entry, everything else frozen):
+
+| | before | after |
+|---|---|---|
+| **total metres driven twice** | **99 428 m** | **25 331 m (−75 %)** |
+| **worst single doubling** | **16 650 m** | **2 830 m (−83 %)** |
+| loops with any doubling | 17/24 | 14/24 |
+| truncated (`best_so_far`) | 2/24 | **0/24** |
+| **no-route (starvation guard)** | 0/24 | **0/24** |
+| backroad | 37.6 % | 36.0 % |
+| clean drives | 1/24 | 1/24 |
+NO STARVATION — the failure mode that killed this idea twice before did not occur, because the threshold
+targets the tail rather than the behaviour. Cost is 1.6 pp of backroad share, accepted.
+NOT FINISHED: 14/24 loops still double back, all now under 2 830 m. The next step is a threshold sweep
+(1 200 m is the obvious candidate, matching `RETRACE_RUN_SOFT_M`) plus a presentation-layer demotion so
+that a route with ANY doubling ranks below a clean one — the same split that made the u-turn rule work.
+
+**BD-121 — out-and-back threshold swept to 1 200 m (matching `RETRACE_RUN_SOFT_M`), and the app-layer
+chip/AI defects fixed.** Threshold sweep on 24 identical loops, real `runPlanner` entry:
+
+| | doubling routes | worst | TOTAL doubled | no-route | truncated | backroad |
+|---|---|---|---|---|---|---|
+| before any fix | 17/24 | 16 650 m | **99 428 m** | 0 | 2/24 | 37.6 % |
+| reject @2 500 m | 14/24 | 2 830 m | 25 331 m | 0 | 0 | 36.0 % |
+| **reject @1 200 m (adopted)** | **12/24** | 3 410 m | **18 916 m** | **0** | **0** | **37.3 %** |
+
+**81 % of the doubled metres are gone, with zero starvation and no backroad cost** (37.3 % vs 37.6 %
+before the fix). 1 200 m beats 2 500 m on routes affected, total doubled AND backroad share. The one
+axis where it is worse — worst single case 3 410 m vs 2 830 m — is a route that reaches the user through
+a relaxation rung or the never-empty fallback, i.e. a path that bypasses the assembly gate; that is the
+next thing to close, and it is recorded rather than smoothed over.
+
+**APP LAYER (the "text box" and "half the AI" complaints), all three fixed:**
+1. `quick_fill.ts` set `style = null` for twisty/scenic/rural, meaning "let the text decide" — but `null`
+   IS the "No preference" chip, so typing "twisty" visibly DE-SELECTED Fun & Explorative. Now maps to
+   `'backroads'`. **The unit test asserted the defect** ("a twisty ask CLEARS the chip"); the expectation
+   was wrong, not the code, so the test was corrected — with the reason written into it — rather than the
+   behaviour re-broken.
+2. `c.preset === 'chill'` was unreachable — `parse_rules` emits chill on `intensity`. Typing "chill
+   drive" moved nothing. Fixed, with a test.
+3. **The weaker parser was beating the better one on every request.** Chips fill from the RULES parse
+   (`/parse`); `/plan` runs the LLM parse, which this project's own gate measures at 0.916 vs 0.852. The
+   app sent those guessed chips as if the user had tapped them, and `applyClientOverrides` replaced the
+   LLM output on truthiness. `buildPlanRequest` now takes `autoFilled` and WITHHOLDS chips quick-fill
+   guessed from the same brief the server is about to parse properly. A chip the user actually tapped
+   enters `touched` and is still authoritative.
+App suite 152 green; backend 405 green.
+
+**BD-121 (CORRECTION — threshold held at 2 500 m, NOT 1 200 m).** The 1 200 m threshold measured better
+on the audit (18 916 m doubled vs 25 331 m, 12/24 routes vs 14/24, backroad 37.3 % vs 36.0 %) but it
+REJECTS the `loop.test.ts` live-engine fixture — a Hamilton→Dundas→Ancaster circuit the repo documents
+as having "distinct out/return corridors". Two tests fail on it.
+That is a genuine unresolved question, not a nuisance: either the fixture is not as clean as its comment
+claims (in which case 1 200 m is right and the fixture must be re-chosen), or 1 200 m clips legitimate
+shared-corridor geometry (in which case the audit gain is partly false). **I am not resolving it by
+loosening a test at the end of a long session** — Hard rule J, and the whole reason this audit exists is
+that I previously trusted a convenient reading. Threshold stays at the measured-safe **2 500 m**, which
+keeps the −75 % result with all 405 tests green.
+NEXT: measure `outAndBack` on that exact fixture geometry. If it genuinely doubles >1 200 m, replace the
+fixture and take the 1 200 m threshold; if not, the detector needs a shared-corridor exemption.
+
+**BD-121 (probe note, NOT a resolution).** Routed the `loop.test.ts` fixture waypoints directly
+(Hamilton→Dundas→Ancaster→Hamilton, `through` middles, default costing): 29.3 km with
+**out-and-back longest 0 m, total 0 m** — so on that path 1 200 m would accept it. But the probe is NOT
+faithful to the failing test: `assembleLoop` applies the resolved costing profile, the repair pass and
+the candidate's own via handling, none of which the probe reproduces. **The question therefore remains
+open and the threshold stays at 2 500 m.** Recorded so nobody later reads "probe said 0 m" as evidence
+the 1 200 m threshold is safe — it is evidence only that the raw corridor is clean.
+
+**BD-122 — ADOPTED: out-and-back added to `fallbackOffenceUnits`. This, not the assembly reject, is what
+killed the catastrophic doublings.**
+BD-120's assembly reject worked on the routes that reach the user as `ok`, but audit-v13 showed the
+worst cases surviving anyway. Diagnosed from the audit data: **all 5 doublings above the 2 500 m reject
+carried `relaxed` status**, and 21 of 60 loops reach the user that way. The mechanism is the never-empty
+fallback — when every candidate is rejected the planner still presents the LEAST BAD one, and
+`fallbackOffenceUnits` decided which that was **with no term for doubling at all**. `retraceRunM` was
+present but is precisely the detector that misses these reversals (named-road repetition; misses name
+changes and unnamed rural road). So the reject moved bad routes into the fallback pool and the fallback
+happily served them.
+FIX: `outAndBackLongestM` added to `OffenceInput`, weighted so a kilometre driven twice costs one full
+u-turn unit (a u-turn IS the cheapest possible out-and-back, so anything longer must cost at least as
+much). Plumbed at all four `fallbackOffenceUnits` call sites; the A→B/alternates paths measure from
+geometry since their result shape does not carry the field.
+MEASURED (60 loops, real `runPlanner` entry, everything else frozen):
+
+| | worst doubling | total doubled | routes affected | no-route |
+|---|---|---|---|---|
+| reject only | 15 780 m | 109 467 m | 40/60 | 2/60 |
+| **+ fallback ranking** | **3 011 m (−81 %)** | **92 890 m (−15 %)** | 39/60 | 2/60 |
+
+Against the ORIGINAL audit (R26 flags on, no reject): worst **19 441 m → 3 011 m, −85 %**; routes
+affected 47/60 → 39/60. No starvation, backroad unchanged (35.9 → 36.0 %).
+HONEST LIMIT: the fix does not reduce HOW MANY routes contain some doubling (40 → 39) — it removes the
+catastrophic tail by making the fallback choose better among bad options. Reducing the count needs
+generation that produces genuinely clean loops, which is the same open problem as loop shape.
+BOOKKEEPING CORRECTION: `audit-v13-before.json` was copied AFTER the post-fix run had already overwritten
+`audit-v13.json`, so it is not a true before-snapshot. The original figures (47/60, 19 441 m) come from
+BD-117 and are the honest baseline.
+
+**BD-123 — R27 scoping: the main-road problem is GENERATION, and I have now falsified every ranking and
+costing lever against it. Recorded so nobody spends another round on them.**
+audit-v14 (90 runs, FRESH SEED — a holdout, not a re-test) with all R27 fixes in:
+worst doubling **19 441 → 5 813 m** on unseen origins (the fix generalises), highway 0.5 %, u-turns 0.
+But **main_majority 59/90** is now the largest defect class: loops average **34.5 % backroad / 61.3 % main**.
+Levers tested against it, all measured on the real `runPlanner` entry:
+1. **MAJORITY grade (R27, new) — REFUSED, INERT.** The owner's first-order rule ("backroads must be the
+   MAJORITY") had NO term in the ranking at all: R25-U10 designed one, only the continuity half was ever
+   wired (BD-88). I built it (zero at parity, rising to max at a 40 pp deficit, deliberately the largest
+   within-tier term) and it moved **main_majority 43/60 → 43/60, backroad 34.5 → 34.8 %.** Nothing.
+   Same lesson as BD-39/62/88: **ranking can only choose among what generation produced**, and when every
+   candidate in the pool is main-majority, penalising main-majority is a no-op. Flag ships OFF; the code
+   and the correct encoding stay for when generation can supply the choice.
+2. **`top_speed` 60 — REFUSED.** backroad +3.2 pp and truncation 1→0, but main_majority 19→22, doubling
+   17→21, clean 3→1. A small road-class gain bought with everything else.
+3. `top_speed` 50 (BD-100/119), COUNTRY_VALUE (BD-119), U19 via-steering (BD-93/104/114) — all previously
+   refused.
+**WHILE DOING THIS I FOUND A REAL STRUCTURAL DEFECT AND FIXED IT ANYWAY:** the within-tier grades were
+never within-tier. `score` is a weighted sum of 0..1 terms with weights <1 (curviness, the dominant
+quality term for backroads, is 0.4), so its whole range is ~1 — while `CONTINUITY_GRADE_MAX` was **6**.
+A "tie-breaker" outweighed every quality signal by 6-15×, meaning the planner literally could not see the
+difference between a good drive and a bad one. That is the owner's "there are clear better paths it
+doesn't take". Continuity rescaled **6 → 3**. (Continuity is also a weak proxy: `backroadLongestM`
+measures a run of road CLASS, not of one road, so a concession-grid zigzag scores as continuous.)
+**THE DECISIVE MEASUREMENT — where the main road actually is.** Backroad share by position along a loop:
+**first 20 % 13.7 % · middle 60 % 34.1 % · last 20 % 12.3 %**; main+urban is **83.4 % at the ends** vs
+63.8 % in the middle. So the arterial is disproportionately the ESCAPE FROM AND RETURN TO THE DOOR —
+which is a PRODUCT problem, not a routing one — but the middle is still main-majority, which is a real
+generation problem. Both are true; neither is fixable by ranking.
+
+**BD-124 — ADOPTED (owner decision 2026-07-31): the THREE-LEG SPLIT. Stop averaging the commute into
+the drive.**
+BD-123 falsified every ranking and costing lever against main-road share and located the real shape of
+the problem: the arterial is disproportionately the escape from the door. The owner chose the product
+fix over another routing lever.
+BUILT: `backend/src/planner/legs.ts` — `splitLoopLegs` cuts a routed loop at the FIRST and LAST corpus
+waypoint (geometric, because loop waypoints are `through` locations and Valhalla does not split legs at
+those — `route.legs` is a single leg for a loop, so per-leg summaries cannot supply this). Returns the
+three spans plus percentages; `driveGeometry` yields the drive alone so it can be measured on its own.
+It REFUSES to report a drive shorter than 25 % of the trip — claiming "the drive" for a 500 m corpus
+span inside a 10 km commute would be exactly the dishonesty this exists to remove. 6 unit tests.
+Wired onto `PlannerResult.legs` (loops only, one extra trace on the chosen route) so the app can show
+"getting there 14 min · THE DRIVE 62 · home 16" instead of one averaged blob.
+MEASURED (29 loops, fresh-seed holdout):
+
+| | backroad | main | main-majority |
+|---|---|---|---|
+| WHOLE route (what the app showed) | 31.5 % | 63.9 % | 20/29 |
+| **THE DRIVE alone** | **42.4 %** | **53.8 %** | 16/25 |
+
+**+10.9 pp backroad and −10.1 pp main, purely by measuring the right thing.**
+**AND THE FINDING THAT MATTERS MOST — the split itself: getting there 28 % · the drive 51 % · home 20 %.**
+**Nearly HALF of a "90 minute loop" is the commute to and from the drive.** A user asking for 90 minutes
+gets roughly 43 minutes of actual drive and 47 minutes of getting there and back, and every metric this
+project has ever reported averaged those together. That is why no routing lever could move road class:
+half the metres being measured were never the product.
+STILL TRUE, and not hidden by the reframing: the drive itself is main-majority on 16 of 25 loops. The
+split makes the number honest; it does not make the drive good. Sizing the DRIVE to the requested
+duration (rather than the whole loop) is the obvious next unit and is a GENERATION parameter, not a
+ranking one — which is the category BD-123 says is the only one left that can work.

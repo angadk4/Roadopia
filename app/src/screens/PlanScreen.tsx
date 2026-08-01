@@ -87,7 +87,15 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
       .catch(() => setLocState('error'));
   }, [locate, setDraft]);
 
-  const build = useMemo(() => buildPlanRequest(draft), [draft]);
+  // R27: chips quick-fill guessed from the brief are withheld from the request
+  // so the server's LLM parse — measurably better than the rules parse driving
+  // these chips — decides them instead of being overwritten by its own weaker
+  // sibling. A chip the user TAPPED enters `touched` and is still sent.
+  const autoFilled = useMemo(
+    () => new Set(quickFill.fromText.filter((f) => !touched.has(f))),
+    [quickFill.fromText, touched],
+  );
+  const build = useMemo(() => buildPlanRequest(draft, autoFilled), [draft, autoFilled]);
 
   const submit = useCallback(() => {
     if (build.ok) props.navigation.navigate('Progress', { request: build.request });

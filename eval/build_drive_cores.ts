@@ -28,7 +28,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { Client } from 'pg';
@@ -69,13 +69,22 @@ const OUT = process.env['OUT'] ?? join('out', 'drive_cores.jsonl');
 /** ~8 km sweep cells (ACP-001). */
 export const CELL_SIZE_M = 8000;
 /** Retrieval window around a cell centre — cores may run past the cell edge. */
-const CELL_SCOPE_HALF_M = 12_000;
+const CELL_SCOPE_HALF_M = Number(process.env['CELL_SCOPE_HALF_M'] ?? 12_000);
 /** Per-cell keeps (ACP: best 2-4). */
 const CELL_KEEP_MAX = 4;
-/** Candidate loop pseudo-origins per cell (top merged-road endpoints). */
-const LOOP_ORIGINS_PER_CELL = 2;
+/**
+ * Candidate loop pseudo-origins per cell (top merged-road endpoints).
+ *
+ * R26-D5: the index's whole thesis is GENERATE MANY, keep only what measures
+ * clean — but measured over 1 177 cells it generates 16 candidates per cell and
+ * keeps 0.4. 31 % of slots never assemble and the rest fail ~1.5 quality bars
+ * EACH, so candidates are not marginal-by-one-bar (which is exactly why
+ * relaxing any single bar unlocked almost nothing — BD-112). Widening the
+ * generator is the lever the diagnosis points at, not a looser bar.
+ */
+const LOOP_ORIGINS_PER_CELL = Number(process.env['LOOP_ORIGINS_PER_CELL'] ?? 2);
 /** Loop candidates assembled per pseudo-origin (budget guard). */
-const LOOP_CANDIDATES_PER_ORIGIN = 6;
+const LOOP_CANDIDATES_PER_ORIGIN = Number(process.env['LOOP_CANDIDATES_PER_ORIGIN'] ?? 6);
 /** Ribbon candidates judged per cell. */
 const RIBBONS_PER_CELL = 4;
 /** Dedup: a kept core may share at most this fraction of another's edges. */
@@ -218,7 +227,7 @@ async function main(): Promise<void> {
     const ext = await db.query<{ minlng: number; minlat: number; maxlng: number; maxlat: number }>(
       `select st_xmin(e) as minlng, st_ymin(e) as minlat,
               st_xmax(e) as maxlng, st_ymax(e) as maxlat
-       from (select st_extent(geometry::geometry) as e from curvy_segments) x`,
+       from (select st_extent(geom::geometry) as e from curvy_segments) x`,
     );
     const { minlng, minlat, maxlng, maxlat } = ext.rows[0]!;
     centres = [];
@@ -230,27 +239,142 @@ async function main(): Promise<void> {
       }
     }
   }
+  // R26-D1 full-sweep support. The derive-from-extent grid is 1 528 cells over a
+  // bbox that includes Lake Ontario, Lake Huron and land outside the extract, so
+  // most cells hold no corpus at all. One presence query replaces 1 528 retrieval
+  // round-trips. SAFETY: a bare bbox-intersects test is strictly BROADER than any
+  // filtered retrieval (no curviness floor, no urban cap), so a cell it calls dead
+  // cannot be live for `retrieveCandidates` — this can only skip work, never
+  // coverage. `liveCells` is still counted in the loop from real retrieval, so the
+  // kill-condition denominator is unchanged.
+  if (!process.env['CELLS']) {
+    const before = centres.length;
+    // ANISOTROPIC on purpose. `squareScope` derives its longitude half-width as
+    // halfM / (111 320 · cos(lat)), so the real cell is WIDER in longitude than
+    // in latitude — at 44 °N, 0.150 ° vs 0.108 °. Expanding equally in both axes
+    // would make the probe NARROWER than the scope it is standing in for and
+    // could drop a cell whose only corpus sits in that longitude margin, quietly
+    // shrinking coverage and the kill-condition denominator. So the longitude
+    // half-width is taken at the region's HIGHEST latitude (smallest cos, widest
+    // degree span), which makes the probe a superset of every cell's true scope
+    // and keeps "dead here ⇒ certainly dead for retrieval" actually true.
+    const dLat = CELL_SCOPE_HALF_M / 111_320;
+    const maxAbsLat = Math.max(...centres.map((c) => Math.abs(c.lat))) + dLat;
+    const maxDLng = CELL_SCOPE_HALF_M / (111_320 * Math.cos((maxAbsLat * Math.PI) / 180));
+    // Coordinates go over as two double precision[] and the point is built in
+    // SQL. Binding an EWKT string array as `geometry[]` fails to parse in the
+    // array literal (Postgres ReadArrayToken) — measured, not assumed.
+    const probe = await db.query<{ i: number }>(
+      `select i from (
+         select ordinality - 1 as i, st_setsrid(st_point(p.lng, p.lat), 4326) as pt
+         from unnest($1::double precision[], $2::double precision[])
+              with ordinality as p(lng, lat, ordinality)
+       ) c
+       where exists (
+         select 1 from curvy_segments cs
+         where cs.geom && st_expand(c.pt, $3::double precision, $4::double precision)
+       )`,
+      [centres.map((c) => c.lng), centres.map((c) => c.lat), maxDLng, dLat],
+    );
+    const liveIdx = new Set(probe.rows.map((r) => Number(r.i)));
+    centres = centres.filter((_, i) => liveIdx.has(i));
+    console.log(
+      `live-cell prefilter: ${before} grid cells → ${centres.length} with corpus present`,
+    );
+  }
+
+  // Resume: rows already computed are replayed from the checkpoint and their
+  // cells skipped. The final artifact is still collect-then-SORT over every row,
+  // so a resumed run produces the byte-identical artifact a single run would.
+  const CKPT = `${OUT}.ckpt.jsonl`;
+  interface Ckpt {
+    cell: string;
+    rows: CoreRow[];
+    filled: boolean;
+    hist: Record<string, number>;
+    /** Guards against resuming a checkpoint built by a different generator or
+     *  over a different cell set — silently blending those would produce an
+     *  artifact that matches no single configuration. */
+    stamp: string;
+  }
+  const STAMP = `${GENERATOR_VERSION}|${centres.length}|${CELL_SIZE_M}|${CELL_SCOPE_HALF_M}|${CELL_KEEP_MAX}`;
+  const resumed: CoreRow[] = [];
+  const doneCells = new Set<string>();
+  // Every checkpoint record is by construction a LIVE cell: the two `continue`
+  // paths (out-of-corpus, zero segments) both return before a record is written.
+  // So resuming can rebuild liveCells exactly, and filled/hist are carried
+  // explicitly — without this a resumed run would report its kill condition over
+  // only the newly-processed cells and silently lose every earlier rejection.
+  let resumedLive = 0;
+  let resumedFilled = 0;
+  const resumedHist = new Map<string, number>();
+  if (process.env['RESUME'] === 'on' && existsSync(CKPT)) {
+    for (const line of readFileSync(CKPT, 'utf8').split('\n')) {
+      if (line.trim() === '') continue;
+      let rec: Ckpt;
+      try {
+        rec = JSON.parse(line) as Ckpt;
+      } catch {
+        // A run killed mid-append leaves a TORN final line. Skipping it costs
+        // one cell of work; aborting the resume (or deleting the checkpoint to
+        // get past it) costs the whole run.
+        console.log('resume: skipping a torn checkpoint line (interrupted append)');
+        continue;
+      }
+      if (rec.stamp !== STAMP) {
+        throw new Error(
+          `checkpoint stamp mismatch: ${rec.stamp} != ${STAMP}. Refusing to blend ` +
+            `a checkpoint from a different generator/cell-set. Delete ${CKPT} to start fresh.`,
+        );
+      }
+      doneCells.add(rec.cell);
+      resumed.push(...rec.rows);
+      resumedLive++;
+      if (rec.filled) resumedFilled++;
+      for (const [k, v] of Object.entries(rec.hist)) {
+        resumedHist.set(k, (resumedHist.get(k) ?? 0) + v);
+      }
+    }
+    console.log(
+      `resume: ${doneCells.size} cells already done, ${resumed.length} cores replayed, ` +
+        `${resumedFilled} previously filled`,
+    );
+  } else if (existsSync(CKPT)) {
+    writeFileSync(CKPT, ''); // fresh run — never silently blend with a stale checkpoint
+  }
   console.log(`sweep: ${centres.length} cells, generator_version=${GENERATOR_VERSION}`);
 
-  const rows: CoreRow[] = [];
-  const histogram = new Map<string, number>(); // per-bar rejection counts
+  const rows: CoreRow[] = [...resumed];
+  const histogram = new Map<string, number>(resumedHist); // per-bar rejection counts
   const bump = (f: string): void => void histogram.set(f, (histogram.get(f) ?? 0) + 1);
-  let liveCells = 0;
-  let filledCells = 0;
+  const errorCells: Array<{ cell: string; error: string }> = [];
+  let liveCells = resumedLive;
+  let filledCells = resumedFilled;
 
   for (let ci = 0; ci < centres.length; ci++) {
     const centre = centres[ci]!;
     const cellId = `c${centre.lng.toFixed(3)}_${centre.lat.toFixed(3)}`;
+    if (doneCells.has(cellId)) continue;
     let retrieved;
     try {
       retrieved = await retrieveCandidates(db, squareScope(centre, CELL_SCOPE_HALF_M), {
         segmentLimit: 3000,
       });
-    } catch {
-      continue; // out-of-corpus cell (lake, edge) — not a live cell
+    } catch (err: unknown) {
+      // R26 audit finding: this used to swallow EVERY failure as "out-of-corpus
+      // cell (lake, edge)". A transient DB error, a pool timeout or a bad query
+      // therefore silently became a dead cell — corrupting the kill condition's
+      // own denominator with no trace, in a run long enough for such errors to
+      // be near-certain. A genuinely dead cell is now impossible to reach here:
+      // the live-cell prefilter already proved corpus is present, so anything
+      // thrown at this point IS an error and is counted and reported.
+      errorCells.push({ cell: cellId, error: err instanceof Error ? err.message : String(err) });
+      console.log(`[${ci + 1}/${centres.length}] ${cellId}: ERROR — ${errorCells.at(-1)!.error}`);
+      continue;
     }
     if (retrieved.segments.length === 0) continue;
     liveCells++;
+    const histAtCellStart = new Map(histogram);
 
     const merged = mergeRoadPieces(retrieved.segments)
       .filter((m) => m.name !== '')
@@ -384,6 +508,16 @@ async function main(): Promise<void> {
     const kept = cellKept.slice(0, CELL_KEEP_MAX).map((k) => k.row);
     rows.push(...kept);
     if (kept.length >= 3) filledCells++;
+    const histDelta: Record<string, number> = {};
+    for (const [k, v] of histogram) {
+      const d = v - (histAtCellStart.get(k) ?? 0);
+      if (d !== 0) histDelta[k] = d;
+    }
+    mkdirSync(dirname(CKPT), { recursive: true });
+    appendFileSync(
+      CKPT,
+      `${JSON.stringify({ cell: cellId, rows: kept, filled: kept.length >= 3, hist: histDelta } satisfies Ckpt)}\n`,
+    );
     console.log(
       `[${ci + 1}/${centres.length}] ${cellId}: segments ${retrieved.segments.length}, kept ${kept.length}`,
     );
@@ -416,6 +550,12 @@ async function main(): Promise<void> {
   }
   if (liveCells > 0 && filledCells / liveCells > 0.9) {
     console.log('note: >90 % of cells filled — the bar may be too loose; raise before U14 ships.');
+  }
+  if (errorCells.length > 0) {
+    console.log(
+      `⚠️ ${errorCells.length} cells ERRORED and are NOT counted as live or dead — ` +
+        `the kill-condition denominator excludes them: ${errorCells.map((e) => e.cell).join(', ')}`,
+    );
   }
   console.log(`artifact: ${OUT}`);
   console.log(`artifact hash: ${hash} (must be byte-identical across two runs)`);

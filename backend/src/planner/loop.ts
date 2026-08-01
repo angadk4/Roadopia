@@ -19,6 +19,7 @@ import {
   traversalSpanOf,
   type WaypointCandidate,
 } from './candidates';
+import { outAndBack } from './outandback';
 import {
   maxRetraceRunM,
   microloopEvents,
@@ -82,6 +83,14 @@ export const SELF_OVERLAP_HARD_REJECT = 0.3;
  * M4 calibrates the cap with the measured distribution.
  */
 export const RETRACE_RUN_SOFT_M = 1_200;
+/**
+ * R27 out-and-back assembly reject. OFF = byte-identical, so the A/B is honest.
+ * The threshold is deliberately generous: audit-v13 measured a tail up to
+ * 19 441 m, so the first cut targets the egregious end without repeating the
+ * round-6 starvation.
+ */
+export const OUT_AND_BACK_REJECT_ON = (process.env['OUT_AND_BACK_REJECT'] ?? 'on') !== 'off';
+export const OUT_AND_BACK_REJECT_M = Number(process.env['OUT_AND_BACK_REJECT_M'] ?? 2500);
 
 /**
  * Residential exposure two-tier (owner round 7: neighbourhood streets "shouldn't
@@ -164,6 +173,8 @@ export interface AssembledLoop {
   spursWide: number;
   /** Longest contiguous same-road doubling in metres (presentation/AC only). */
   retraceRunM: number;
+  /** R27: longest stretch driven twice in opposite directions, metres. */
+  outAndBackLongestM: number;
   /** Residential-class share outside the origin grace; null = trace failed
    *  (fail-open at assembly, unknown at presentation/AC). */
   residentialShare: number | null;
@@ -295,6 +306,24 @@ export async function assembleLoop(
   // singles are last-resort presentation material ranked below every clean route.
   const microloops = microloopEvents(route.geometry, origin);
   if (microloops > maxMicroloops) rejectReasons.push(`microloops ${microloops}`);
+  // R27 — OUT-AND-BACK, the defect audit-v13 found on 47 of 60 loops while the
+  // three detectors above reported 4 u-turns between them. None of them can see
+  // it: `uturns` reads Valhalla MANEUVER LABELS and loops are built with
+  // `through` waypoints, which forbid a u-turn AT the waypoint — so the router
+  // doubles back ALONG THE ROAD and never emits the label. `spurs` and
+  // `retraceRunM` key on named-road repetition and miss reversals that cross a
+  // name change or run on unnamed rural road. `outAndBack` measures the thing
+  // itself from geometry.
+  //
+  // Same two-tier shape as u-turns/spurs above, for the same reason (round-6:
+  // a blanket hard cap rejected 687 candidates and left 0/40 briefs alive):
+  // only an EGREGIOUS doubling dies here; everything shorter is carried for the
+  // presentation layer to demote.
+  const oab = outAndBack(route.geometry);
+  const outAndBackLongestM = oab.longestM;
+  if (OUT_AND_BACK_REJECT_ON && outAndBackLongestM > OUT_AND_BACK_REJECT_M) {
+    rejectReasons.push(`out_and_back ${Math.round(outAndBackLongestM)}m`);
+  }
   const spursWide = spurEvents(
     route.geometry,
     origin,
@@ -408,6 +437,7 @@ export async function assembleLoop(
     spurs,
     spursWide,
     retraceRunM,
+    outAndBackLongestM,
     residentialShare,
     residentialRunM,
     residentialRunMid,
