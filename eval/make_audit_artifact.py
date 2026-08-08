@@ -201,7 +201,7 @@ for m in discover:
 
 legend = ''.join(f'<span><i style="background:{c}"></i>{n}</span>' for c, n in CLS.values())
 
-out = f"""<title>Roadopia audit-v14 — 90 runs on unseen origins</title>
+out = f"""<title>Roadopia audit-v16 — the state of the app, measured</title>
 <style>
 :root {{
   --bg:#0f1113; --panel:#16181c; --line:#24272d; --ink:#e9ebee; --dim:#9aa1ab;
@@ -271,7 +271,7 @@ td.bar i {{ display:block; height:8px; background:var(--accent); border-radius:4
 .callout b {{ color:var(--bad) }}
 </style>
 <div class="wrap">
-<h1>audit-v14 — 90 runs on origins the fixes have never seen</h1>
+<h1>audit-v16 — the state of the app, measured on 90 fresh runs</h1>
 <p class="lede">60 loops (40 across the region, 10 Brampton, 10 Southfields), 20 A&rarr;B drives and
 30 Discover menus. Every route traced edge-by-edge through Valhalla for real road class, and checked
 for doubling back by a detector built from geometry alone rather than from Valhalla's u-turn labels —
@@ -279,14 +279,13 @@ which is what made the defect invisible in the first place. <b>This run uses a f
 are origins the fixes were never tuned against: a holdout, not a re-test.</p>
 
 <div class="callout">
-<b>What changed since the last audit.</b> The app's u-turn counter reads Valhalla <i>maneuver labels</i>,
-and loops are built with <code>through</code> waypoints, which forbid a u-turn <i>at</i> the waypoint — so
-the router doubled back along the road and never emitted the label. 47 of 60 loops were driving a stretch
-twice, up to 19.4&nbsp;km, while the app reported 4 u-turns in total. Two fixes followed: a geometric
-out-and-back reject at assembly, and — the one that mattered — the same measure added to the
-<i>never-empty fallback</i>, which had been choosing the "least bad" rejected route with no term for
-doubling at all. Worst case fell from 19,441&nbsp;m to about 3,000&nbsp;m. The numbers below are that
-work, re-measured on ground it has not seen.
+<b>Where things stand.</b> The catastrophic defects are tamed: worst doubling-back cut from
+19.4&nbsp;km to ~3.5&nbsp;km, truncated searches from 58% to ~5%, u-turn counting replaced by a
+detector that measures geometry, area-revisits now gated, and every loop card shows the drive
+separately from the commute. What has <i>not</i> moved — across ten measured levers — is the core:
+the drive is still mostly main road, still ~half commute by time, and still rarely loop-shaped.
+Those are architectural, and the write-up accompanying this report proposes the architecture change
+rather than an eleventh lever.
 </div>
 
 <div class="scores">

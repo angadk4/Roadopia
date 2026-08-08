@@ -207,6 +207,47 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
         </View>
       )}
 
+      {/* R28 — the drive, separate from the commute to reach it.
+          A "90 minute loop" from a suburban door measures ~28 % getting there,
+          ~49 % drive, ~23 % home, and the ends are 83 % main road against 64 %
+          in the middle (audit-v15). Showing one averaged number told the user
+          their whole trip was the drive, which is why the road-class figure
+          looked bad and no routing lever could move it. */}
+      {route.legs && (
+        <View style={styles.legsWrap}>
+          <View style={styles.legsBar}>
+            <View
+              style={[
+                styles.legSeg,
+                { flex: Math.max(1, route.legs.there_pct), backgroundColor: colors.border },
+              ]}
+            />
+            <View
+              style={[
+                styles.legSeg,
+                { flex: Math.max(1, route.legs.drive_pct), backgroundColor: colors.accent },
+              ]}
+            />
+            <View
+              style={[
+                styles.legSeg,
+                { flex: Math.max(1, route.legs.home_pct), backgroundColor: colors.border },
+              ]}
+            />
+          </View>
+          <Text style={[styles.legsText, { color: colors.textMuted }]}>
+            {`getting there ${Math.round((min * route.legs.there_pct) / 100)} min · `}
+            <Text style={{ color: colors.text, fontWeight: '600' }}>
+              {`the drive ${Math.round((min * route.legs.drive_pct) / 100)} min`}
+              {route.legs.drive_backroad_pct !== null
+                ? ` (${route.legs.drive_backroad_pct}% backroad)`
+                : ''}
+            </Text>
+            {` · home ${Math.round((min * route.legs.home_pct) / 100)} min`}
+          </Text>
+        </View>
+      )}
+
       {/* stats (FR-070) */}
       <View style={styles.statsRow}>
         <Stat label="distance" value={`${km} km`} colors={colors} />
@@ -331,6 +372,10 @@ const styles = StyleSheet.create({
   attr: { fontSize: 9 },
   banner: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md },
   bannerText: { ...font.body },
+  legsWrap: { marginTop: 10, marginBottom: 2 },
+  legsBar: { flexDirection: 'row', height: 6, borderRadius: 3, overflow: 'hidden', gap: 2 },
+  legSeg: { height: 6 },
+  legsText: { fontSize: 12, marginTop: 6, lineHeight: 17 },
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
   stat: { gap: 2 },
   statValue: { ...font.heading, fontVariant: ['tabular-nums'] },

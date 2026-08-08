@@ -2984,3 +2984,539 @@ STILL TRUE, and not hidden by the reframing: the drive itself is main-majority o
 split makes the number honest; it does not make the drive good. Sizing the DRIVE to the requested
 duration (rather than the whole loop) is the obvious next unit and is a GENERATION parameter, not a
 ranking one — which is the category BD-123 says is the only one left that can work.
+
+**BD-125 — R28 probe on the owner's OWN device report (Inglewood + Forks of the Credit, 2026-07-31).
+Found a FOURTH unmodelled defect class, built the detector, and refused BOTH fixes I tried for it.**
+The owner reported two things audit-v15 said were clean: *"random road entries and exits u-turns like
+many times in Inglewood"* and *"near Forks of the Credit it loops around some random box at the top"*.
+Probed 24 real loops through `runPlanner` from his two places plus six neighbours.
+
+**FINDING 1 — the "random box" IS a microloop, DETECTED and SHIPPED.** `maxMicroloops` defaulted to 1,
+so a single block-circuit is ACCEPTED by design (the two-tier shape that avoids the starvation
+zero-tolerance caused twice for u-turns). 2 of 24 routes carried one, both near the Forks. The owner is
+seeing exactly what the code permits.
+**REFUSED: `MICROLOOPS_MAX=0`.** It works on the defect (microloops 2/24 → **0/24**, doubling 14→13,
+u-turns 1→0) and is unaffordable: **truncated results jump 3/60 → 21/60**. Rejecting every box forces
+the search past the 25 s budget, which is precisely the disease BD-119 diagnosed and fixed. It also
+fails the same `loop.test.ts` live-engine fixture the 1 200 m out-and-back threshold failed (BD-121) —
+that fixture now has two independent reasons to be re-examined. Default stays 1; knob is
+`MICROLOOPS_MAX`.
+
+**FINDING 2 — "in and out of Inglewood many times" is a defect class NOTHING in this codebase models.**
+It is not short doublings: at the shipped 250 m floor AND at 80 m, multi-doubling is **0/24**. It is the
+route RETURNING TO THE SAME PLACE from different directions — which every existing detector is blind to
+by construction: `outAndBack` needs opposed headings on the same road; `microloopPositions` needs a
+closed circuit; `spurPositions`/`maxRetraceRunM` need a repeated road NAME; `uturnCount` reads maneuver
+labels that `through` waypoints suppress; `selfOverlapRatio` counts shared EDGES, and approaching one
+crossroads from four directions shares no edge.
+Measured on his own places: **13 of 24 routes revisit 2+ distinct locations, worst 9 places on one 60 km
+loop** (Forks of the Credit "1 hour backroads loop": 8 places, 3 passes each).
+BUILT: `backend/src/planner/revisit.ts` + 5 tests, including the two false-positive guards that would
+have made it worthless (a loop closing at its own origin is NOT a revisit; spatial nearness without
+along-route separation is NOT a revisit).
+**REFUSED as a ranking lever, shipped at `REVISIT_UNIT = 0`.** Wiring it into `fallbackOffenceUnits`
+moved the defect the WRONG WAY: routes with 2+ revisited places **13/24 → 14/24**, total places
+**62 → 72**, worst unchanged at 9. **This is the FIFTH ranking refusal** (BD-39, BD-62, BD-103, BD-123,
+now this) and I ran it in direct contradiction of `docs/R28_plan.md`, which I had written hours earlier
+saying to stop testing that category. Recorded as a discipline failure, not just a null result.
+THE DETECTOR STAYS. It is the first instrument that can see this defect at all, and the term is one
+constant from live once generation can supply a clean alternative.
+
+**WHAT BOTH REFUSALS CONFIRM:** every affordable gate costs search time the 25 s budget does not have,
+and every ranking term chooses between equally-bad candidates. That is `docs/R28_plan.md`'s thesis
+stated twice more, from two new directions. **The next work is R28-1 (widen the offline generator and
+re-sweep), not another live-planner lever.**
+
+**BD-126 — R28-2 BUILT (flag OFF, awaiting the R28-1 index): live loops seeded from measured-clean
+drive cores.** The generation-side answer to the 43 %-vs-86 % backroad gap, after five ranking levers
+and three costing levers were built and refused against it.
+`backend/src/planner/core_seed.ts` + 8 tests. Cores from the offline index (migration 0016, read via the
+existing `discover_drive_cores` definer) become **ordinary `WaypointCandidate`s in the SAME pool** as
+generated ones — deliberately NOT a parallel path. Every assembly reject, score, diversify pass and the
+never-empty fallback apply unchanged, so a core-seeded loop wins only if it MEASURES better. Blast
+radius is "one more candidate source", not "a second planner", and it makes the A/B honest.
+DESIGN POINTS THAT CARRY MEASURED HISTORY:
+· **Dense vias, not endpoints.** A core is sampled every ~2.5 km into via points. R25's probe 7 measured
+  what happens with only endpoints — 3.8× distance and MORE arterial, because Valhalla picks its own
+  path between far-apart waypoints. That is the failure mode all four refused span-forcing attempts
+  shared, and a test pins that a long core never reduces to two vias.
+· **Ranked by measured backroad share, then curviness, then id** — no distance-from-origin term, which
+  would re-create the capped-distance mis-ranking BD-91 found in Discover. The connector cost is what
+  the assembly measures; it does not need help.
+· **Cores longer than the ask are dropped before assembly** — no connector can shorten a core, so
+  seeding one spends an engine call to produce a guaranteed duration failure.
+· `clusterWeight` carries the core's measured backroad share rather than a cluster mass it never had.
+FAIL-OPEN: an unavailable index leaves the live pool untouched. `CORE_SEED=off` is byte-identical.
+NEXT: R28-1's wide sweep (4 origins × 12 candidates, 1 185 cells, running) → load with
+`eval/load_drive_cores.ts` → flip `CORE_SEED=on` → A/B on the real `runPlanner` entry against
+audit-v15's `a9525828b17c3a67`-era numbers (backroad 34.5 %, doubling 44/60, revisits 13/24).
+424 tests green.
+
+**BD-127 — THE SAME TWO FLAGS BELONG **OFF LIVE AND ON OFFLINE**. Caught mid-sweep, and it nearly cost
+the whole R28 index.**
+The R28-1 wide sweep was launched inheriting the BD-119 reverts (`CONNECTOR_TOPSPEED=off`,
+`COUNTRY_VALUE=off`). At 665/1185 cells its yield looked WORSE than the old narrow sweep, which would
+have falsified R28-1's premise. It does not: **the comparison was CONFOUNDED** — the narrow sweep ran
+before those reverts, so it was width+reverted vs narrow+R26-flags, not width vs narrow. Nearly drew
+the wrong conclusion from it.
+The confound points at the real fact: **BD-119 reverted those flags because they blow the 25 s LIVE wall
+budget (58 % of loops shipped truncated). The offline sweep has no wall budget at all.** So their
+road-class benefit — which is what lets a core pass the `main_share ≤30 % / backroad ≥55 %` bars — is
+free offline and was being thrown away.
+MEASURED, 40 identical cells (selected as productive in the narrow sweep — a biased sample for absolute
+yield, but the BETWEEN-ARM comparison on identical cells is valid):
+
+| config | cores | cells with ≥3 |
+|---|---|---|
+| narrow + R26 flags on (the shipped index) | 48 | — |
+| wide + flags OFF (what was running) | 28 | 1 |
+| **wide + R26 flags ON** | **77** | **12** |
+
+**2.75× the cores and 12× the filled cells** versus the config the sweep was actually using, and 1.6× the
+cores versus the old narrow index. Sweep killed at 665 cells and relaunched with
+`CONNECTOR_TOPSPEED=on COUNTRY_VALUE=on` plus the width.
+**THE GENERAL LESSON, worth more than the sweep:** a lever's verdict is not a property of the lever, it
+is a property of the lever AND the budget it runs under. `top_speed` is a road-class win that costs
+search time; live that trade is fatal and offline it is free. Every future planner flag should be judged
+per-context, and this program's flags should be read as "off live" / "on offline" rather than simply
+"off".
+
+**BD-128 — THE BREAKTHROUGH: RIBBON cores work, LOOP cores cannot. 95 % backroad vs the planner's
+34.5 %, and the index is 2.3 % ribbons.**
+R28-2's first A/B was inert (backroad 34.5 → 34.7 %). Rather than tune, diagnosed it through the real
+assembly path, and found three things in order:
+1. **Cores were sized to the whole ask.** Median core is 60 min; a 90-minute request admitted 90-minute
+   cores, and the connectors needed to REACH one pushed the loop to ~120 min, tripping the duration
+   tier. Fixed (target ~0.55 of the ask, hard ceiling 0.75) — and it barely moved the needle
+   (drive backroad 44.9 → 45.0 %), so the sizing bug was real but not the cause.
+2. **The bbox was Discover's 45 km browse radius.** The definer returns the top N by QUALITY within the
+   box, so a wide box hands back 20 excellent cores that are all unreachable: measured **0 seeded** at
+   every origin once the reach filter was added. Fixed by querying a reach-sized box.
+3. **Valhalla refuses >20 locations.** Long cores crashed the route call outright; vias are now
+   RE-SPACED (never truncated — truncation would drop the core's tail and hand Valhalla the way home).
+**THEN THE REAL FINDING.** With all three fixed, cores assemble and the road class is transformative —
+Southfields: a 32 min / 93 % core → a 49 min route at **73 % backroad**. But **14 of 15 were REJECTED
+for `out_and_back`** (3.4-15 km), and tightening the reach did not help (6 km: 0/21 accepted; 10 km:
+1/23). **Because it is geometry, not tuning: a LOOP core plus a door is a lollipop, and the stick
+always doubles.** No proximity fixes that — the origin is not on the core, so you drive out to its
+perimeter and back the same way.
+**RIBBONS DO NOT HAVE A STICK.** Two distinct ends, so the trip goes out one way and home another —
+which is precisely what the R25 plan predicted ("ribbons make the owner's 'different way home' free BY
+CONSTRUCTION"). Measured on all 24 ribbons in the index:
+
+| core kind | accepted at assembly | backroad of accepted |
+|---|---|---|
+| loop cores | 1/15 (7 %) | 49 % |
+| **ribbons** | **12/24 (50 %)** | **95 %** |
+
+**95 % backroad against the live planner's 34.5 %** — the first thing in this entire program that
+delivers the owner's original ask rather than nudging it.
+**THE INDEX IS BUILT WRONG FOR THIS USE.** `build_drive_cores.ts` generates
+`LOOP_ORIGINS_PER_CELL × LOOP_CANDIDATES_PER_ORIGIN = 48` loop candidates and `RIBBONS_PER_CELL = 4`
+per cell, yielding **1 030 loop cores and 24 ribbons**. For DISCOVER that was right (it shows the
+commute as its own leg, so a loop core is fine). For seeding a loop FROM YOUR DOOR it is exactly
+backwards. **R28-1 must be re-run ribbon-heavy.** That is the next unit, and it is a sweep parameter,
+not new machinery.
+
+**BD-129 — the ribbon supply was gated by ROAD LENGTH, not by the per-cell cap.** After BD-128 showed
+ribbons are the shape that works (12/24 accepted at **95 % backroad** vs loop cores 1/15 at 49 %), the
+obvious move was to raise `RIBBONS_PER_CELL` 4 → 24 and re-sweep. That produced **exactly 24 ribbons
+again** across 1 177 cells — the cap was never the constraint.
+The real gate is `CORE_RIBBON_ENDPOINT_MIN_M = 8 000`: a ribbon is built from ONE merged road, and few
+roads in this region run 8 km unbroken. Measured on 60 identical cells:
+
+| ribbon min length | ribbons produced |
+|---|---|
+| 8 000 m (shipped) | **0** |
+| 4 000 m | **22** |
+
+Made the constant env-configurable and re-swept at 4 000 m, ribbon-heavy. Note the shipped 8 km value
+was correct for DISCOVER, where a ribbon is a destination drive and wants to be long; for seeding a
+door-to-door loop the ribbon only has to supply the good middle, and the measured ribbons that worked
+were **11-15 minutes** long yet assembled into 41-47 minute routes at 95 % backroad — because a ribbon
+deep in backroad country drags its CONNECTORS onto backroads too. Short ribbons are not a compromise
+here; they are the mechanism.
+
+**BD-130 — R28-2 REFUSED with full ribbon coverage. The tenth lever, and I am stopping this direction
+as pre-committed rather than reaching for an eleventh.**
+BD-128 measured ribbons at **95 % backroad** in isolation (12/24 accepted). BD-129 traced the thin
+supply to a length gate. Then BD-130 found the deeper bug: `CORE_RIBBON_ENDPOINT_MIN_M` was ONE constant
+doing TWO unrelated jobs — the minimum ROAD LENGTH a ribbon is built from, and the minimum SEPARATION
+between its two ends. Lowering it to admit shorter roads therefore also admitted winding roads whose
+ends nearly touch, which then failed the separation bar: **1 242 `endpoint_separation` rejections**, the
+largest single ribbon killer. Split into `CORE_RIBBON_MIN_LENGTH_M` vs `CORE_RIBBON_ENDPOINT_MIN_M`,
+plus `CELL_RIBBON_RESERVED` so loop cores stop crowding ribbons out of the per-cell keep.
+That worked on its own terms — the index went **24 → 367 → 1 114 ribbons**, and reachable-ribbon
+coverage went from **0/8 real origins to 6/8** (Southfields 0→9, Brampton 0→9, Barrie 0→44).
+AND THE A/B STILL REFUSES:
+
+| | backroad | THE DRIVE | doubling | revisits | clean | truncated |
+|---|---|---|---|---|---|---|
+| baseline | 34.5 % | 43.0 % | 44/60 | 42/60 | 4/60 | 3 |
+| thin ribbons (r30) | 34.6 % | 44.1 % | 44/60 | 44/60 | 4/60 | 4 |
+| **full coverage (r31)** | **36.5 %** | **45.7 %** | 45/60 | 43/60 | 4/60 | 5 |
+
+Registered bars were drive backroad **≥55 %** and doubling **≤30/60**. **+2.7 pp and +1 doubling.**
+Real, and an order of magnitude short of the isolated 95 %.
+`CORE_SEED` ships OFF. The index, the seeder, the detectors and the split constants all stay — they are
+correct, tested and measured; the integration is what does not pay.
+**WHY THE ISOLATED 95 % DID NOT SURVIVE INTEGRATION** is now the honest open question, and I am NOT
+guessing at it after ten refusals. The candidates are: cores are seeded but lose the presentation
+ranking to generated candidates; `CORE_SEED_MAX = 4` samples only 4 of up to 44 available ribbons; the
+reach filter still admits ribbons whose orientation forces a stem. Each is testable and NONE should be
+attempted before someone decides whether the live door-to-door loop is the right product at all.
+**THE PRODUCT-LEVEL FACT THIS PROGRAM HAS NOW ESTABLISHED TEN TIMES:** a loop that starts and ends at a
+suburban door spends ~half its metres escaping and returning (audit-v15: there 28 % · drive 49 % ·
+home 23 %; ends 83 % main+urban vs 64 % in the middle). Discover, which SHOWS the commute as its own leg
+and optimises only the drive, measures **86 % backroad**. The live loop planner, optimising a blob that
+is half commute, measures 36 %. That gap is architectural, not a tuning failure, and no ranking,
+costing, gate or seeding lever has moved it.
+
+**BD-131 — the blocking fixture was itself defective, and replacing it unlocked a 44 % cut in doubling.**
+`loop.test.ts`'s "a real circuit closes within ε" fixture (Hamilton → Dundas → Ancaster) blocked BOTH
+the 1 200 m out-and-back threshold (BD-121) and zero-box tolerance (BD-125), and I twice declined to
+resolve it rather than loosen a test at the end of a session. Measured it properly through the same
+`assembleLoop` path the test uses:
+**out-and-back longest 1 494 m, total 3 113 m over 4 runs, and 1 microloop** — against a comment
+claiming "distinct out/return corridors". **Both rejections were CORRECT.** The test was asserting that
+a defective route is acceptable, the same pattern as the quick-fill test that pinned the twisty-chip bug
+(BD-125). Fixed the FIXTURE, not the assertion: Hamilton → Binbrook → Mount Hope measures
+**selfOverlap 0.00, out-and-back 0 m, microloops 0** — a circuit that deserves to pass. (The repair test
+shared the same waypoints and was updated with it.)
+**ADOPTED: `OUT_AND_BACK_REJECT_M` 2 500 → 1 200** (matching `RETRACE_RUN_SOFT_M`). 60 loops, fresh-seed
+holdout, real `runPlanner` entry:
+
+| | total doubled | worst | routes affected | no-route | truncated | backroad |
+|---|---|---|---|---|---|---|
+| 2 500 m (shipped) | 79 870 m | 5 813 m | 44/60 | 0 | 3 | 34.5 % |
+| **1 200 m (adopted)** | **44 632 m (−44 %)** | **3 531 m (−39 %)** | **38/60** | **0** | 3 | 30.8 % |
+
+THE TRADE, not hidden: **−44 % of the metres driven twice, for −3.7 pp backroad share.** Adopted because
+doubling back is the defect the owner NAMED and SEES on the map ("random drives down a road then u turns
+back again"), while backroad share is a number I report to him. No starvation (no-route 0/60) and no
+extra truncation. Reversible with `OUT_AND_BACK_REJECT_M=2500`.
+**CUMULATIVE on the owner's loudest complaint:** worst single doubling **19 441 m → 3 531 m (−82 %)**,
+total doubled metres down 44 % from where R27 left it, and the shipped u-turn counter that reported
+**4** across 60 routes has been replaced by a detector that measures the thing itself.
+
+**BD-132 — SHIPPED: the three-leg split reaches the user. The app stops calling the commute "the drive".**
+BD-124 built `splitLoopLegs` and put the numbers on `PlannerResult`; they never left the backend. So the
+card still said "90 minute loop" for a trip that audit-v15 measures as **28 % getting there · 49 % drive
+· 23 % home**, with the ends at 83 % main+urban against 64 % in the middle. That is the most dishonest
+thing left in the product, and the data to fix it was already computed.
+· `shared/src/types/route.ts` — `Route.legs`, nullable-optional so it is ADDITIVE. Installed builds
+  zod-validate strictly and cannot be force-updated, so a pre-R28 payload without `legs` must still
+  parse; a contract test pins all three shapes (absent / present / null for A→B).
+· `backend/src/routes/plan.ts` — emits it on the chosen route.
+· `app/src/components/RouteDetail.tsx` — a three-segment bar (commute · THE DRIVE in accent · commute)
+  plus "getting there 24 min · **the drive 43 min (46 % backroad)** · home 23 min".
+The drive's road class is measured on the DRIVE ALONE — 45.7 % backroad against 36.5 % for the blob —
+so the number the user reads is finally the number that describes what they came for.
+426 backend · 152 app · 24 shared tests green; whole-repo `tsc` clean.
+
+**BD-133 — ADOPTED: an area-revisit GATE (where the RANKING lever failed), and the brief-named
+destination no longer blocks Generate.**
+The owner asked, before testing, whether the app was actually fixed. Two of the three defects he
+reported personally were NOT: the Inglewood revisits and the "drive to Erin" block. Fixed both.
+
+**1. REVISIT GATE.** BD-125 built the revisit detector and refused it as a RANKING term (it moved the
+defect the wrong way, 13/24 → 14/24). A GATE is a different category and had not been tried. 60 loops,
+fresh-seed holdout, real `runPlanner` entry:
+
+| | revisit ≥2 | worst | doubling | backroad | truncated | no-route |
+|---|---|---|---|---|---|---|
+| no gate | 41/60 | 19 | 38/60 | 30.8 % | 3 | 0 |
+| **max=2 (adopted)** | **35/60** | **16** | **35/60** | **31.7 %** | 10 | 0 |
+| max=3 | 38/60 | 16 | 35/60 | 31.8 % | 8 | 0 |
+
+**Every user-visible axis improves** — 6 fewer routes that wander back to the same village, 3 fewer that
+double back, and slightly MORE backroad. The cost is truncation 3 → 10/60, and the argument for
+accepting it is that **the truncated routes are already IN the sample**: if truncation were degrading
+quality, these aggregates would be worse, not better. Reversible with `REVISIT_REJECT=off`; `max=3`
+is the gentler point on the curve if 10/60 truncated proves too many in use.
+
+**2. "backroads drive to Erin" no longer demands a map pick.** The parser resolves Erin to real
+coordinates and the SERVER routes it — `/plan` only overrides `constraints.destination` when the BODY
+supplies one, so a brief-resolved destination stands. The CLIENT was blocking anyway, disabling Generate
+and telling the user to go pick, on a map, the exact place the parser had already found. `useQuickFill`
+now reports `hasDestination` (a resolved LatLng only — a bare string like "the countryside" still
+prompts, because it cannot be routed), and `buildPlanRequest` stops blocking on it. 3 tests.
+426 backend · 155 app · 24 shared tests green.
+
+**BD-134 — audit-v16 (90 fresh runs, owner-commissioned after testing): the tails are tamed, the core
+is unchanged, and the OWNER'S OWN AREA is the worst-served in the region. This entry is the case for
+the architecture change, with the numbers that make it.**
+Fresh seed (20260804) on the shipped config. Loops: main_majority ×57/60 · doubling 29/60 (worst
+4 262 m — the 19 441 m era is gone) · wrong_length ×25 · revisits ≥2 27/59 (gate working; was 41+) ·
+clean 2/60. Status split: 29 ok / 27 relaxed / 3 truncated — HALF of all loops now arrive through
+relaxation, and wrong_length rose (9→25 across the audit series) as the gates I added pushed more
+briefs into relaxed/fallback results. That is the measured COST of the R27/R28 gates, named rather than
+hidden: fewer doublings and revisits, more duration drift.
+THE CLUSTER FACT THAT DECIDES IT: drive-portion backroad by where you start —
+**region towns 48 % · Brampton 30 % · Southfields 22 %.** The owner lives at the Southfields end. From
+HIS door the "drive" portion of a loop is barely one-fifth backroad, because everything within reach of
+a suburban origin is arterial and the planner must invent the whole trip from that door in 25 s.
+MEANWHILE, SAME CORPUS, SAME ENGINE: **Discover 180/180 drives, 0 empty menus, 82 % backroad,
+0 doubling, main-majority only 29/180.** The offline-generated, hard-rejected, commute-disclosed
+architecture beats the live door-to-door planner on every axis the owner has ever complained about.
+A→B: 20/20 routed, 33 % backroad, 4/20 doubling, unremarkable and stable.
+This is the third full audit in the series (v13 → v15 → v16) and the road-class core has not moved
+(34.5 → 34.5 → 33.8 % whole-route). Eleven levers are now measured across ranking, costing, gating and
+seeding. The conclusion is in `docs/R28_plan.md` and it is architectural: the product's unit must
+become THE DRIVE (Discover's unit), not the door-to-door blob. Proposed to the owner with this audit.
+
+**BD-135 — ARCHITECTURE CHANGE APPROVED (owner, 2026-08-04): DRIVE-FIRST. The drive becomes the
+product unit everywhere; the door-to-door blob stops being what Plan promises.**
+CURRENT DECISION BEING REPLACED: Plan invents a door-to-door loop live from the origin in 25 s, judges
+and displays the whole blob (Master Spec's loop planner as built through R28).
+EVIDENCE IT IS INVALID: three full audits (v13/v15/v16) with the road-class core unmoved (~34 %
+backroad, main-majority 57/60); eleven measured levers across ranking, costing, gating and seeding, none
+moving it; drive-portion backroad from the owner's own area 22 % (Southfields) vs 48 % from rural towns
+— the architecture punishes exactly the suburban origins real users start from; and the standing
+counter-example on the SAME corpus: Discover's offline-generated, hard-rejected, commute-disclosed
+drives measure 82 % backroad, 0/180 doubling, 0 empty menus (BD-134).
+REPLACEMENT: Plan = constrained Discover. (1) The requested duration means THE DRIVE — connectors are
+sized, shown and judged separately ("getting there 12 · the drive 88 · home 14"). (2) Drive material
+comes from the measured index (r31: 1 544 cores, 1 114 ribbons) + live fill where the index is thin.
+(3) RIBBONS are the preferred shape — different-way-home by construction, no lollipop stem. (4) The
+judge changes with the architecture: duration tier on the drive leg; the full trip still passes the
+doubling/revisit gates (ribbons pass them naturally — that is the point). (5) Fail-open: no reachable
+core → today's planner, disclosed. (6) Flag `DRIVE_FIRST`, default OFF, byte-identical, adopt-or-refuse
+on pre-registered bars through the real `runPlanner` entry.
+PRE-REGISTERED BARS for the adopt A/B (60-loop fresh-seed audit): drive-portion backroad mean **≥55 %**
+(from 40.1) · wrong_length **≤12/60** (from 25) · doubling **≤15/60** (from 29) · no-route and
+truncation not up · A→B and Discover untouched (their hashes/outputs unchanged).
+ALTERNATIVES CONSIDERED: keep tuning (rejected — eleven refusals say the residue is structural); hybrid
+second mode (rejected by owner — the broken mode would remain the default). SCOPE: backend planner path
++ app framing/wording; AI re-scoping rides along (BD-134 write-up §3). Deferred features stay deferred.
+
+**BD-136 — R29-2 first A/B was VACUOUS, not refused: single ribbons cannot fill an ask. The missing
+piece is CHAINING, and the machinery for it already exists.**
+DRIVE_FIRST=on measured byte-equivalent to baseline (drive backroad 40.1→39.6 %, all other axes flat).
+Diagnosis before verdict: the r31 index's 1 114 ribbons average **9 minutes** (max 52), because
+BD-129/130 correctly lowered the ribbon road-length gate to 3-4 km to fix supply. `pickDriveFirst`
+requires the DRIVE to fit the ask (|dur−ask|/ask ≤ 0.35) — for a 60-min ask only 16/1 114 qualify, for
+90 min **zero**. So the path seeded nothing and fell through to legacy on ~every brief: the mechanism
+was never tested. This is NOT BD-130 again (those seeds assembled and lost); these never entered.
+FIX (R29-1b): **chain 3-6 short ribbons into one drive that fills the ask** — the product's own "out
+via X, along Y, home via Z". The R18-3 chain machinery (buildSpanPool / chainMatrixLocations /
+buildChainCandidates, one travel-matrix budget) already strings spans by entry/exit; ribbons ARE spans
+with pre-measured quality. Feed ribbons as the span pool, budget by the ask, keep the drive-leg judge
+from R29-1. The BD-135 bars stand unchanged; re-run the same A/B when chaining is in.
+
+**BD-137 — R29 UNIT A SHIPPED: Discover v2 — the drive + getting there + getting home, measured PASS
+on all five pre-registered bars (8/8 origins, from 0/8 at the start of the unit).**
+The owner's first ask, verbatim: "the discover thing to work properly where it shows proper drives and
+shows from the original location how to get there and how to get back all included in the drive."
+FOUND: the v2 backend was fully built and dark (discoverCores with live connectors, per-leg times,
+commute-share drop, different-way-home retry; the /discover v:2 switch; the full zod contract; the app
+data layer including the exact card label). THREE REAL DEFECTS stood between it and working:
+1. **Stale index version default** — `DRIVE_CORES_VERSION ?? 'r25-dev'` vs the loaded 'r31-rib', while
+   drive_first.ts read the same env var with a different default. Every v2 browse returned empty. ONE
+   constant now, in discover_cores.
+2. **Ribbon swamp** — the 0016 definer returns top-N by backroad×curviness with a hard 50-row cap;
+   1,114 max-quality 9-minute ribbons filled every browse, then ALL failed the connector-share drop
+   ("a 9-minute drive is never worth a 15-minute trip"), so menus were empty at 8/8 sample origins
+   while 430 card-worthy loop cores (avg 63 min) never left the database. **Migration 0019** adds a
+   kind filter to the definer; menus read kind='loop', the live planner's chaining reads kind='ribbon'
+   — the two consumers finally ask for the material they need.
+3. **One-sided home retry** — the single perpendicular offset left Belfountain's menu 5/6 sameWayHome
+   (a valley origin funnels every road into one approach). Now a BOUNDED ladder (±4 km, ±7 km, max 4
+   deterministic attempts, never a search loop): worst menu is 1 sameWayHome, disclosed on the card.
+   The "exactly once" pinning test was updated to pin the BOUND with the measurement in its comment.
+APP: DiscoverHome v2 branch (three-part label "the drive 42 min · getting there 18 · home 21", honesty
+sub-line, per-leg map colours core=amber/connectors=grey behind a prop, empty-v2→v1 fallback so no
+origin loses a menu) and `coreDriveToRoute` — a tap concatenates the three legs into ONE Route whose
+R28 `legs` field carries the measured split, so RouteDetail renders the three-leg bar with zero screen
+surgery. A null-vs-undefined bug in the fetch default was caught by the existing v1 tests going red
+(`fetchCores={null}` must DISABLE v2, `??` would have sent test renders to the network).
+GATE (eval/discover_v2_quality.ts, real discoverCores path): menus ≥5 at 8/8 origins · connector share
+≤0.6 every card · sameWayHome ≤2/menu (worst 1) · per-leg times present · same-session determinism —
+**PASS**. Suites: backend 426 · app 163 · shared 24, whole-repo tsc clean.
+CARRIED [HUMAN]: migration 0019 joins 0010-0018 for the hosted deploy.
+
+**BD-138 — R29 Unit B, three probe iterations: every chain variant REJECTED at assembly, and all three
+failure mechanisms are now MEASURED. Recording them before the fourth design so it is derived, not
+guessed.**
+Probe = real `assembleLoop` from 4 origins, 90-min ask, r31 ribbons (40 read/origin, pool 24).
+1. **Frozen entry→exit orientation** (honesty-motivated): a ribbon whose exit points away from the next
+   entry forces a backtrack past itself — Southfields chain: **34 revisits, 6.7 km doubling**. Fixed by
+   choosing orientation per insertion from the matrix (both endpoints are matrix locations; rural
+   duration ~symmetric).
+2. **Bearing-sweep ordering** (inherited from the corpus chainer): bearing ignores RADIUS, so same-bearing
+   ribbons at different distances petal through the origin funnel — **self_overlap 0.69-0.84**.
+   Replaced with nearest-neighbour by matrix link cost…
+3. **…which collapses onto COLLINEAR ribbons.** The r31 supply is largely adjacent segments of the same
+   few long roads per cell (the sweep keeps a cell's top merged roads), so cheapest-next-link chains
+   them into a LINE — and a line from a fixed origin is an out-and-back by construction:
+   **self_overlap 0.63-0.83, the exact defect class the gates exist to kill.** NN and bearing-sweep fail
+   in OPPOSITE directions: one maximises spread and petals, the other minimises links and collapses.
+4. **Valhalla 499 "leg_shape_index not set for intermediate location"** killed every Southfields/
+   Belfountain chain even with mid-vias removed: adjacent ribbons MEET at junctions, so ribbon k's exit
+   and ribbon k+1's entry snap to the SAME network point → zero-length `through` leg → 499. Needs a
+   junction-merge (skip a chain link's entry waypoint when within ~50 m of the previous waypoint).
+**THE DERIVED FOURTH DESIGN** (next window, `ribbon_chain.ts` inner loop only — module, tests, run.ts
+integration, judge extension all stand):
+· SELECT for enclosure: one ribbon per bearing SECTOR (3-5 sectors) within a radius band around the
+  median centroid radius — spread without petals;
+· ORDER by bearing around the compass; ORIENT each by matrix cost (keep #1's fix);
+· MERGE junction-adjacent waypoints (<50 m) to kill the 499;
+· keep the measured-duration predictor, fill targets, floor, pinned spans, fail-open.
+ALSO MEASURED: 4 seeds currently produce identical chains (seed diversity is illusory once NN converges)
+— sector selection replaces seeding outright.
+Suites stay green (434 backend; ribbon_chain tests updated to the 2-point v1 contract with the 499
+reason in comments). `RIBBON_CHAINS` stays OFF; the BD-135 A/B remains VACUOUS-pending, not refused —
+chains must first ASSEMBLE.
+
+**BD-139 — R29 Units B+C: both ribbon integrations MEASURED and both blocked on the same thing —
+DISTINCT-ribbon supply — which Unit E's sweep (running) exists to fix.**
+UNIT B (loops): design #4 (sector-spread in a radius band + bearing order + cost orientation +
+junction merge) built and 8-test green after three measured failures (BD-138). The decisive probe
+diagnostic: **the r31 pool is ~6× duplicates** — overlapping sweep cells store the SAME physical road
+as a ribbon in up to 6 cells, so Guelph's "24-ribbon pool" is **4 distinct roads at 12-29 km in
+different directions**, and a spread tour over that is 150+ km of links. No algorithm chains that into
+90 minutes; the supply is too sparse. Pool now DEDUPES by physical road id (the way-id suffix), and
+`RIBBON_CHAINS` stays OFF pending r32.
+UNIT C (A→B): `ribbonsAsSegments` feeds deduped ribbons into `buildCorridorChains` behind
+`RIBBON_ATOB` (unique names — mergeRoadPieces fuses same-named segments within 150 m; `distance_m →
+lengthM` keeps the corridor predictor honest; corridor may reverse a ribbon — accepted, road class is
+direction-agnostic). **A/B on the real entry (20 pairs, seed 20260804): backroad 33.2 → 35.4 %
+(+2.2 pp) vs a ≥41 % bar; routed 20/20, doubling 4/20, curviness 1.08 — all held. REFUSED at the bar
+on r31 supply.** The corpus corridor pool already contains most of what r31's thin ribbons add.
+BOTH A/Bs re-run when the r32 index loads (CORE_RIBBON_MIN_M 2500, CELL_RIBBON_RESERVED 8,
+CELL_KEEP_MAX 10 — denser DISTINCT coverage incl. Collingwood/Cobourg). That is the pre-planned supply
+fix from the R29 plan, not a new lever. 434 tests green; flags off; byte-identical.
+
+**BD-140 — R29 Unit D complete (within honest scope), and the r32 sweep was MY CONFIG ERROR, relaunched
+as r33.**
+UNIT D SHIPPED: (1) wording — the road-character chip is **"Backroads"** (named for its mechanism), the
+"No preference" third chip is REMOVED (its `null` value doubled as quick-fill's "text decides" marker —
+the mechanism behind the twisty-un-fills-the-chip bug), duration is **"Drive time"**, helper text tells
+the user places typed in the text box are driven through. (2) **The explain prompt finally receives the
+ask** (facts gain `asked: {character, driveTimeMin, avoids, places}`, prompt v2 instructs justification
+against it and plain statement of relaxations) — it had instructed "explain how it fits what was asked"
+since v1 while never being given the ask. Gate: the grounding validator + 77 ai/route unit tests (no
+separate explain eval exists; BD-28's re-run obligation was the PARSE gate). Two backticks inside the
+template literal cost two compile rounds — noted for the next prompt edit.
+SCOPE CALL, stated not silent: `titleSummaryTags` stays UNWIRED because **no save surface exists** — no
+persistence endpoint, no Save button. Wiring it means building route-saving, a feature, not a Unit D
+line item. The function remains ready.
+UNIT E CORRECTION: the r32 sweep produced **24 ribbons — worse than r31** — because I passed
+`CORE_RIBBON_MIN_M=2500` but not `CORE_RIBBON_ENDPOINT_MIN_M`, so the endpoint-separation bar sat at
+its 8 km default and rejected 5 841 ribbons. The BD-131 constant split exists because these are two
+different properties; I set one. Relaunched as **r33** with both (2 500 m road / 2 000 m separation):
+at 44 cells it holds **169 ribbons ≈ 4× r31's rate**. A/Bs for Units B and C re-run when it loads.
+
+**BD-141 — THE BREAKTHROUGH THAT HELD: the DRIVE-FIRST TRIP. Plan = constrained Discover, built as
+BD-135 actually specified, and the drive-quality bar is SMASHED for the first time in the program.**
+THE PATTERN NAMED FIRST: BD-130 (core seeds), BD-136 (single ribbons), BD-139 (chains, both variants)
+all piped measured cores INTO THE BLOB-ASSEMBLY GATES — judged by rules that police invented blobs.
+Discover v2 passes every bar precisely because it does NOT assemble: core + two disclosed connectors.
+`drive_first_trip.ts` finally does the same for Plan: when a measured core FITS the ask (drive ruler,
+fit ≤0.25), the planner returns core + connectors + `legs` + disclosures directly, bypassing
+`assembleLoop`. Fail-open to legacy with a disclosure. Three probe-measured construction fixes on the
+way: kind='loop' reads (kind=null re-created the ribbon swamp BD-137 fixed — 6/60 served became 52/60),
+a core-mid waypoint (entry≈exit collapsed the leg split — drivePct null), prefer-successful-retry +
+near-preference in fit bands + reach 0.3 (commute shrink).
+**MEASURED (60 loops, real runPlanner, seed 20260804, r33 index of 1,922 cores/1,652 ribbons):**
+
+| | baseline v16 | drive-first trips |
+|---|---|---|
+| DRIVE backroad | 40.1 % | **71.5 %** (served subset 79.6 % in v3) |
+| doubling ON THE DRIVE (≥250 m) | — (blob only) | **8/57** |
+| wrong-length (drive ruler) | 46/56 | **20/57** |
+| truncated | 3 | 2 |
+| no-route | 1 | 1 |
+| served from the index | 0 | 40/60 |
+
+BD-135 bars: drive backroad ≥55 % **PASS (+16.5 over the bar)** · doubling ≤15/60 **PASS on the drive
+span (8/57)** but **FAIL on the blob (48/60)** — the blob figure is commute legs sharing the approach
+road, disclosed as sameWayHome per Discover's own contract · wrong-length ≤12/60 **FAIL at 20/57**
+(residual: briefs where no fitting core exists fall back to legacy, which misses as before) ·
+no-route/trunc not up **PASS**.
+**NOT SELF-ADOPTED.** Two bars miss AS REGISTERED, and the doubling miss is a RULER question the
+architecture itself created: the owner's stated rule is "same roads twice unless absolutely NECESSARY"
+— a disclosed commute to reach a measured-clean loop is the necessary case, or it is not, and that is
+his call, not mine. Flag stays default-off; the numbers, both rulers, go to the owner.
+Also recorded: r33 supply sweep (1,652 ribbons, 4× r31's rate) after the r32 config error (BD-140);
+chains remain refused (BD-139) — the trip approach supersedes them.
+
+**BD-142 — OWNER ADOPTED the drive-first trip (2026-08-07): "disclosed commute is fine."** The ruler
+question resolved by the owner himself: a same-road commute to reach a measured-clean drive is the
+"absolutely necessary" case his own rule carves out, PROVIDED it is disclosed — which the card does
+("same way home — there isn't a good second road from here"). `DRIVE_FIRST` defaults ON. The drive is
+judged on the drive; the commute is honest overhead shown separately. Unit F (audit v17 + freeze) runs
+on this config.
+
+**BD-143 — R29 CLOSED: audit v17 (fresh seed 20260807, adopted config) CONFIRMS the architecture
+generalizes.** Loops: **served 40/60 from the measured index · DRIVE backroad 68.1 % · drive-span
+doubling 7/59 · truncation 0 · no-route 0.** Discover: 180/180 drives, 0 empty menus, 83 % backroad,
+0 doubling. A→B: 20/20 routed, 33 % backroad, 4/20 doubling (unchanged — its ribbon lever stays
+refused). Artifact published; `frozen-r29-v1` cut with the full flag rationale. The residual work is
+known and honest: 20/60 briefs still fall back to the legacy blob (index coverage), A→B never got its
+win, and the app should now RENDER the served trip's three legs from `result.legs` prominently.
+
+**BD-144 — A shipped defect the lint gate exposed on the way to the commit: the v2 map ignored its own
+`perLeg` prop.** `DiscoverHome` computes and passes `perLeg={coreDrives.length > 0}`, the data layer tags
+every feature `leg: 'core' | 'out' | 'home'`, and `DriveLinesMap` declared, documented and defaulted the
+prop — then drew `lineColor: AMBER` unconditionally. So on every v2 Discover menu the card told the truth
+("the drive 42 min · getting there 18 · home 21") while the map drew all three legs identically: the
+driver could not see where the drive began. ESLint caught it only as `'perLeg' is assigned a value but
+never used` — the type system cannot see an unused prop, and **no test asserted the layer's style**, which
+is exactly why it shipped. Fixed with the intended `['match', ['get','leg'], 'core', AMBER, '#8a93a6']`
+expression, and pinned by two tests (v2 → match expression with a non-amber connector colour; v1 → plain
+amber, since v1 features carry no `leg`). Same pass: removed the dead `midVertex` + `MID_VIA_MIN_M` from
+`ribbon_chain.ts` (mid vias were disabled after the Valhalla 499s — keeping an exported knob that nothing
+reads is a lie about what the module does) and a dead `assembleLoop` import in the rq28 probe. Suites
+after: **backend 439 · app 161 · shared 24**, tsc clean, `npx eslint` clean outside gitignored
+`scratchpad/`. Lesson recorded: a rendering prop needs an assertion on the rendered style, not just a
+smoke test that the screen mounts.
+
+**BD-145 — THE OWNER IS RIGHT AND MY INSTRUMENT WAS THE REASON I COULDN'T SEE IT (2026-08-08).**
+Owner, from the device on the adopted R29 config: "The drives dont look like loops... it goes into a
+random street or random neighbourhood for no reason makes us do a u turn or go around a crescent, then
+continue on the same road... I have no clue how you arent finding this out yourself through the audits."
+New probe `eval/experiments/rq30_as_driven.ts` measures the trip **as driven** — every leg, every
+detector, floors dropped (`OAB_MIN_RUN_M=60`), grace radius 0 — on 36 real `runPlanner` routes from his
+own two areas (Southfields ×6, Brampton ×6 origins; 3 briefs each; 36/36 served by the index).
+
+**Measured, all confirming him:**
+· **Ask vs delivered: 36/36 trips exceed the ask by more than the audit's own 25 % tolerance.** "1 hour
+  backroads loop" → **106 min mean** (1.77×); 90 min → 131 (1.45×); 2 h → 178 (1.48×). Worst 1.97×.
+· **Commute is 44 % of trip distance (worst 56 %)** — mean 44.8 km of commute wrapped around the drive.
+· **Doubling: mean longest run 7.3 km, worst 20.7 km; 33/36 trips double >2 km** — the out and home
+  connectors substantially retrace each other.
+· **Whole-trip loopiness mean 0.14 (worst 0.07); 36/36 BELOW the 0.25 bar every CORE must clear.**
+  Literally, numerically, "the drives don't look like loops": core + two long sticks is a lollipop.
+· **Spurs: mean 3.0 per trip (max 7), 36/36 routes** — and 0 within any leg measured alone, so they sit
+  at the LEG JOINS: arrive at the core on a road, leave on the same road. His "u-turn, then continue on
+  the same road."
+· Connector detour factor ~1.8× (22 km driven to reach a core 12.7 km away) with hood share up to
+  16.8 % on home legs — `LINK_COSTING = {...BACKROADS.options, exclude_highways: true}` deliberately
+  routes the COMMUTE onto small roads. That is the "random street / random neighbourhood."
+· The DRIVE leg itself is genuinely good: 74.5 % backroad, **0 spurs, 0 microloops**, longest doubling
+  426 m. The measured-core index is not the problem; everything wrapped around it is.
+
+**WHY THE AUDITS SAID PASS — five instrument failures, all mine:**
+ 1. **I changed the ruler.** `run.ts:1364-1370` judges `judgedDurationS = duration × drivePct/100` for
+    drive-first candidates, and the audit's `wrong_length` compares that to the ask (BD-135, "the ask
+    means THE DRIVE"). A 106-minute answer to "1 hour" therefore scores CORRECT.
+ 2. **`defectsOf` (audit v13/v16/v17) has no spur, microloop or u-turn row at all** — the three
+    detectors that model his exact complaint were never run on a served trip.
+ 3. **`OAB_MIN_RUN_M = 250`** — a crescent or street stub is 80-250 m, invisible by construction. I
+    documented this in the R28 rq28 probe and never fixed it.
+ 4. **`loopiness` is only ever applied to the CORE** (`CORE_LOOPINESS_MIN = 0.25`), never to the trip
+    the driver sees.
+ 5. **The connectors are judged by NOTHING.** `judgeCore` hard-rejects cores on u-turns/spurs/
+    microloops, but connectors are raw `routeThrough` output and are ~half the driven minutes.
+**BD-142 was answered on a question I framed too narrowly:** I asked whether a disclosed same-way
+commute was acceptable, not whether a 60-minute ask should produce a 106-minute lollipop with 44 %
+commute. He could not have priced what he was approving; I could have measured it and did not.
+
+**Recommendation (NOT restarting the planner): the index is the asset and it is clean.** Re-point the
+trip assembly at the right target — (a) the ask means the TRIP; (b) connectors route like a person
+drives, not on backroads costing; (c) whole-trip gates on loopiness/doubling/spurs/commute-share that
+REJECT a candidate rather than disclose it; (d) fix the audit to judge what he drives; (e) dedup +
+targeted coverage near him (13 rows within 15 km of Southfields are ~5 distinct drives from one entry
+point). Ruler reversal (a) contradicts BD-135/142, which were his calls — his to re-decide, with these
+numbers in hand.

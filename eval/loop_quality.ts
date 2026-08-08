@@ -63,6 +63,7 @@ import {
   retrieveCandidates,
   type CandidateSegment,
 } from '../backend/src/planner/retrieve';
+import { revisitCount } from '../backend/src/planner/revisit';
 import { cleanDriveVerdict } from '../backend/src/planner/roadclass';
 import {
   CHAIN_CANDIDATES_ON,
@@ -499,6 +500,7 @@ async function evaluateBrief(
       residentialShare: a.residentialShare,
       residentialRunM: a.residentialRunM,
       outAndBackLongestM: a.outAndBackLongestM,
+      revisitPlaces: revisitCount(a.route.geometry, origin),
       traceNull: a.trace === null,
       loopiness: shapeLoopiness, // R21-1 (null → 0)
       corridorDoubling: shapeCorridor,
@@ -664,6 +666,7 @@ async function evaluateBrief(
         residentialShare: best.a.residentialShare,
         residentialRunM: best.a.residentialRunM,
         outAndBackLongestM: best.a.outAndBackLongestM,
+        revisitPlaces: revisitCount(best.a.route.geometry, origin),
         traceNull: best.a.trace === null,
         loopiness: SHAPE_QUALITY_ON ? bestLoopiness : null, // R21-1 parity
         corridorDoubling: SHAPE_QUALITY_ON ? bestCorridorDoubling : null,

@@ -28,7 +28,7 @@ export const OAB_OPPOSED_DEG = 135;
  * through a junction are all legitimately "opposed" for a few tens of metres;
  * a driver only experiences an out-and-back when it runs for a while.
  */
-export const OAB_MIN_RUN_M = 250;
+export const OAB_MIN_RUN_M = Number(process.env['OAB_MIN_RUN_M'] ?? 250);
 
 export interface OutAndBackRun {
   /** Distance along the route where the doubling starts, metres. */

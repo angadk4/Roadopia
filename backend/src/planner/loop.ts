@@ -42,6 +42,7 @@ import {
   residentialShareOf,
 } from './residential';
 import type { CandidateSegment } from './retrieve';
+import { revisitCount } from './revisit';
 import {
   BACKROAD_CLASSES,
   classMixOf,
@@ -89,8 +90,15 @@ export const RETRACE_RUN_SOFT_M = 1_200;
  * 19 441 m, so the first cut targets the egregious end without repeating the
  * round-6 starvation.
  */
+/**
+ * R28 — reject a route that returns to the same PLACE too many times. OFF =
+ * byte-identical. `REVISIT_REJECT_MAX` is the number of distinct revisited
+ * places tolerated; audit-v15 measured 43/60 routes at >=2.
+ */
+export const REVISIT_REJECT_ON = (process.env['REVISIT_REJECT'] ?? 'on') !== 'off';
+export const REVISIT_REJECT_MAX = Number(process.env['REVISIT_REJECT_MAX'] ?? 2);
 export const OUT_AND_BACK_REJECT_ON = (process.env['OUT_AND_BACK_REJECT'] ?? 'on') !== 'off';
-export const OUT_AND_BACK_REJECT_M = Number(process.env['OUT_AND_BACK_REJECT_M'] ?? 2500);
+export const OUT_AND_BACK_REJECT_M = Number(process.env['OUT_AND_BACK_REJECT_M'] ?? 1200);
 
 /**
  * Residential exposure two-tier (owner round 7: neighbourhood streets "shouldn't
@@ -227,7 +235,7 @@ export async function assembleLoop(
     middleType = 'through',
     maxUturns = 1,
     maxSpurs = 1,
-    maxMicroloops = 1,
+    maxMicroloops = MICROLOOPS_MAX_DEFAULT,
     residentialHardShare = RESIDENTIAL_HARD_SHARE,
     residentialHardRunM = RESIDENTIAL_HARD_RUN_M,
     avoidHighways = false,
@@ -319,6 +327,15 @@ export async function assembleLoop(
   // a blanket hard cap rejected 687 candidates and left 0/40 briefs alive):
   // only an EGREGIOUS doubling dies here; everything shorter is carried for the
   // presentation layer to demote.
+  // R28 — AREA REVISITS, the owner's "in and out of Inglewood many times".
+  // The RANKING lever for this was built and refused (BD-125: it moved the
+  // defect the wrong way, 13/24 -> 14/24). A GATE is a different category and
+  // has not been tried. Only egregious cases die here, per the two-tier shape
+  // the file already uses for u-turns and spurs.
+  const revisits = REVISIT_REJECT_ON ? revisitCount(route.geometry, origin) : 0;
+  if (REVISIT_REJECT_ON && revisits > REVISIT_REJECT_MAX) {
+    rejectReasons.push(`revisits ${revisits}`);
+  }
   const oab = outAndBack(route.geometry);
   const outAndBackLongestM = oab.longestM;
   if (OUT_AND_BACK_REJECT_ON && outAndBackLongestM > OUT_AND_BACK_REJECT_M) {
@@ -495,6 +512,17 @@ export interface AssemblyOpts {
 export const SELF_OVERLAP_RELAXED = 0.45;
 export const UTURNS_RELAXED_MAX = 2;
 export const SPURS_RELAXED_MAX = 2;
+/**
+ * R28 — how many "random boxes" a route may contain and still be ACCEPTED.
+ *
+ * Was hard-coded 1, i.e. a single block-circuit shipped. The two-tier shape
+ * (repeat offenders die at assembly, singles are presentation-only) exists to
+ * avoid the starvation that killed zero-tolerance for u-turns twice — but the
+ * owner reported seeing exactly this on the device near the Forks of the
+ * Credit ("it loops around some random box at the top"), and the rq28 probe
+ * reproduced it: 2 of 24 routes carry a microloop and ship.
+ */
+export const MICROLOOPS_MAX_DEFAULT = Number(process.env['MICROLOOPS_MAX'] ?? 1);
 export const MICROLOOPS_RELAXED_MAX = 2;
 export const RESIDENTIAL_HARD_RELAXED = 0.3;
 /**

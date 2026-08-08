@@ -39,6 +39,18 @@ export interface RouteFacts {
    *  chip won instead of pretending the text was honoured. Absent when text
    *  and controls agree (byte-identical prompts for the common case). */
   clientOverrides?: string[];
+  /**
+   * R29 Unit D — THE ASK. The prompt has instructed the model to explain "how
+   * it fits what was asked" since v1 while never being given the ask — the
+   * narration could only infer it from the satisfied/relaxed labels. Optional
+   * so canned/older fixtures stay byte-identical.
+   */
+  asked?: {
+    character: string | null;
+    driveTimeMin: number | null;
+    avoids: string[];
+    places: string[];
+  };
 }
 
 export interface Explanation {

@@ -22,7 +22,7 @@ const PRESET_LABEL: Record<Preset, string> = {
   twisty: 'Twisty',
   chill: 'Relaxed',
   simple: 'Direct',
-  backroads: 'Fun & Explorative',
+  backroads: 'Backroads', // R29 Unit D rename
   coffee_stop: 'Coffee stop',
   avoid_highways: 'No highways',
 };

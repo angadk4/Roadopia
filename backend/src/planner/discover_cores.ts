@@ -56,8 +56,15 @@ export const CORE_CONNECTOR_SHARE_MAX = 0.6;
 export const HOME_OVERLAP_RETRY = 0.5;
 /** A retried home leg may cost at most this over the direct one. */
 export const HOME_RETRY_MAX_FACTOR = 1.35;
-/** The sweep build tag this deployment serves (flips only after a verified load). */
-export const DRIVE_CORES_VERSION = process.env['DRIVE_CORES_VERSION'] ?? 'r25-dev';
+/**
+ * The sweep build tag this deployment serves (flips only after a verified load).
+ *
+ * R29 (Unit A blocker): this defaulted to 'r25-dev' while the loaded index is
+ * 'r31-rib' — so every v2 browse returned an empty menu against a 1,544-core
+ * index. drive_first.ts read the SAME env var with a different default, which
+ * is exactly how the two paths silently diverged; there is now ONE constant.
+ */
+export const DRIVE_CORES_VERSION = process.env['DRIVE_CORES_VERSION'] ?? 'r33-rib';
 
 export interface CoreRowRead {
   id: string;
@@ -83,6 +90,7 @@ type CoresFn = (
   bbox: [number, number, number, number],
   version: string,
   limit: number,
+  kind?: 'loop' | 'ribbon' | null,
 ) => Promise<CoreRowRead[]>;
 type MatrixFn = (baseUrl: string, req: MatrixRequest) => Promise<MatrixCell[][]>;
 type RouteFn = (baseUrl: string, req: RouteThroughRequest) => Promise<RouteThroughOutput>;
@@ -95,16 +103,22 @@ export interface DiscoverCoresDeps {
   routeFn?: RouteFn;
 }
 
-/** The definer read (0016): bad/stale rows are unreturnable by construction. */
+/**
+ * The definer read (0016/0019): bad/stale rows are unreturnable by construction.
+ * `kind` filters SQL-side (0019) — necessary, not cosmetic: the definer caps at
+ * 50 rows ordered by quality, and 1,114 max-quality ribbons otherwise swamp the
+ * cap so loop cores never leave the database (measured: 0/8 origins got a menu).
+ */
 export async function readDriveCores(
   db: Client,
   bbox: [number, number, number, number],
   version: string,
   limit: number,
+  kind: 'loop' | 'ribbon' | null = null,
 ): Promise<CoreRowRead[]> {
   const res = await db.query<CoreRowRead>(
-    'select * from discover_drive_cores($1, $2, $3, $4, $5, $6)',
-    [bbox[0], bbox[1], bbox[2], bbox[3], version, limit],
+    'select * from discover_drive_cores($1, $2, $3, $4, $5, $6, $7)',
+    [bbox[0], bbox[1], bbox[2], bbox[3], version, limit, kind],
   );
   return res.rows;
 }
@@ -119,6 +133,11 @@ function legOf(route: RouteThroughOutput): CoreLeg {
 
 /** Deterministic perpendicular offset point for the one home-leg retry. */
 function offsetVia(exit: LatLng, origin: LatLng, offsetM: number): [number, number] {
+  // R29: offsetM may be NEGATIVE — the opposite perpendicular side. The road
+  // network is not symmetric about the exit→origin line (a river valley or a
+  // town often blocks one side), and the single-side retry measured 5/6 cards
+  // stuck sameWayHome at Belfountain while a clean second road sat on the
+  // other side.
   const mid = { lat: (exit.lat + origin.lat) / 2, lng: (exit.lng + origin.lng) / 2 };
   const dx = (origin.lng - exit.lng) * Math.cos((mid.lat * Math.PI) / 180);
   const dy = origin.lat - exit.lat;
@@ -142,12 +161,24 @@ export async function discoverCores(
 
   const dLat = CORES_BROWSE_HALF_M / 111_320;
   const dLng = CORES_BROWSE_HALF_M / (111_320 * Math.cos((origin.lat * Math.PI) / 180));
-  const rows = await cores(
+  const fetched = await cores(
     deps.db,
     [origin.lng - dLng, origin.lat - dLat, origin.lng + dLng, origin.lat + dLat],
     DRIVE_CORES_VERSION,
-    CORES_BROWSE_LIMIT,
+    CORES_BROWSE_LIMIT * 2,
+    'loop',
   );
+  // R29 Unit A: a CARD must be worth the trip to it. The definer ranks by
+  // QUALITY, and the r31 index's 100 %-backroad 9-minute ribbons swept every
+  // top-20 — then all failed the connector-share drop ("mostly getting-there"),
+  // leaving EVERY menu empty while 430 loop cores averaging 63 min sat unread.
+  // Measured: 0/8 sample origins produced a menu. So the menu prefers the
+  // LONGEST drives (they are what survives the share test); short ribbons are
+  // the live planner's chaining material, not cards.
+  const rows = fetched
+    .slice()
+    .sort((a, b) => b.duration_s - a.duration_s || a.id.localeCompare(b.id))
+    .slice(0, CORES_BROWSE_LIMIT);
   if (rows.length === 0) {
     return {
       v: 2,
@@ -223,26 +254,35 @@ export async function discoverCores(
           let sameWayHome = false;
           if (edgeOverlapRatio(homeDirect.geometry, out.geometry) >= HOME_OVERLAP_RETRY) {
             sameWayHome = true;
-            try {
-              // ONE deterministic retry via a perpendicular offset (never a loop)
-              const retry = await buildRoute(deps.valhallaUrl, {
-                waypoints: [
-                  [row.exit.lng, row.exit.lat],
-                  offsetVia(row.exit, origin, 4000),
-                  [origin.lng, origin.lat],
-                ],
-                costingOptions: { ...BACKROADS.options, exclude_highways: true },
-              });
-              if (
-                retry.duration_s <= homeDirect.duration_s * HOME_RETRY_MAX_FACTOR &&
-                edgeOverlapRatio(retry.geometry, out.geometry) <
-                  edgeOverlapRatio(homeDirect.geometry, out.geometry)
-              ) {
-                home = retry;
-                sameWayHome = false;
+            // Bounded, deterministic retries: one per perpendicular SIDE (the
+            // network is rarely symmetric about the exit→origin line). Never a
+            // search loop — exactly two extra route calls in the worst case,
+            // and only for cards already stuck on the same road home.
+            // Widening ladder: near offsets first (cheap detour), far ones for
+            // valley origins where every nearby road funnels into one approach
+            // (measured: Belfountain's menu was 5/6 sameWayHome at ±4 km).
+            for (const side of [4000, -4000, 7000, -7000]) {
+              try {
+                const retry = await buildRoute(deps.valhallaUrl, {
+                  waypoints: [
+                    [row.exit.lng, row.exit.lat],
+                    offsetVia(row.exit, origin, side),
+                    [origin.lng, origin.lat],
+                  ],
+                  costingOptions: { ...BACKROADS.options, exclude_highways: true },
+                });
+                if (
+                  retry.duration_s <= homeDirect.duration_s * HOME_RETRY_MAX_FACTOR &&
+                  edgeOverlapRatio(retry.geometry, out.geometry) <
+                    edgeOverlapRatio(homeDirect.geometry, out.geometry)
+                ) {
+                  home = retry;
+                  sameWayHome = false;
+                  break;
+                }
+              } catch {
+                /* try the other side; sameWayHome stays true if both fail */
               }
-            } catch {
-              /* keep the direct leg; sameWayHome stays true */
             }
           }
           return {

@@ -13,17 +13,29 @@
  * device location (BD-27) — the lat/long readout is gone (map-first).
  */
 
-import type { DiscoverResult, LatLng, NearbyDrive } from '@shared/types';
+import type {
+  CoreDrive,
+  DiscoverResult,
+  DiscoverResultV2,
+  LatLng,
+  NearbyDrive,
+} from '@shared/types';
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import DriveLinesMap from '../components/DriveLinesMap';
 import {
   buildDiscoverPlanRequest,
+  coreDrivesBounds,
+  coreDrivesToFeatureCollection,
+  coreDriveToRoute,
+  coreTripLabel,
+  DISCOVER_V2,
   DiscoverUnavailableError,
   discoverDrivesToFeatureCollection,
   driveDurationS,
   drivesBounds,
+  fetchDiscoverCores,
   fetchDiscoverDrives,
   nearbyDriveToRoute,
 } from '../lib/discover';
@@ -45,17 +57,26 @@ export interface DiscoverHomeProps {
   locate?: () => Promise<LocationResult>;
   /** Injectable for tests; default = POST /discover. */
   fetchDrives?: FetchFn;
+  /** Injectable for tests; default = POST /discover with v:2 (null disables v2). */
+  fetchCores?: ((origin: LatLng) => Promise<DiscoverResultV2>) | null;
 }
 
 type Phase =
   | { kind: 'need_origin' }
   | { kind: 'loading' }
   | { kind: 'loaded'; result: DiscoverResult }
+  /** R29 Unit A: the v2 three-leg menu — the drive + get-there + get-home. */
+  | { kind: 'loaded_v2'; result: DiscoverResultV2 }
   | { kind: 'empty'; disclosures: string[] }
   | { kind: 'unavailable' }
   | { kind: 'error' };
 
 type LocState = 'idle' | 'fetching' | 'denied' | 'error';
+
+/** Shared empties — one identity each, so "no drives" never invalidates a memo.
+ *  Never mutated (the screen only ever reads these). */
+const NO_DRIVES: NearbyDrive[] = [];
+const NO_CORE_DRIVES: CoreDrive[] = [];
 
 /** Whole minutes → a friendly duration ("45 min" / "1 h 50 min" / "2 h"). */
 function fmtDur(s: number): string {
@@ -81,6 +102,15 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
   const fetchDrives =
     props.fetchDrives ??
     ((o: LatLng) => fetchDiscoverDrives({ baseUrl: getApiBaseUrl(), sessionId }, o));
+  // `null` explicitly DISABLES v2 (tests pin the v1 path with it), so this must
+  // distinguish null from undefined — `??` would treat both as "use the default"
+  // and send test renders to the real network.
+  const fetchCores =
+    props.fetchCores !== undefined
+      ? props.fetchCores
+      : DISCOVER_V2
+        ? (o: LatLng) => fetchDiscoverCores({ baseUrl: getApiBaseUrl(), sessionId }, o)
+        : null;
 
   const [phase, setPhase] = useState<Phase>({ kind: 'need_origin' });
   const [locState, setLocState] = useState<LocState>('idle');
@@ -109,29 +139,58 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
     let live = true;
     setPhase({ kind: 'loading' });
     setSelectedId(null);
-    fetchDrives(origin)
-      .then((result) => {
+    const loadV1 = (): Promise<void> =>
+      fetchDrives(origin).then((result) => {
         if (!live) return;
         setPhase(
           result.drives.length === 0
             ? { kind: 'empty', disclosures: result.disclosures }
             : { kind: 'loaded', result },
         );
-      })
-      .catch((err: unknown) => {
-        if (!live) return;
-        setPhase(
-          err instanceof DiscoverUnavailableError ? { kind: 'unavailable' } : { kind: 'error' },
-        );
       });
+    // R29 Unit A: v2 (drive + get-there + get-home) is the product; v1 remains
+    // the fallback wherever the index has no cores yet (e.g. Collingwood /
+    // Cobourg until the next sweep) so no origin loses its menu.
+    const load = fetchCores
+      ? fetchCores(origin).then((result) => {
+          if (!live) return;
+          if (result.drives.length === 0) return loadV1();
+          setPhase({ kind: 'loaded_v2', result });
+        })
+      : loadV1();
+    load.catch((err: unknown) => {
+      if (!live) return;
+      setPhase(
+        err instanceof DiscoverUnavailableError ? { kind: 'unavailable' } : { kind: 'error' },
+      );
+    });
     return () => {
       live = false;
     };
   }, [origin?.lat, origin?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const drives = phase.kind === 'loaded' ? phase.result.drives : [];
-  const fc = useMemo(() => discoverDrivesToFeatureCollection(drives), [drives]);
-  const bounds = useMemo(() => drivesBounds(drives), [drives]);
+  // Memoized on `phase` so the two lists keep a stable identity between renders:
+  // a fresh `[]` each render re-ran the map's FeatureCollection/bounds memos and
+  // handed ShapeSource a new shape every time.
+  const drives = useMemo(
+    () => (phase.kind === 'loaded' ? phase.result.drives : NO_DRIVES),
+    [phase],
+  );
+  const coreDrives = useMemo(
+    () => (phase.kind === 'loaded_v2' ? phase.result.drives : NO_CORE_DRIVES),
+    [phase],
+  );
+  const fc = useMemo(
+    () =>
+      coreDrives.length > 0
+        ? coreDrivesToFeatureCollection(coreDrives)
+        : discoverDrivesToFeatureCollection(drives),
+    [drives, coreDrives],
+  );
+  const bounds = useMemo(
+    () => (coreDrives.length > 0 ? coreDrivesBounds(coreDrives) : drivesBounds(drives)),
+    [drives, coreDrives],
+  );
 
   /** Launch a drive: instant Result with the pre-built route, else /plan flow. */
   const go = useCallback(
@@ -144,6 +203,16 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
       }
     },
     [origin, props.navigation],
+  );
+
+  /** R29: a v2 tap opens Result with the three legs concatenated into one
+   *  Route whose `legs` field carries the measured split — RouteDetail's
+   *  three-leg bar renders it without any screen surgery. */
+  const goCore = useCallback(
+    (d: CoreDrive) => {
+      props.navigation.navigate('Result', { route: coreDriveToRoute(d) });
+    },
+    [props.navigation],
   );
 
   const onSelectLine = useCallback((p: Record<string, unknown>) => {
@@ -211,7 +280,7 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
   );
 
   // Bottom rail: one card per drive — the per-drive detail + "Let's go" CTA.
-  const rail = drives.length > 0 && (
+  const rail = (drives.length > 0 || coreDrives.length > 0) && (
     <View style={styles.railWrap}>
       <ScrollView
         horizontal
@@ -219,6 +288,41 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
         contentContainerStyle={styles.rail}
         keyboardShouldPersistTaps="handled"
       >
+        {coreDrives.map((d) => {
+          const selected = d.id === selectedId;
+          const honesty =
+            d.barProfile === 'cell_relaxed'
+              ? `best around here · ${Math.round(d.core.backroadShare * 100)}% backroad`
+              : d.sameWayHome
+                ? 'same way home — no good second road from here'
+                : 'different way home';
+          return (
+            <Pressable
+              key={d.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Let's go — ${d.name}`}
+              onPress={() => goCore(d)}
+              onPressIn={() => setSelectedId(d.id)}
+              style={({ pressed }) => [
+                styles.card,
+                { borderColor: selected ? AMBER : colors.border, opacity: pressed ? 0.85 : 1 },
+              ]}
+            >
+              <View style={styles.cardHead}>
+                <Text style={styles.cardName} numberOfLines={1}>
+                  {d.name}
+                </Text>
+              </View>
+              <Text style={styles.cardMeta}>
+                {curveWord(d.core.curviness)} · {coreTripLabel(d)}
+              </Text>
+              <Text style={styles.cardSub}>{honesty}</Text>
+              <View style={[styles.cta, { backgroundColor: colors.accent }]}>
+                <Text style={[styles.ctaText, { color: colors.onAccent }]}>Let's go</Text>
+              </View>
+            </Pressable>
+          );
+        })}
         {drives.map((d) => {
           const selected = d.segmentId === selectedId;
           return (
@@ -264,6 +368,7 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
     <DriveLinesMap
       featureCollection={fc}
       bounds={bounds}
+      perLeg={coreDrives.length > 0}
       sourceId="discover-drives"
       onSelectLine={onSelectLine}
       banner={overlay}

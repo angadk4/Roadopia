@@ -70,10 +70,14 @@ export async function fetchDiscoverCores(
   return parsed.data;
 }
 
-/** App-side switch for the v2 browse — flipped when the swept core index is
- *  LOADED at the deployment the app points at (an empty v2 menu on every
- *  browse would be a worse product than the honest v1 while the sweep runs). */
-export const DISCOVER_V2 = false;
+/**
+ * App-side switch for the v2 browse. ON since R29 Unit A: the r31 ribbon index
+ * (1,544 cores) is loaded and the backend serves {core, connectorOut,
+ * connectorHome} with per-leg times. The screen still falls back to v1 when a
+ * v2 menu comes back EMPTY (index gaps, e.g. Collingwood/Cobourg until the
+ * next sweep) — no origin loses its menu.
+ */
+export const DISCOVER_V2 = true;
 
 /** Total trip time (s) of a three-leg core drive. */
 export function coreTripDurationS(d: CoreDrive): number {
@@ -251,6 +255,83 @@ export function drivesBounds(drives: NearbyDrive[]): Bounds | null {
   }
   if (!Number.isFinite(west) || !Number.isFinite(south)) return null;
   return { sw: [west, south], ne: [east, north] };
+}
+
+/** Union bounds over ALL THREE legs of v2 core drives ([lng,lat]).
+ *  The camera must fit the connectors too — a drive 20 km away with a tight
+ *  core-only fit would render as a line leaving the screen. */
+export function coreDrivesBounds(drives: CoreDrive[]): Bounds | null {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  const eat = (g: { coordinates: unknown }): void => {
+    for (const [lng, lat] of g.coordinates as Array<[number, number]>) {
+      if (lng < west) west = lng;
+      if (lng > east) east = lng;
+      if (lat < south) south = lat;
+      if (lat > north) north = lat;
+    }
+  };
+  for (const d of drives) {
+    eat(d.core.geometry);
+    eat(d.connectorOut.geometry);
+    eat(d.connectorHome.geometry);
+  }
+  if (!Number.isFinite(west) || !Number.isFinite(south)) return null;
+  return { sw: [west, south], ne: [east, north] };
+}
+
+/**
+ * Map a tapped v2 core drive into the shared `Route` the Result screen renders —
+ * the three legs concatenated into one geometry, WITH `Route.legs` filled from
+ * the three MEASURED legs. RouteDetail's R28 three-leg bar then shows
+ * "getting there X · the drive Y · home Z" on the result for free, and the
+ * road-class number shown for the drive is the CORE's measured share — not a
+ * blob average.
+ */
+export function coreDriveToRoute(d: CoreDrive): Route {
+  const coords = [
+    ...(d.connectorOut.geometry.coordinates as Array<[number, number]>),
+    ...(d.core.geometry.coordinates as Array<[number, number]>).slice(1),
+    ...(d.connectorHome.geometry.coordinates as Array<[number, number]>).slice(1),
+  ];
+  const totalM = d.connectorOut.distance_m + d.core.distance_m + d.connectorHome.distance_m;
+  const totalS = coreTripDurationS(d);
+  const pct = (m: number): number => Math.round((m / Math.max(1, totalM)) * 100);
+  return {
+    geometry: { type: 'LineString', coordinates: coords },
+    is_loop: d.kind === 'loop',
+    waypoints: [d.core.entry, d.core.exit],
+    distance_m: totalM,
+    duration_s: totalS,
+    curviness: Math.max(0, d.core.curviness),
+    elevation_profile: null,
+    climb_m: null,
+    highway_flag: false, // cores are highway-free by the index bars; connectors exclude highways
+    toll_flag: false,
+    ferry_flag: false,
+    unpaved_flag: false,
+    character_tags: [],
+    intensity: 'moderate',
+    free_tags: d.barProfile === 'cell_relaxed' ? ['discover', 'best-around-here'] : ['discover'],
+    visibility: 'private',
+    owner_id: null,
+    origin_type: 'ai',
+    forked_from: null,
+    name: d.name,
+    stops: [],
+    legs: {
+      there_pct: pct(d.connectorOut.distance_m),
+      drive_pct: pct(d.core.distance_m),
+      home_pct: pct(d.connectorHome.distance_m),
+      there_m: Math.round(d.connectorOut.distance_m),
+      drive_m: Math.round(d.core.distance_m),
+      home_m: Math.round(d.connectorHome.distance_m),
+      drive_backroad_pct: Math.round(d.core.backroadShare * 100),
+      drive_main_pct: Math.round(d.core.mainShare * 100),
+    },
+  };
 }
 
 /**

@@ -46,13 +46,20 @@ function candidate(id: string, waypoints: LatLng[]): WaypointCandidate {
 describe('assembleLoop (M3-T07, live engine)', () => {
   it('a real circuit closes within ε and stays under the self-overlap cap', async (ctx) => {
     if (!engineUp) return ctx.skip();
-    // Hamilton → Dundas valley (NW) → Ancaster (SW) → back: distinct out/return corridors
+    // R28: the previous fixture (Dundas → Ancaster) was NOT the clean circuit its
+    // comment claimed. Measured through this same assembly path it carries
+    // 1 494 m of out-and-back over 4 runs, 3 113 m doubled in total, and one
+    // microloop — so it was asserting that a defective route is acceptable, and
+    // it blocked BOTH the tighter out-and-back threshold and zero-box tolerance.
+    // Replaced with a genuinely clean circuit rather than weakening the
+    // assertion: Hamilton → Binbrook (SE) → Mount Hope (SW) measures
+    // selfOverlap 0.00, out-and-back 0 m, microloops 0.
     const loop = await assembleLoop(
       VALHALLA,
       ORIGIN,
       candidate('good', [
-        { lat: 43.2647, lng: -79.954 }, // Dundas
-        { lat: 43.218, lng: -79.987 }, // Ancaster
+        { lat: 43.1247, lng: -79.8014 }, // Binbrook
+        { lat: 43.1614, lng: -79.9089 }, // Mount Hope
       ]),
     );
     expect(loop.closureM).toBeLessThanOrEqual(EPSILON_CLOSURE_M);
@@ -76,8 +83,8 @@ describe('assembleLoop (M3-T07, live engine)', () => {
       VALHALLA,
       ORIGIN,
       candidate('rp-clean', [
-        { lat: 43.2647, lng: -79.954 },
-        { lat: 43.218, lng: -79.987 },
+        { lat: 43.1247, lng: -79.8014 }, // Binbrook — see the fixture note above
+        { lat: 43.1614, lng: -79.9089 }, // Mount Hope
       ]),
     );
     expect(loop.repairsApplied).toBeGreaterThanOrEqual(0);

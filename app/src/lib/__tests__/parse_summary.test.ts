@@ -50,7 +50,7 @@ describe('parseChips', () => {
       'Through Forks of the Credit',
       'Near Elora',
       '~1.5 hr',
-      'Fun & Explorative',
+      'Backroads',
       'No highways',
       'Paved only',
       'Scenic',

@@ -69,6 +69,49 @@ describe('domain schemas round-trip parse/serialize', () => {
     expectRoundTrip(RouteSchema, route);
   });
 
+  it('Route carries the R28 three-leg split, and stays valid WITHOUT it', () => {
+    // The app zod-validates strictly and installed builds cannot be force-updated,
+    // so `legs` must be additive: an older payload with no legs must still parse.
+    const base: Route = {
+      geometry,
+      is_loop: true,
+      waypoints: [origin],
+      distance_m: 42000,
+      duration_s: 5400,
+      curviness: 0.42,
+      elevation_profile: null,
+      climb_m: null,
+      highway_flag: false,
+      toll_flag: false,
+      ferry_flag: false,
+      unpaved_flag: false,
+      character_tags: [],
+      intensity: 'spirited',
+      free_tags: [],
+      visibility: 'public',
+      owner_id: null,
+      origin_type: 'ai',
+      forked_from: null,
+      stops: [],
+    };
+    expectRoundTrip(RouteSchema, base); // no legs — the pre-R28 shape
+    expectRoundTrip(RouteSchema, {
+      ...base,
+      legs: {
+        there_pct: 28,
+        drive_pct: 49,
+        home_pct: 23,
+        there_m: 11760,
+        drive_m: 20580,
+        home_m: 9660,
+        drive_backroad_pct: 46,
+        drive_main_pct: 51,
+      },
+    });
+    // an A→B route has no drive span to report
+    expectRoundTrip(RouteSchema, { ...base, is_loop: false, legs: null });
+  });
+
   it('Spot', () => {
     const spot: Spot = {
       location: origin,

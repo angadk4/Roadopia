@@ -159,7 +159,21 @@ function stopRequestsOf(rows: readonly StopRow[]): StopRequest[] {
  * values quick-fill guessed from the same brief the server is about to parse
  * properly are withheld.
  */
-export function buildPlanRequest(draft: PlanDraft, autoFilled?: ReadonlySet<string>): BuildResult {
+export function buildPlanRequest(
+  draft: PlanDraft,
+  autoFilled?: ReadonlySet<string>,
+  /**
+   * R28 — true when the BRIEF itself named a destination the server can resolve.
+   *
+   * The parser resolves "backroads drive to Erin" to real coordinates, and the
+   * server already routes it: `/plan` only overrides `constraints.destination`
+   * when the BODY supplies one, so a brief-resolved destination stands. But the
+   * client was blocking the request anyway — demanding the user go pick, on a
+   * map, the exact place the parser had already found. The owner reported this
+   * as part of "the text box isn't filling in the options properly".
+   */
+  briefHasDestination = false,
+): BuildResult {
   const problems: string[] = [];
   const brief = draft.brief.trim();
 
@@ -168,7 +182,7 @@ export function buildPlanRequest(draft: PlanDraft, autoFilled?: ReadonlySet<stri
   if (brief.length > MAX_BRIEF_CHARS)
     problems.push(`Keep the brief under ${MAX_BRIEF_CHARS} characters.`);
   if (!draft.origin) problems.push('Add a start point.');
-  if (draft.shape === 'a_to_b' && !draft.destination)
+  if (draft.shape === 'a_to_b' && !draft.destination && !briefHasDestination)
     problems.push('Pick a destination for an A → B drive.');
 
   if (problems.length > 0 || !draft.origin) return { ok: false, problems };

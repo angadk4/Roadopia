@@ -95,7 +95,10 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
     () => new Set(quickFill.fromText.filter((f) => !touched.has(f))),
     [quickFill.fromText, touched],
   );
-  const build = useMemo(() => buildPlanRequest(draft, autoFilled), [draft, autoFilled]);
+  const build = useMemo(
+    () => buildPlanRequest(draft, autoFilled, quickFill.hasDestination),
+    [draft, autoFilled, quickFill.hasDestination],
+  );
 
   const submit = useCallback(() => {
     if (build.ok) props.navigation.navigate('Progress', { request: build.request });
@@ -285,7 +288,9 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
           by the endpoints). "Any" = surprise me. */}
       {draft.shape === 'loop' && (
         <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.text }]}>How long{fromText('duration')}</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            Drive time{fromText('duration')}
+          </Text>
           <View style={styles.buttonRow}>
             {[{ label: 'Any', seconds: null }, ...DURATION_CHOICES].map((c) => {
               const active = draft.durationTargetS === c.seconds;
@@ -343,8 +348,11 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
           {(
             [
               { value: 'simple', label: 'Direct' },
-              { value: 'backroads', label: 'Fun & Explorative' },
-              { value: null, label: 'No preference' },
+              // R29 Unit D: "Fun & Explorative" → "Backroads" (the chip's actual
+              // mechanism), and the "No preference" third chip is GONE — its
+              // `null` value doubled as quick-fill's "text decides" marker,
+              // which is how typing "twisty" used to DE-SELECT the chip.
+              { value: 'backroads', label: 'Backroads' },
             ] as ReadonlyArray<{ value: DriveStyle | null; label: string }>
           ).map((s) => {
             const active = draft.style === s.value;
@@ -376,9 +384,9 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
           })}
         </View>
         <Text style={[styles.note, { color: colors.textMuted }]}>
-          Changes which roads we build the drive from — not how fast you drive it. Fun & Explorative
-          favours quiet, characterful roads; Direct keeps it straightforward; No preference lets
-          your own words decide.
+          Changes which roads we build the drive from — not how fast you drive it. Backroads favours
+          quiet, characterful country roads; Direct keeps it straightforward. Name places or roads
+          in the text box and the drive will go through them.
         </Text>
       </View>
 

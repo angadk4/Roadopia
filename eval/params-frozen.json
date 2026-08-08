@@ -1,6 +1,6 @@
 {
-  "config_id": "frozen-r27-v1",
-  "frozen_at": "2026-07-30",
+  "config_id": "frozen-r29-v1",
+  "frozen_at": "2026-08-07",
   "discipline": "§21: tuned on DEV only, validated on VAL; any later change = new config id + fresh VAL pass",
   "params": {
     "ALPHA_LOOP": 0.45,
@@ -280,5 +280,11 @@
     "loop_fixed": "a9525828b17c3a67",
     "loop_random": "67685293c218a58e",
     "atob": "ee07cc6c2cd1fc77"
-  }
+  },
+  "DRIVE_FIRST": "on — BD-141/142: Plan serves a fitting MEASURED core + two disclosed connectors (no blob assembly). Drive backroad 40.1->71.5%, drive-span doubling 8/57. Owner adopted the disclosed-commute ruler.",
+  "DRIVE_CORES_VERSION": "r33-rib — 1,922 cores / 1,652 ribbons (2.5km road / 2.0km separation, ribbon-reserved cells)",
+  "RIBBON_CHAINS": "off — REFUSED (BD-138/139): three measured failure mechanisms + sparse distinct supply; superseded by the trip architecture",
+  "RIBBON_ATOB": "off — REFUSED at +2.2pp vs +8pp bar (BD-139); corridor pool already contains the material",
+  "DISCOVER_V2": "on (app) — three-leg menus, PASS 8/8 origins (BD-137); migration 0019 kind filter",
+  "EXPLAIN_PROMPT": "v2 — the prompt finally receives the ask (BD-140)"
 }

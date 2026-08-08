@@ -48,9 +48,13 @@ import {
   chainMatrixLocations,
 } from './chain';
 import { CONNECTOR_KEY_TOLERANCE, CONNECTOR_REFINE_ON, refineLoopFinalist } from './connectors';
+import { CORE_REACH_FRAC, CORE_SEED_MAX, CORE_SEED_ON, coreSeedCandidates } from './core_seed';
 import { profileExcludesHighways, profileForRequest, type CostingMode } from './costing';
 import { measureCurvatureClassAware } from './curvature';
+import { CORES_BROWSE_LIMIT, DRIVE_CORES_VERSION, readDriveCores } from './discover_cores';
 import { diversify, prefilterByDuration } from './diversify';
+import { DRIVE_FIRST_ON, pickDriveFirst, readDriveFirstCores } from './drive_first';
+import { driveFirstTrip } from './drive_first_trip';
 import { driveGeometry, splitLoopLegs, type LegSplit } from './legs';
 import {
   assembleLoop,
@@ -69,6 +73,14 @@ import { weightsForPreset } from './presets';
 import { initialParams, nextRelaxation, type SearchParams } from './relax';
 import { AVOID_DISC_RADIUS_M, resolveLocations, type ResolvedLocation } from './resolve_locations';
 import { retrieveAnchorPoints, retrieveCandidates } from './retrieve';
+import { revisitCount } from './revisit';
+import {
+  chainRibbons,
+  RIBBON_CHAINS_ON,
+  ribbonMatrixLocations,
+  ribbonPool,
+  ribbonsAsSegments,
+} from './ribbon_chain';
 import { classMixOf, type ClassMix } from './roadclass';
 import { buildScope } from './scope';
 import {
@@ -94,6 +106,9 @@ import {
   type UrbanIndex,
 } from './urban';
 import { DURATION_TOLERANCE_DEFAULT, validateCandidate, type ValidationVerdict } from './validate';
+
+/** R29 Unit C — ribbons in the A→B corridor pool. OFF = byte-identical. */
+const RIBBON_ATOB_ON = (process.env['RIBBON_ATOB'] ?? 'off') !== 'off';
 
 export const WALL_CLOCK_BUDGET_MS = 25_000;
 /** R18-2: 3 → 5 so the ladder's deeper rungs (soft-relax, avoid-relax,
@@ -476,6 +491,72 @@ export async function runPlanner(
   const isLoop = constraints.shape === 'loop';
   let durationS = constraints.duration_target_s ?? 5400; // distance-derived below (R18-4)
 
+  // R29 (BD-135, the architecture the owner approved) — DRIVE-FIRST TRIP.
+  // When a MEASURED core fits the ask, Plan returns exactly a Discover trip:
+  // the core + two disclosed connectors, judged as Discover judges them — NOT
+  // pushed through the blob-assembly gates that killed every prior attempt
+  // (BD-130/136/139: seeds, single ribbons and chains all died in
+  // assembleLoop, whose whole-trip rules police invented blobs, not disclosed
+  // commutes). Fail-open: no fitting core → the legacy planner runs unchanged,
+  // with a disclosure saying so.
+  if (isLoop && DRIVE_FIRST_ON && constraints.duration_target_s !== null) {
+    const trip = await driveFirstTrip(
+      deps.db,
+      deps.valhallaUrl,
+      origin,
+      constraints.duration_target_s,
+    );
+    if (trip !== null) {
+      const mins = (x: number): number => Math.round(x / 60);
+      result.status = 'ok';
+      result.route = {
+        geometry: trip.geometry,
+        distance_m: trip.distanceM,
+        duration_s: trip.durationS,
+        legs: [...trip.out.legs, ...trip.home.legs],
+        // Maneuvers cover the connectors; the core's own turns are part of its
+        // measured record (turns_per_10min), not re-derived here.
+        maneuvers: [...trip.out.maneuvers, ...trip.home.maneuvers],
+        has_highway: trip.out.has_highway || trip.home.has_highway,
+        has_toll: trip.out.has_toll || trip.home.has_toll,
+        has_ferry: trip.out.has_ferry || trip.home.has_ferry,
+        has_unpaved: trip.out.has_unpaved || trip.home.has_unpaved,
+      };
+      result.curviness = trip.core.curviness;
+      // A loop core's entry ≈ exit, which collapses the geometric leg split
+      // (both waypoints match the same vertex — measured: drivePct null on
+      // every served trip). A core mid-point forces the walk past the far side.
+      const coreCoords = trip.core.geom_simplified.coordinates as Array<[number, number]>;
+      const coreMid = coreCoords[Math.floor(coreCoords.length / 2)]!;
+      result.waypoints = [trip.core.entry, { lat: coreMid[1], lng: coreMid[0] }, trip.core.exit];
+      result.legs = {
+        therePct: Math.round((trip.out.distance_m / Math.max(1, trip.distanceM)) * 100),
+        drivePct: Math.round((trip.core.distance_m / Math.max(1, trip.distanceM)) * 100),
+        homePct: Math.round((trip.home.distance_m / Math.max(1, trip.distanceM)) * 100),
+        thereM: Math.round(trip.out.distance_m),
+        driveM: Math.round(trip.core.distance_m),
+        homeM: Math.round(trip.home.distance_m),
+        driveBackroadPct: Math.round(trip.core.backroad_share * 100),
+        driveMainPct: Math.round(trip.core.main_share * 100),
+      };
+      result.disclosures.push(
+        `A measured drive fit your time: ${trip.core.name} — the drive ${mins(
+          trip.core.duration_s,
+        )} min · getting there ${mins(trip.out.duration_s)} · home ${mins(trip.home.duration_s)}.`,
+      );
+      if (trip.sameWayHome) {
+        result.disclosures.push(
+          "You'll come home the way you went out — there isn't a good second road from here.",
+        );
+      }
+      step(emit, 'drive_first_trip', 'completed', `served ${trip.core.id}`);
+      return result;
+    }
+    result.disclosures.push(
+      'No measured drive fits that time near this start yet — planned live instead.',
+    );
+  }
+
   // R18-4 character bundles: the levers a character ACTUALLY moves (costing
   // rides profileForRequest below; here: weights, arterial bar, duration
   // tolerance, scenic's optional viewpoint garnish)
@@ -721,6 +802,7 @@ export async function runPlanner(
         residentialShare: r.residentialShare,
         residentialRunM: r.residentialRunM,
         outAndBackLongestM: outAndBack(r.route.geometry).longestM,
+        revisitPlaces: revisitCount(r.route.geometry, origin),
         traceNull: r.trace === null,
         // R21-1: least-degenerate sliver wins the never-empty fallback too
         loopiness: SHAPE_QUALITY_ON && isLoop ? loopiness(r.route.geometry) : null,
@@ -915,6 +997,77 @@ export async function runPlanner(
           pinnedSpans,
           pinnedPoints,
         });
+    // R29 DRIVE-FIRST (BD-135, owner-approved architecture change): the ask
+    // means THE DRIVE. Measured ribbons whose OWN duration fits the ask enter
+    // the pool; their connectors are the commute, judged as such below. Ribbons
+    // give different-way-home by construction, so the full trip passes the
+    // doubling/revisit gates naturally. Fail-open: index empty -> pool untouched.
+    if (isLoop && DRIVE_FIRST_ON && !outOfBudget()) {
+      const dfCores = await readDriveFirstCores(deps.db, origin, durationS);
+      const picks = pickDriveFirst(dfCores, durationS, origin);
+      if (picks.length > 0) {
+        candidates = [...picks.map((p) => p.candidate), ...candidates];
+      } else {
+        result.disclosures.push(
+          'No measured drive fits that time near this start yet — planned live instead.',
+        );
+      }
+    }
+    // R29 Unit B — RIBBON CHAINS (BD-135/136): 3-6 measured ribbons chained
+    // into one drive that FILLS the ask, with routed links between them. One
+    // travel matrix; measured durations price the ribbons (the matrix's
+    // fastest-path shortcut under-prices them ~3x). Fail-open on matrix or
+    // index errors — the legacy pool must never be hostage to either.
+    if (isLoop && RIBBON_CHAINS_ON && !outOfBudget()) {
+      try {
+        const chainRibbonsRows = await readDriveFirstCores(deps.db, origin, durationS);
+        const rpool = ribbonPool(origin, chainRibbonsRows);
+        if (rpool.length >= 2 && durationS !== null) {
+          emit({ type: 'tool_call', tool: 'travel_matrix' });
+          const rmatrix = await travelMatrix(deps.valhallaUrl, {
+            locations: ribbonMatrixLocations(origin, rpool),
+            costingOptions: profile.options,
+          });
+          const rchains = chainRibbons(origin, chainRibbonsRows, rmatrix, durationS);
+          if (rchains.length > 0) candidates = [...rchains, ...candidates];
+        }
+      } catch {
+        /* ribbon chains skipped — legacy pool stands */
+      }
+    }
+    // R28-2 CORE SEEDS — measured-clean drives from the offline index, entered
+    // as ORDINARY candidates in the same pool. No privileges: every assembly
+    // reject, score, diversify pass and the never-empty fallback apply to them
+    // unchanged, so a core wins only if it actually measures better. Five
+    // ranking levers and three costing levers have been refused against the
+    // 43 %-vs-86 % backroad gap (docs/R28_plan.md); this is the generation-side
+    // answer. Fail-open: the live pool must never be hostage to the index.
+    let coreNote = '';
+    if (isLoop && CORE_SEED_ON && !outOfBudget()) {
+      try {
+        // Query the REACH box, not Discover's 45 km browse box. The definer
+        // returns the top N by QUALITY within the bbox, so a wide box hands back
+        // 20 excellent cores that are all too far to reach — measured: every one
+        // of them filtered out, 0 seeded. Sizing the bbox to the reach budget
+        // makes the quality ranking operate over cores that can actually be used.
+        const reachM = Math.max(8_000, ((durationS ?? 5_400) * CORE_REACH_FRAC * 55_000) / 3_600);
+        const half = reachM / 111_320;
+        const cores = await readDriveCores(
+          deps.db,
+          [origin.lng - half, origin.lat - half, origin.lng + half, origin.lat + half],
+          DRIVE_CORES_VERSION,
+          CORES_BROWSE_LIMIT,
+        );
+        const seeded = coreSeedCandidates(cores, durationS, CORE_SEED_MAX, origin);
+        if (seeded.length > 0) {
+          candidates = [...candidates, ...seeded];
+          coreNote = ` +${seeded.length} core seeds`;
+        }
+      } catch {
+        coreNote = ' (core index unavailable)';
+      }
+    }
+    void coreNote;
     // R18-3 chained multi-span candidates: string 3-7 curvy spans per loop,
     // budgeted by ONE travel matrix. v1 = stop-free loop briefs; chains ADD to
     // the legacy pool (diversify/scoring pick winners). Fail-open on matrix
@@ -946,7 +1099,30 @@ export async function runPlanner(
     // matrix — the binding constraint is the detour cap, re-checked exactly at
     // assembly; selection budgets by straight-line path with slack under it.
     if (!isLoop && CORRIDOR_CHAINS_ON && effectiveStops.length === 0 && !outOfBudget()) {
-      const chains = buildCorridorChains(origin, destination!, retrieved.segments);
+      // R29 Unit C — RIBBON_ATOB: measured ribbons join the corridor span pool.
+      // Collinear-along-the-corridor is the GOOD case here (it is what killed
+      // loop tours). Fail-open: an index error leaves the corpus pool intact.
+      let corridorSegments = retrieved.segments;
+      if (RIBBON_ATOB_ON) {
+        try {
+          const west = Math.min(origin.lng, destination!.lng) - 0.15;
+          const east = Math.max(origin.lng, destination!.lng) + 0.15;
+          const south = Math.min(origin.lat, destination!.lat) - 0.15;
+          const north = Math.max(origin.lat, destination!.lat) + 0.15;
+          const ribbonRows = await readDriveCores(
+            deps.db,
+            [west, south, east, north],
+            DRIVE_CORES_VERSION,
+            40,
+            'ribbon',
+          );
+          const extra = ribbonsAsSegments(ribbonRows);
+          if (extra.length > 0) corridorSegments = [...retrieved.segments, ...extra];
+        } catch {
+          /* corpus pool stands */
+        }
+      }
+      const chains = buildCorridorChains(origin, destination!, corridorSegments);
       if (chains.length > 0) {
         candidates = [...chains, ...candidates];
         chainNote = `; ${chains.length} corridor-chained`;
@@ -1181,12 +1357,23 @@ export async function runPlanner(
       // outrank a measured-clean pool-mate (audit issue #13)
       if (TRACE_NULL_STRICT_ON && r.trace === null) dirtyClauses.push('trace_null');
       const dirty = dirtyClauses.length > 0;
+      // R29: for a drive-first candidate the promise is THE DRIVE, so the
+      // duration terms judge the drive leg against the ask — judging the trip
+      // is exactly the mis-ruler that killed core seeding (BD-130). The split
+      // is geometric (through-waypoints emit no legs).
+      let judgedDurationS = r.route.duration_s;
+      if (
+        (DRIVE_FIRST_ON && r.candidate.id.startsWith('drive-')) ||
+        (RIBBON_CHAINS_ON && r.candidate.id.startsWith('rchain-'))
+      ) {
+        const sp = splitLoopLegs(r.route.geometry, r.candidate.waypoints);
+        if (sp) judgedDurationS = (r.route.duration_s * sp.drivePct) / 100;
+      }
       // round 14: an on-target route outranks a shorter one of the same
       // quality tier (2nd lexicographic tier, below quality)
       const durOff =
         constraints.duration_target_s !== null &&
-        Math.abs(r.route.duration_s - constraints.duration_target_s) /
-          constraints.duration_target_s >
+        Math.abs(judgedDurationS - constraints.duration_target_s) / constraints.duration_target_s >
           DURATION_TOLERANCE_DEFAULT;
       // R19: third lexicographic tier — a clean on-target COUNTRY-context
       // route beats a clean on-target TOWN-context one (2 < 5 < 10 keeps
@@ -1218,6 +1405,7 @@ export async function runPlanner(
         residentialShare: r.residentialShare,
         residentialRunM: r.residentialRunM,
         outAndBackLongestM: outAndBack(r.route.geometry).longestM,
+        revisitPlaces: revisitCount(r.route.geometry, origin),
         traceNull: r.trace === null,
         loopiness: shapeLoopiness, // R21-1 (null → 0)
         corridorDoubling: shapeCorridor,
@@ -1230,7 +1418,7 @@ export async function runPlanner(
         units,
         durOff,
         contextHeavy, // R19: urban context tier
-        durationS: r.route.duration_s,
+        durationS: judgedDurationS,
         durationTargetS: constraints.duration_target_s,
         turnsPer10min: r.turnsPer10min ?? null, // R25-U9b (grade 0 while flag off)
         backroadLongestM: r.backroadLongestM ?? null,

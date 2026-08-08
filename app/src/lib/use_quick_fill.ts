@@ -27,9 +27,20 @@ export interface QuickFillView {
    *  Credit"). Display-only: the text is their source of truth, so removing
    *  one means editing the text (they're sent via the brief, not overrides). */
   pins: readonly LocationConstraint[];
+  /**
+   * R28 — the BRIEF named a destination the parser resolved.
+   *
+   * The client used to demand the user pick, on a map, the exact place the
+   * parser had already found: "backroads drive to Erin" flipped Shape to A→B
+   * and then disabled Generate. The server routes it fine — `/plan` only
+   * overrides `constraints.destination` when the BODY supplies one — so this
+   * flag exists purely to stop the client blocking a request the backend can
+   * already answer.
+   */
+  hasDestination: boolean;
 }
 
-const IDLE: QuickFillView = { fromText: [], note: null, pins: [] };
+const IDLE: QuickFillView = { fromText: [], note: null, pins: [], hasDestination: false };
 
 export function useQuickFill(args: {
   brief: string;
@@ -70,10 +81,15 @@ export function useQuickFill(args: {
           const body = raw as { constraints?: unknown };
           let auto: AutoFill;
           let pins: readonly LocationConstraint[];
+          let hasDestination = false;
           try {
             const constraints = validateParsedConstraints(body.constraints);
             auto = computeAutoFill(constraints);
             pins = constraints.location_constraints;
+            // A resolved LatLng means the server can route it; a bare string
+            // (e.g. "the countryside") cannot be routed and must still prompt.
+            hasDestination =
+              constraints.destination !== null && typeof constraints.destination !== 'string';
           } catch {
             return; // malformed → chips stay put (fail-open)
           }
@@ -83,6 +99,7 @@ export function useQuickFill(args: {
             fromText: auto.fromText.filter((f) => !touchedRef.current.has(f)),
             note: auto.note,
             pins,
+            hasDestination,
           });
         })
         .catch(() => {

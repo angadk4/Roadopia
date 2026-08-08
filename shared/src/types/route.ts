@@ -174,5 +174,31 @@ export const RouteSchema = z.object({
   country_score: z.number().min(0).max(1).nullable().optional(),
   arterial_share: z.number().min(0).max(1).nullable().optional(),
   agent_explanation: z.string().nullable().optional(),
+  /**
+   * R28 — the three-leg split of a loop: getting there · THE DRIVE · getting
+   * home, with the drive's own measured road class.
+   *
+   * WHY THIS IS ON THE ROUTE AND NOT A UI DETAIL: audit-v15 measured that a
+   * "90 minute loop" from a suburban door is ~28 % getting there, ~49 % drive
+   * and ~23 % coming home, and that the ends are 83 % main+urban against 64 %
+   * in the middle. Every number the app has ever shown averaged the commute
+   * into the drive, which is why the road-class figure looked bad and no
+   * routing lever could move it. Optional/nullable: absent for A→B, and for a
+   * loop with no meaningful drive span (see splitLoopLegs' minDriveFrac).
+   */
+  legs: z
+    .object({
+      there_pct: z.number().min(0).max(100),
+      drive_pct: z.number().min(0).max(100),
+      home_pct: z.number().min(0).max(100),
+      there_m: z.number().nonnegative(),
+      drive_m: z.number().nonnegative(),
+      home_m: z.number().nonnegative(),
+      drive_backroad_pct: z.number().min(0).max(100).nullable(),
+      drive_main_pct: z.number().min(0).max(100).nullable(),
+    })
+    .nullable()
+    .optional()
+    .describe('R28: getting there / THE DRIVE / getting home — never averaged together'),
 });
 export type Route = z.infer<typeof RouteSchema>;

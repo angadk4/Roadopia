@@ -30,7 +30,28 @@ export const CORE_HOOD_SHARE_MAX = 0.05;
 export const CORE_TURNS_PER_10MIN_MAX = 5.0;
 export const CORE_LOOPINESS_MIN = 0.25; // loops only
 export const CORE_RIBBON_CORRIDOR_DOUBLING_MAX = 0.1;
-export const CORE_RIBBON_ENDPOINT_MIN_M = 8000;
+/**
+ * R28 (BD-128): minimum length of the single merged road a ribbon is built
+ * from. At 8 km this yielded 24 ribbons across 1 177 cells — the binding
+ * constraint on the index, NOT RIBBONS_PER_CELL. Ribbons are the shape that
+ * works for door-to-door loops (12/24 accepted at 95 % backroad vs loop cores
+ * 1/15 at 49 %), so the supply matters.
+ */
+export const CORE_RIBBON_ENDPOINT_MIN_M = Number(process.env['CORE_RIBBON_ENDPOINT_MIN_M'] ?? 8000);
+/**
+ * R28 (BD-130) — how much ROAD a ribbon must be built from, as distinct from
+ * how far apart its two ENDS are.
+ *
+ * These were ONE constant, doing two unrelated jobs: `build_drive_cores`
+ * filtered merged roads by `lengthM >= CORE_RIBBON_ENDPOINT_MIN_M` while
+ * `core_bars` rejected on `endpointSeparationM < CORE_RIBBON_ENDPOINT_MIN_M`.
+ * So lowering it to admit shorter roads ALSO admitted winding roads whose ends
+ * are barely apart — which then failed the separation bar: 1 242
+ * `endpoint_separation` rejections, the single largest ribbon killer in the
+ * r30 sweep. Length and separation are different properties and now have
+ * different knobs.
+ */
+export const CORE_RIBBON_MIN_LENGTH_M = Number(process.env['CORE_RIBBON_MIN_M'] ?? 8000);
 export const CORE_RIBBON_SELF_OVERLAP_MAX = 0.05;
 
 export interface CoreMetrics {

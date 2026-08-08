@@ -45,11 +45,14 @@ describe('screen smoke', () => {
     // "Road character" (it selects which roads, never pace) + R25-U16b's third
     // chip makes style:null reachable (the duration "Any" precedent).
     expect(text).toContain('optional');
-    expect(text).toContain('How long'); // R24-U12 time control (loops)
+    expect(text).toContain('Drive time'); // R24-U12 time control (loops)
     expect(text).toContain('Road character');
     expect(text).toContain('Direct');
-    expect(text).toContain('Fun & Explorative');
-    expect(text).toContain('No preference');
+    // R29 Unit D: the chip is named for its mechanism, and the "No preference"
+    // third chip is gone (its null value doubled as quick-fill's marker — the
+    // twisty-un-fills-the-chip bug).
+    expect(text).toContain('Backroads');
+    expect(text).not.toContain('No preference');
     expect(text).toContain('not how fast you drive it'); // Hard rule D sub-label
     expect(text).toContain('Scenery');
     expect(text).toContain('Prefer views');

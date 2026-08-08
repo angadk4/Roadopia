@@ -398,6 +398,14 @@ interface RouteRow {
   classes: string;
   /** R27 three-leg split: the DRIVE measured on its own, without the escape. */
   drivePct: number | null;
+  /**
+   * R29 — doubling measured on the DRIVE SPAN alone. Under drive-first the
+   * commute legs may legitimately share a road (disclosed sameWayHome — the
+   * owner's own rule is "same roads twice unless absolutely NECESSARY", and
+   * reaching a distant loop is the necessary case); doubling INSIDE the drive
+   * remains a real defect. Blob-OAB conflates the two, so both are reported.
+   */
+  driveOabLongestM: number | null;
   driveBackroadPct: number | null;
   driveMainPct: number | null;
   therePct: number | null;
@@ -515,9 +523,12 @@ async function main(): Promise<void> {
         // R27 — measure the DRIVE, not the escape to it.
         const split = splitLoopLegs(geo, res.waypoints ?? []);
         let driveMix = null;
+        let driveOabLongestM: number | null = null;
         if (split) {
+          const dgeo = driveGeometry(geo, split);
+          driveOabLongestM = outAndBack(dgeo).longestM;
           try {
-            const dt = await traceRoadClasses(VALHALLA, driveGeometry(geo, split));
+            const dt = await traceRoadClasses(VALHALLA, dgeo);
             driveMix = classMixOf(dt.edges);
           } catch {
             driveMix = null;
@@ -559,6 +570,7 @@ async function main(): Promise<void> {
           oabLongestM: oab.longestM,
           oabRuns: oab.runs,
           drivePct: split ? split.drivePct : null,
+          driveOabLongestM,
           therePct: split ? split.therePct : null,
           driveBackroadPct: driveMix ? Math.round(driveMix.backroadShare * 100) : null,
           driveMainPct: driveMix ? Math.round(driveMix.mainShare * 100) : null,

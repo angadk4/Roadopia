@@ -30,7 +30,13 @@ import { AMBER, font, radius, spacing, useTheme } from '../theme';
  *  narrows `properties` back to a plain record. */
 export type LineFeatureCollection = FeatureCollection;
 
+/** Connector legs (get-there / get-home) — readable on both styles, and clearly
+ *  subordinate to the amber drive. */
+const CONNECTOR_GREY = '#8a93a6';
+
 export interface DriveLinesMapProps {
+  /** R29: color lines by their `leg` property (core amber, connectors grey). */
+  perLeg?: boolean;
   /** The amber lines to draw (null while loading). */
   featureCollection: LineFeatureCollection | null;
   /** Camera fit; null leaves the default camera (never crashes on empty data). */
@@ -55,6 +61,7 @@ export default function DriveLinesMap(props: DriveLinesMapProps): ReactElement {
   const { featureCollection, bounds, onSelectLine, children, banner, sheet } = props;
   const { name: themeName, colors } = useTheme();
   const sourceId = props.sourceId ?? 'drive-lines';
+  const perLeg = props.perLeg ?? false;
 
   const onPress = useCallback(
     (e: { features: Array<{ properties?: unknown }> }) => {
@@ -107,7 +114,17 @@ export default function DriveLinesMap(props: DriveLinesMapProps): ReactElement {
             />
             <LineLayer
               id={`${sourceId}-line`}
-              style={{ lineColor: AMBER, lineWidth: 3.5, lineCap: 'round', lineJoin: 'round' }}
+              style={{
+                // The drive is the product; the commute is context. Amber on the
+                // core, grey on the connectors, so the map says the same thing the
+                // card says ("the drive 42 min · getting there 18 · home 21").
+                lineColor: perLeg
+                  ? ['match', ['get', 'leg'], 'core', AMBER, CONNECTOR_GREY]
+                  : AMBER,
+                lineWidth: 3.5,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
             />
           </ShapeSource>
         )}

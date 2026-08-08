@@ -127,9 +127,15 @@ describe('discoverCores (R25-U14)', () => {
     expect(CORE_CONNECTOR_SHARE_MAX).toBeLessThan(1);
   });
 
-  it('same-way-home: retried ONCE via an offset, disclosed when no second road exists', async () => {
+  it('same-way-home: retried via a BOUNDED offset ladder, disclosed when no second road exists', async () => {
+    // R29: was "exactly once". The single-side retry measured 5/6 cards stuck
+    // sameWayHome at Belfountain (a valley origin funnels every nearby road
+    // into one approach) while a clean second road sat on the other side or
+    // further out. The contract is now a bounded ladder — up to 4 deterministic
+    // offset attempts (±4 km, ±7 km), never a search loop — and this pins the
+    // BOUND rather than the old count.
     // routeFn returns the SAME line for out and direct home (total overlap);
-    // the retry (3 waypoints) also fails to differ → sameWayHome stays true
+    // every retry (3 waypoints) also fails to differ → sameWayHome stays true
     const outLine = straightRoute([
       [ORIGIN.lng, ORIGIN.lat],
       [near.entry.lng, near.entry.lat],
@@ -148,7 +154,8 @@ describe('discoverCores (R25-U14)', () => {
       }),
     );
     expect(res.drives[0]!.sameWayHome).toBe(true);
-    expect(retries).toBe(1); // exactly one retry, never a search loop
+    expect(retries).toBeGreaterThanOrEqual(1);
+    expect(retries).toBeLessThanOrEqual(4); // the ladder is BOUNDED, never a search loop
     expect(res.disclosures.join(' ')).toMatch(/way you went out/);
   });
 

@@ -1,7 +1,7 @@
 import { validateParsedConstraints } from '@shared/types';
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_DRAFT } from '../plan_draft';
+import { DEFAULT_DRAFT, buildPlanRequest, type PlanDraft } from '../plan_draft';
 import { applyAutoFill, computeAutoFill } from '../quick_fill';
 
 /**
@@ -142,5 +142,40 @@ describe('applyAutoFill (R25-U16d)', () => {
     const auto = computeAutoFill(constraints({}));
     const updates = applyAutoFill(filled, auto, NO_TOUCH);
     expect(updates.style).toBe(DEFAULT_DRAFT.style);
+  });
+});
+
+describe('R28 — a brief-named destination must not block Generate', () => {
+  const draft = (over: Partial<PlanDraft> = {}): PlanDraft => ({
+    ...DEFAULT_DRAFT,
+    brief: 'backroads drive to Erin',
+    origin: { source: 'pin', point: { lat: 43.75, lng: -79.83 } },
+    shape: 'a_to_b',
+    destination: null,
+    ...over,
+  });
+
+  it('blocks when NOTHING named a destination', () => {
+    const r = buildPlanRequest(draft(), undefined, false);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.problems.join(' ')).toContain('destination');
+  });
+
+  it('ALLOWS it when the brief resolved one — the server routes it', () => {
+    // The owner reported this as the text box "not filling the options": the
+    // parser found Erin, the app flipped Shape to A→B, then demanded he pick
+    // Erin on a map. /plan only overrides destination when the BODY supplies
+    // one, so the brief-resolved place stands.
+    const r = buildPlanRequest(draft(), undefined, true);
+    expect(r.ok).toBe(true);
+  });
+
+  it('still allows a user-picked destination with no brief', () => {
+    const r = buildPlanRequest(
+      draft({ brief: '', destination: { lat: 43.77, lng: -80.07 } }),
+      undefined,
+      false,
+    );
+    expect(r.ok).toBe(true);
   });
 });

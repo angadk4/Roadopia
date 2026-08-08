@@ -36,7 +36,7 @@ import { Client } from 'pg';
 import { generateLoopCandidates, traversalSpanOf } from '../backend/src/planner/candidates';
 import { mergeRoadPieces } from '../backend/src/planner/chain';
 import {
-  CORE_RIBBON_ENDPOINT_MIN_M,
+  CORE_RIBBON_MIN_LENGTH_M,
   judgeCore,
   type CoreMetrics,
 } from '../backend/src/planner/core_bars';
@@ -71,7 +71,15 @@ export const CELL_SIZE_M = 8000;
 /** Retrieval window around a cell centre — cores may run past the cell edge. */
 const CELL_SCOPE_HALF_M = Number(process.env['CELL_SCOPE_HALF_M'] ?? 12_000);
 /** Per-cell keeps (ACP: best 2-4). */
-const CELL_KEEP_MAX = 4;
+const CELL_KEEP_MAX = Number(process.env['CELL_KEEP_MAX'] ?? 4);
+/**
+ * R28 (BD-130) — reserve slots for RIBBONS so loop cores cannot crowd them out.
+ * Ribbons are the only shape that seeds a door-to-door loop without a doubling
+ * stem (BD-128: 12/24 accepted at 95 % backroad vs loop cores 1/15 at 49 %), but
+ * they lose the per-cell quality ranking to loops, and 8 of 10 real origins had
+ * ZERO reachable ribbon in the r30 index.
+ */
+const CELL_RIBBON_RESERVED = Number(process.env['CELL_RIBBON_RESERVED'] ?? 0);
 /**
  * Candidate loop pseudo-origins per cell (top merged-road endpoints).
  *
@@ -86,7 +94,13 @@ const LOOP_ORIGINS_PER_CELL = Number(process.env['LOOP_ORIGINS_PER_CELL'] ?? 2);
 /** Loop candidates assembled per pseudo-origin (budget guard). */
 const LOOP_CANDIDATES_PER_ORIGIN = Number(process.env['LOOP_CANDIDATES_PER_ORIGIN'] ?? 6);
 /** Ribbon candidates judged per cell. */
-const RIBBONS_PER_CELL = 4;
+/**
+ * R28 (BD-128): ribbons are the shape that WORKS for seeding a loop from the
+ * user's door — two distinct ends mean no lollipop stick to double back along.
+ * Measured: ribbons 12/24 accepted at 95 % backroad, loop cores 1/15 at 49 %.
+ * The index was 1 030 loop cores to 24 ribbons because this was 4 against 48.
+ */
+const RIBBONS_PER_CELL = Number(process.env['RIBBONS_PER_CELL'] ?? 4);
 /** Dedup: a kept core may share at most this fraction of another's edges. */
 const CORE_DEDUP_OVERLAP_MAX = 0.5;
 /** Loop core duration target (s) — a 60-90 min DRIVE core. */
@@ -390,7 +404,7 @@ async function main(): Promise<void> {
 
     // --- ribbons: long whole roads, routed along their own geometry ---
     for (const road of merged
-      .filter((m) => m.lengthM >= CORE_RIBBON_ENDPOINT_MIN_M)
+      .filter((m) => m.lengthM >= CORE_RIBBON_MIN_LENGTH_M)
       .slice(0, RIBBONS_PER_CELL)) {
       const [a, b] = traversalSpanOf(road);
       try {
@@ -505,7 +519,21 @@ async function main(): Promise<void> {
     }
 
     cellKept.sort((x, y) => y.quality - x.quality || x.row.id.localeCompare(y.row.id));
-    const kept = cellKept.slice(0, CELL_KEEP_MAX).map((k) => k.row);
+    // Fill reserved ribbon slots first, then the rest by quality.
+    const ribbonsFirst =
+      CELL_RIBBON_RESERVED > 0
+        ? [
+            ...cellKept.filter((k) => k.row.kind === 'ribbon').slice(0, CELL_RIBBON_RESERVED),
+            ...cellKept.filter(
+              (k) =>
+                !cellKept
+                  .filter((x) => x.row.kind === 'ribbon')
+                  .slice(0, CELL_RIBBON_RESERVED)
+                  .includes(k),
+            ),
+          ]
+        : cellKept;
+    const kept = ribbonsFirst.slice(0, CELL_KEEP_MAX).map((k) => k.row);
     rows.push(...kept);
     if (kept.length >= 3) filledCells++;
     const histDelta: Record<string, number> = {};

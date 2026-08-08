@@ -205,6 +205,17 @@ function factsOf(
     // R25-U16a: what the controls overrode — the narration can say "the chip
     // won" instead of pretending the text was honoured. Omitted when empty.
     ...(clientOverrides.length > 0 ? { clientOverrides } : {}),
+    // R29 Unit D — the ask itself, so the narration justifies against what the
+    // user actually requested instead of reverse-engineering it from labels.
+    asked: {
+      character: constraints.preset,
+      driveTimeMin:
+        constraints.duration_target_s !== null ? constraints.duration_target_s / 60 : null,
+      avoids: Object.entries(constraints.avoid)
+        .filter(([, v]) => v === true)
+        .map(([k]) => k),
+      places: constraints.location_constraints.map((l) => l.text),
+    },
   };
 }
 
@@ -241,6 +252,19 @@ function routePayload(
     stops: result.stops, // grounded spots + MEASURED arrivals (R16-3)
     country_score: result.countryScore, // measured road-class honesty (R18-1)
     arterial_share: result.arterialShare,
+    // R28 — the drive, separate from the commute to it (never averaged).
+    legs: result.legs
+      ? {
+          there_pct: result.legs.therePct,
+          drive_pct: result.legs.drivePct,
+          home_pct: result.legs.homePct,
+          there_m: result.legs.thereM,
+          drive_m: result.legs.driveM,
+          home_m: result.legs.homeM,
+          drive_backroad_pct: result.legs.driveBackroadPct,
+          drive_main_pct: result.legs.driveMainPct,
+        }
+      : null,
     urban_share: result.urbanShare, // R19: measured urban-context honesty
   };
 }

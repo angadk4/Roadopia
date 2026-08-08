@@ -165,11 +165,31 @@ export interface OffenceInput {
    * Optional so existing callers stay byte-identical when absent.
    */
   outAndBackLongestM?: number | null;
+  /**
+   * R28 — distinct places the route RETURNS to (revisit.ts). The owner's "in
+   * and out of Inglewood many times": a shape no other detector models, because
+   * it shares no edge, closes no circuit and emits no u-turn. Measured on his
+   * own places: 13 of 24 routes revisit 2+ locations, worst 9.
+   * Optional → no contribution (byte-identical for callers that don't measure).
+   */
+  revisitPlaces?: number | null;
 }
 
 /** R27: below this a reversal is junction furniture, not a drive defect
  *  (mirrors OAB_MIN_RUN_M in outandback.ts; no import cycle). */
 export const OUT_AND_BACK_UNIT_FLOOR_M = 250;
+/** R28 — offence units charged per revisited place (a u-turn is 1.0). */
+/**
+ * R28 — REFUSED as a ranking lever and shipped at 0. Wiring revisits into the
+ * fallback ranking moved the defect the WRONG way (routes with 2+ revisited
+ * places 13/24 → 14/24, total places 62 → 72, worst unchanged at 9): the fifth
+ * ranking refusal in this program, and confirmation of docs/R28_plan.md's
+ * thesis — every candidate in the pool has revisits, so penalising revisits
+ * chooses between equally-bad options. The DETECTOR stays (revisit.ts), because
+ * it is the first instrument that can see this defect at all, and the term is
+ * one constant away from being live once generation can supply a clean choice.
+ */
+export const REVISIT_UNIT = Number(process.env['REVISIT_UNIT'] ?? 0);
 export const RETRACE_UNIT_SOFT_M = 1_200; // mirrors RETRACE_RUN_SOFT_M (no import cycle)
 // R25-U5ab: mirror loop.ts's ruler-relative recalibration (paired Milton
 // probe; see loop.ts RESIDENTIAL_SOFT_SHARE) — the graded units must start
@@ -230,6 +250,11 @@ export function fallbackOffenceUnits(d: OffenceInput): number {
   if (d.outAndBackLongestM != null) {
     units += Math.max(0, d.outAndBackLongestM - OUT_AND_BACK_UNIT_FLOOR_M) / 1000;
   }
+  // R28: coming back to a place you already drove through is as bad as a
+  // u-turn to the person driving it — it is the same "wait, I've been here"
+  // experience. One unit each, so a route that wanders back to the same village
+  // three times cannot win the never-empty fallback over one that doesn't.
+  if (d.revisitPlaces != null) units += d.revisitPlaces * REVISIT_UNIT;
   if (d.traceNull) units += TRACE_NULL_STRICT_ON ? TRACE_NULL_UNITS_STRICT : 0.5;
   return Math.round(units * 100) / 100;
 }
