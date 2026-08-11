@@ -36,15 +36,34 @@ import { writeFileSync } from 'node:fs';
 
 import { Client } from 'pg';
 
+import { selfIntersections } from '../backend/src/planner/crossings';
 import { discoverDrives } from '../backend/src/planner/discover';
 import { driveGeometry, splitLoopLegs } from '../backend/src/planner/legs';
-import { corridorDoublingRatio, loopiness, selfOverlapRatio } from '../backend/src/planner/overlap';
+import {
+  corridorDoublingRatio,
+  loopiness,
+  microloopPositions,
+  selfOverlapRatio,
+  spurPositions,
+  SPUR_WINDOW_WIDE_STEPS,
+} from '../backend/src/planner/overlap';
 import { parseRules } from '../backend/src/planner/parse_rules';
 import { classMixOf } from '../backend/src/planner/roadclass';
 import { runPlanner } from '../backend/src/planner/run';
+import {
+  driveClosedLoopiness,
+  TRIP_LOOPINESS_MIN,
+  TRIP_OAB_ORIGIN_GRACE_M,
+  TRIP_SPUR_GRACE_M,
+} from '../backend/src/planner/trip_gates';
 import { isUrbanContext, urbanIndexFor, type UrbanIndex } from '../backend/src/planner/urban';
 import { traceRoadClasses } from '../backend/src/valhalla/trace';
 import type { LatLng, LineString } from '../shared/src/types';
+
+import { buildManifest, manifestLine } from './manifest';
+import { ATOB_GOLD_V1 } from './suites/atob_gold_v1';
+import { ATOB_HOLDOUT_V1, LOOPS_HOLDOUT_V1 } from './suites/holdout_v1';
+import { GOLD_ASK_LADDER_MIN, LOOPS_GOLD_V1 } from './suites/loops_gold_v1';
 
 const DB = process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 const VALHALLA = process.env['VALHALLA_URL'] ?? 'http://127.0.0.1:8002';
@@ -329,6 +348,27 @@ for (let i = 0; i < 10; i++) {
   });
 }
 
+// R32-U1 — FROZEN SUITE SELECTION. AUDIT_SUITE=gold-v1 replaces the generated
+// origins with the stratified gold fixtures (every network class × the ask
+// ladder); AUDIT_SUITE=holdout-v1 runs the NEVER-TUNE acceptance set. Default
+// (unset) keeps the legacy seeded generation, byte-identical.
+const SUITE = process.env['AUDIT_SUITE'] ?? '';
+if (SUITE === 'gold-v1' || SUITE === 'holdout-v1') {
+  const fixtures = SUITE === 'gold-v1' ? LOOPS_GOLD_V1 : LOOPS_HOLDOUT_V1;
+  loopOrigins.length = 0;
+  for (const f of fixtures) {
+    for (const min of f.asks ?? GOLD_ASK_LADDER_MIN) {
+      loopOrigins.push({
+        label: `${f.label} ${min}m`,
+        lat: f.at.lat,
+        lng: f.at.lng,
+        cluster: f.cls,
+        brief: `${min} minute backroads loop`,
+      });
+    }
+  }
+}
+
 const ATOB_PAIRS: Array<[string, LatLng, string, LatLng]> = [
   ['Hamilton', { lat: 43.2557, lng: -79.8711 }, 'Guelph', { lat: 43.5448, lng: -80.2482 }],
   ['Brampton', BRAMPTON, 'Belfountain', { lat: 43.7935, lng: -80.0088 }],
@@ -351,6 +391,16 @@ const ATOB_PAIRS: Array<[string, LatLng, string, LatLng]> = [
   ['Orillia', { lat: 44.6082, lng: -79.4197 }, 'Barrie', { lat: 44.3894, lng: -79.6903 }],
   ['Woodstock', { lat: 43.1315, lng: -80.757 }, 'London', { lat: 42.9849, lng: -81.2453 }],
 ];
+
+if (SUITE === 'gold-v1') {
+  ATOB_PAIRS.length = 0;
+  for (const f of ATOB_GOLD_V1)
+    ATOB_PAIRS.push([f.label.split('→')[0]!, f.a, f.label.split('→')[1] ?? f.id, f.b]);
+} else if (SUITE === 'holdout-v1') {
+  ATOB_PAIRS.length = 0;
+  for (const f of ATOB_HOLDOUT_V1)
+    ATOB_PAIRS.push([f.label.split('→')[0]!, f.a, f.label.split('→')[1] ?? f.id, f.b]);
+}
 const ATOB_BRIEFS = ['backroads drive', 'twisty drive', 'scenic drive', 'drive'];
 
 const discoverOrigins: Array<{ label: string; lat: number; lng: number }> = [];
@@ -388,6 +438,24 @@ interface RouteRow {
   turnsPer10min: number | null;
   /** SHIPPED detectors — what the planner believes about itself */
   uturnsShipped: number | null;
+  /**
+   * BD-146 — the owner's complaints as first-class columns. spursWide counts
+   * "into a random street, u-turn, back out" stubs (wide window, 500 m origin
+   * grace — the shipped 2.5 km grace hid his whole subdivision); microloops
+   * counts crescents/"random box" circuits. Neither had an audit row before
+   * v18, which is a large part of why v13–v17 kept saying PASS while he drove
+   * the defects.
+   */
+  spursWide: number | null;
+  microloops: number | null;
+  /** BD-161: transversal self-crossings beyond origin grace. */
+  crossings: number | null;
+  /** Loop shape of THE DRIVE (arc + chord) when the trip has a split. */
+  driveLoopiness: number | null;
+  /** R34-U8 serve tier from disclosures: exact | alternate | legacy | none. */
+  servedTier: 'exact' | 'alternate' | 'legacy' | 'none' | null;
+  /** Longest doubled run OUTSIDE the 1 km origin grace (the gate's ruler). */
+  oabLongestAwayM: number | null;
   /** INDEPENDENT detector — what the geometry actually shows */
   oabTotalM: number | null;
   oabLongestM: number | null;
@@ -432,16 +500,42 @@ function defectsOf(r: Partial<RouteRow>): string[] {
   if ((r.highwayPct ?? 0) > 1) d.push('highway');
   if ((r.mainPct ?? 0) > (r.backroadPct ?? 0)) d.push('main_majority');
   if ((r.hoodPct ?? 0) > 5) d.push('neighbourhood');
-  if ((r.oabLongestM ?? 0) >= OAB_MIN_RUN_M) d.push('out_and_back');
+  // Doubling outside the 1 km origin grace — one road into a subdivision is
+  // the owner's own "unless absolutely necessary" case (BD-147).
+  if ((r.oabLongestAwayM ?? r.oabLongestM ?? 0) >= OAB_MIN_RUN_M) d.push('out_and_back');
   if ((r.turnsPer10min ?? 0) > 5) d.push('turn_soup');
-  if (r.kind === 'loop' && (r.loopiness ?? 1) < 0.15) d.push('not_a_loop');
+  // BD-146/147: "loops should look like loops" is judged on THE DRIVE (arc
+  // closed by its chord) when the trip has a leg split — whole-trip loopiness
+  // punishes distance-to-supply quadratically and the get-there/get-home
+  // spokes are the owner's explicit ask. Rows without a split (legacy blobs)
+  // keep the whole-shape judgment. Both at the 0.25 core bar (v13–v17's 0.15
+  // let 0.14 lollipops read as loops — the owner saw them instantly).
+  const loopMetric = r.driveLoopiness ?? r.loopiness;
+  if (r.kind === 'loop' && (loopMetric ?? 1) < TRIP_LOOPINESS_MIN) d.push('not_a_loop');
+  if ((r.uturnsShipped ?? 0) > 0) d.push('uturn');
+  if ((r.spursWide ?? 0) > 0) d.push('street_stub');
+  if ((r.microloops ?? 0) > 0) d.push('crescent');
+  if ((r.crossings ?? 0) > 0) d.push('self_crossing');
+  // the commute must not outweigh the drive (distance-based split)
+  if (r.kind === 'loop' && r.drivePct !== null && r.drivePct !== undefined && r.drivePct < 50) {
+    d.push('commute_majority');
+  }
   if (r.targetMin !== null && r.targetMin !== undefined && r.durationMin) {
-    if (Math.abs(r.durationMin - r.targetMin) / r.targetMin > 0.25) d.push('wrong_length');
+    // R34-U8: an ALTERNATE serves a DIFFERENT duration by design, with words —
+    // its mismatch is the disclosed product. Everything else keeps the bar.
+    if (
+      r.servedTier !== 'alternate' &&
+      Math.abs(r.durationMin - r.targetMin) / r.targetMin > 0.25
+    ) {
+      d.push('wrong_length');
+    }
   }
   return d;
 }
 
 async function main(): Promise<void> {
+  const manifest = await buildManifest({ suite: SUITE !== '' ? SUITE : 'audit-v13-legacy' });
+  console.log(manifestLine(manifest));
   const db = new Client({ connectionString: DB });
   await db.connect();
   const rows: RouteRow[] = [];
@@ -499,6 +593,12 @@ async function main(): Promise<void> {
           corridorDoubling: null,
           turnsPer10min: null,
           uturnsShipped: null,
+          spursWide: null,
+          microloops: null,
+          crossings: null,
+          servedTier: 'none',
+          driveLoopiness: null,
+          oabLongestAwayM: null,
           oabTotalM: null,
           oabLongestM: null,
           oabRuns: [],
@@ -566,6 +666,33 @@ async function main(): Promise<void> {
           })(),
           turnsPer10min: mins > 0 ? +((res.route.maneuvers.length / mins) * 10).toFixed(1) : null,
           uturnsShipped: res.route.maneuvers.filter((m) => m.type.startsWith('uturn')).length,
+          spursWide: spurPositions(
+            geo,
+            { lat: o.lat, lng: o.lng },
+            TRIP_SPUR_GRACE_M,
+            SPUR_WINDOW_WIDE_STEPS,
+          ).length,
+          microloops: microloopPositions(geo, { lat: o.lat, lng: o.lng }, TRIP_SPUR_GRACE_M).length,
+          crossings: selfIntersections(geo, { lat: o.lat, lng: o.lng }).length,
+          servedTier: res.disclosures.some((d) => d.includes('one around') && d.includes('instead'))
+            ? 'alternate'
+            : res.disclosures.some((d) => d.includes('loop around'))
+              ? 'exact'
+              : 'legacy',
+          driveLoopiness: (() => {
+            if (!split) return null;
+            const l = driveClosedLoopiness(driveGeometry(geo, split));
+            return l === null ? null : +l.toFixed(2);
+          })(),
+          oabLongestAwayM: (() => {
+            const rad = Math.PI / 180;
+            const away = oab.runs.filter((run) => {
+              const dLat = (run.point[1] - o.lat) * 111_320;
+              const dLng = (run.point[0] - o.lng) * 111_320 * Math.cos(o.lat * rad);
+              return Math.hypot(dLat, dLng) > TRIP_OAB_ORIGIN_GRACE_M;
+            });
+            return away.reduce((m, run) => Math.max(m, run.lengthM), 0);
+          })(),
           oabTotalM: oab.totalM,
           oabLongestM: oab.longestM,
           oabRuns: oab.runs,
@@ -663,6 +790,12 @@ async function main(): Promise<void> {
           corridorDoubling: null,
           turnsPer10min: null,
           uturnsShipped: null,
+          spursWide: null,
+          microloops: null,
+          crossings: null,
+          servedTier: null,
+          driveLoopiness: null,
+          oabLongestAwayM: null,
           oabTotalM: null,
           oabLongestM: null,
           oabRuns: [],
@@ -701,6 +834,12 @@ async function main(): Promise<void> {
           corridorDoubling: null,
           turnsPer10min: mins > 0 ? +((res.route.maneuvers.length / mins) * 10).toFixed(1) : null,
           uturnsShipped: res.route.maneuvers.filter((m) => m.type.startsWith('uturn')).length,
+          spursWide: spurPositions(geo, a, TRIP_SPUR_GRACE_M, SPUR_WINDOW_WIDE_STEPS).length,
+          microloops: microloopPositions(geo, a, TRIP_SPUR_GRACE_M).length,
+          crossings: selfIntersections(geo, a).length,
+          servedTier: null,
+          driveLoopiness: null,
+          oabLongestAwayM: null,
           oabTotalM: oab.totalM,
           oabLongestM: oab.longestM,
           oabRuns: oab.runs,
@@ -834,7 +973,15 @@ async function main(): Promise<void> {
   const tally = new Map<string, number>();
   for (const r of rows) for (const d of r.defects) tally.set(d, (tally.get(d) ?? 0) + 1);
 
+  const loopsAll = rows.filter((r) => r.kind === 'loop');
+  const serveTriple = {
+    clean_exact_serve: loopsAll.filter((r) => r.servedTier === 'exact').length,
+    clean_alternate_serve: loopsAll.filter((r) => r.servedTier === 'alternate').length,
+    legacy_serve: loopsAll.filter((r) => r.servedTier === 'legacy').length,
+    true_no_clean: loopsAll.filter((r) => r.servedTier === 'none').length,
+  };
   const summary = {
+    serveTriple,
     generatedAt: new Date().toISOString(),
     runtimeMin: Math.round((performance.now() - t00) / 60000),
     loops: {
@@ -865,7 +1012,7 @@ async function main(): Promise<void> {
     defectTally: [...tally.entries()].sort((a, b) => b[1] - a[1]),
   };
 
-  writeFileSync(OUT, JSON.stringify({ summary, routes: rows, discover: discoverMenus }));
+  writeFileSync(OUT, JSON.stringify({ manifest, summary, routes: rows, discover: discoverMenus }));
   console.log('\n=== audit-v13 summary ===');
   console.log(JSON.stringify(summary, null, 2));
   console.log(`\nwrote ${OUT}`);

@@ -12,10 +12,14 @@ import { ExplanationSchema } from './tools';
  * results ONLY — never raw model reasoning (no chain-of-thought).
  */
 
-/** The deterministic pipeline's steps (§27.3 state machine). */
+/** The deterministic pipeline's steps (§27.3 state machine).
+ *  `drive_first_trip` (R30/BD-146): the measured-trip attempt that runs before
+ *  blob generation — emitted on serve AND on gate-rejection, so the trace
+ *  always says which cores were tried and which as-driven rules they broke. */
 export const PipelineStepSchema = z.enum([
   'parse',
   'validate_constraints',
+  'drive_first_trip',
   'scope',
   'retrieve',
   'generate_candidates',

@@ -35,11 +35,13 @@ import { decodePolyline } from './polyline';
  * a typo here would fail without any signal.
  */
 export interface AutoCostingOptions {
-  /** ⚠️ R25-U2: VERIFIED NO-OP on the pinned 3.7.0 (probed 2026-07-26 —
-   *  byte-identical route/time/shape to a deliberately bogus control key).
-   *  Kept as the caller-facing INTENT flag; realizeCostingOptions() translates
-   *  it into the lever that works (use_highways: 0, and dropping `shortest`,
-   *  which bypasses every soft factor). Never trust it alone again. */
+  /** R32-U4 (BD-154) OVERTURNS R25-U2: rq32 probed the RUNNING instance with
+   *  highway-vs-arterial control pairs and `exclude_highways` WORKS (rerouted
+   *  highway-free both times; `allow_hard_exclusions: true` is set in our
+   *  server config). The old "verified no-op" verdict came from an
+   *  inconclusive pair — identical routes because the baseline had no highway
+   *  to remove. HARD contract; realizeCostingOptions() still adds
+   *  use_highways: 0 alongside and drops `shortest`. */
   exclude_highways?: boolean;
   /** Same probe caveat as exclude_highways (unproven either way on a toll-free
    *  pair) — realizeCostingOptions() adds use_tolls: 0 alongside it. */
@@ -51,9 +53,8 @@ export interface AutoCostingOptions {
    *  present in the 3.7 binary; a gravel-belt corridor kept its gravel). The
    *  TRACE result-scan is the guarantee; validation gates on the measurement. */
   exclude_unpaved?: boolean;
-  /** Soft preference 0..1 (Valhalla default 1). THE working highway lever
-   *  (probed: use_highways: 0 removed 64 % highway; exclude_highways removed
-   *  0 %) — but BYPASSED under `shortest`. */
+  /** Soft preference 0..1 (Valhalla default 1). Preference shaping alongside
+   *  the hard exclusion (BD-154) — BYPASSED under `shortest`. */
   use_highways?: number;
   use_tolls?: number;
   /** Soft ferry preference 0..1 (Valhalla auto option `use_ferry`). */
@@ -72,6 +73,14 @@ export interface AutoCostingOptions {
   /** Seconds added at transitions between unlike-named roads (default 5) —
    *  discourages subdivision rat-runs (round 7). */
   maneuver_penalty?: number;
+  /** R33-U5 bake-off levers (documented Valhalla auto options; pass-through).
+   *  use_distance 0..1 mixes distance into the objective WITHOUT `shortest`'s
+   *  total blindness to every other factor. */
+  use_distance?: number;
+  /** Seconds penalty for entering a service road (engine default 15). */
+  service_penalty?: number;
+  /** Multiplier on service-road cost (engine default 1). */
+  service_factor?: number;
   /** DISTANCE-optimal routing (R18-1, probed live 2026-07-16): removes the
    *  speed advantage that makes arterials win every connector — measured
    *  arterial share 99 %→5 % (Waterdown–Campbellville) and 81 %→34 %
@@ -103,12 +112,23 @@ export const AVOID_REAL_LEVERS_ON = process.env['AVOID_REAL_LEVERS'] !== 'off';
  * the exclude_* keys (kept — zero cost, future engines may honour them). The
  * trace result-scan stays the truth for validation either way.
  */
+/** R32-U4 (BD-154): rq32 probed the RUNNING engine and `exclude_highways`
+ *  WORKS (both highway control pairs rerouted highway-free; the rural control
+ *  was inconclusive-identical — which is exactly how R25-U2's probe likely
+ *  produced its false "no-op" verdict). NOTE the wire ALWAYS carried the key
+ *  (the spread never deleted it) — production avoids were already protected
+ *  by a lever we believed inert. Default ON = unchanged wire bytes, now
+ *  UNDERSTOOD. Off = soft-only diagnostic arm (deletes the hard key). */
+export const HARD_EXCLUSIONS_ON = (process.env['HARD_EXCLUSIONS'] ?? 'on') !== 'off';
+
 export function realizeCostingOptions(opts: AutoCostingOptions): AutoCostingOptions {
   if (!AVOID_REAL_LEVERS_ON) return opts;
   const out: AutoCostingOptions = { ...opts };
   if (opts.exclude_highways === true) {
     out.use_highways = 0;
     delete out.shortest; // shortest bypasses every soft factor — the avoid wins
+    // hard contract stays on the wire when proven (BD-154); soft-only otherwise
+    if (!HARD_EXCLUSIONS_ON) delete out.exclude_highways;
   }
   if (opts.exclude_tolls === true) out.use_tolls = 0;
   if (opts.exclude_ferries === true) out.use_ferry = 0;
@@ -140,6 +160,7 @@ const ValhallaManeuverSchema = z.object({
   type: z.number(),
   instruction: z.string(),
   length: z.number().nonnegative().optional(), // km
+  street_names: z.array(z.string()).optional(), // R33-U6 continuity input
 });
 
 const ValhallaSummarySchema = z.object({
@@ -161,11 +182,20 @@ const ValhallaLegSchema = z.object({
   maneuvers: z.array(ValhallaManeuverSchema).optional(),
 });
 
+const ValhallaWarningSchema = z.object({
+  // Valhalla warning objects carry {code, text}; tolerate either shape.
+  text: z.string().optional(),
+  message: z.string().optional(),
+  code: z.number().optional(),
+});
 const ValhallaRouteResponseSchema = z.object({
   trip: z.object({
     legs: z.array(ValhallaLegSchema).min(1),
     summary: ValhallaSummarySchema,
   }),
+  /** R32-U4: never discard what the engine is trying to tell us — an ignored
+   *  hard exclusion arrives HERE, not as an error. */
+  warnings: z.array(ValhallaWarningSchema).optional(),
 });
 
 const ValhallaErrorSchema = z.object({
@@ -243,9 +273,13 @@ export function mapRouteResponse(body: unknown): RouteThroughOutput {
         type: MANEUVER_TYPES[m.type] ?? `type_${m.type}`,
         instruction: m.instruction,
         ...(m.length !== undefined ? { distance_m: m.length * 1000 } : {}),
+        ...(m.street_names !== undefined ? { street_names: m.street_names } : {}),
       })) ?? [],
   );
 
+  const warnings = (parsed.warnings ?? [])
+    .map((w) => w.text ?? w.message ?? (w.code !== undefined ? `code ${w.code}` : ''))
+    .filter((w) => w !== '');
   return RouteThroughOutputSchema.parse({
     geometry: { type: 'LineString', coordinates },
     distance_m: summary.length * 1000, // km → m
@@ -257,6 +291,7 @@ export function mapRouteResponse(body: unknown): RouteThroughOutput {
     has_ferry: summary.has_ferry ?? false,
     // Valhalla 3.7 route summaries expose no unpaved flag (see header note).
     has_unpaved: false,
+    ...(warnings.length > 0 ? { warnings } : {}),
   });
 }
 

@@ -10,6 +10,7 @@ import { create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it } from 'vitest';
 
 import RouteDetail from '../../components/RouteDetail';
+import { AMBER } from '../../theme';
 import ResultScreen from '../ResultScreen';
 
 const ROUTE: Route = {
@@ -174,6 +175,71 @@ describe('RouteDetail', () => {
       tree = create(<RouteDetail route={ROUTE} explanation={null} done="ok" />);
     });
     expect(textOf(tree)).not.toContain('"Stops"');
+  });
+
+  // R30 (BD-146): the result MAP must say what the legs bar says — a served
+  // trip renders three leg-tagged features (grey commutes, amber drive); a
+  // route without a split stays one amber feature. This is the RouteDetail
+  // twin of the Discover perLeg test (BD-144's lesson: assert the layer).
+  it('a served trip splits the map line into out/core/home features', () => {
+    // ~equal-length thirds along a straight-ish line: there_m/drive_m/home_m
+    // pick the split vertices
+    const served: Route = {
+      ...ROUTE,
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [-79.98, 43.2],
+          [-79.96, 43.2],
+          [-79.94, 43.2],
+          [-79.92, 43.2],
+          [-79.9, 43.2],
+          [-79.88, 43.2],
+          [-79.86, 43.2],
+        ] as Array<[number, number]>,
+      },
+      legs: {
+        there_pct: 33,
+        drive_pct: 34,
+        home_pct: 33,
+        there_m: 3200,
+        drive_m: 3200,
+        home_m: 3200,
+        drive_backroad_pct: 88,
+        drive_main_pct: 6,
+      },
+    };
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<RouteDetail route={served} explanation={null} done="ok" />);
+    });
+    const src = tree.root
+      .findAll((n) => String(n.type) === 'mapbox-shapesource')
+      .find((n) => n.props.id === 'detail-route')!;
+    const fc = src.props.shape as {
+      features: Array<{ properties: { leg: string }; geometry: { coordinates: unknown[] } }>;
+    };
+    expect(fc.features.map((f) => f.properties.leg)).toEqual(['out', 'core', 'home']);
+    for (const f of fc.features) {
+      expect(f.geometry.coordinates.length).toBeGreaterThanOrEqual(2);
+    }
+    const line = tree.root
+      .findAll((n) => String(n.type) === 'mapbox-linelayer')
+      .find((n) => n.props.id === 'detail-route-line')!;
+    expect(line.props.style.lineColor).toEqual(['match', ['get', 'leg'], 'core', AMBER, '#8a93a6']);
+  });
+
+  it('a route without a split stays ONE feature, tagged core (amber)', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<RouteDetail route={ROUTE} explanation={null} done="ok" />);
+    });
+    const src = tree.root
+      .findAll((n) => String(n.type) === 'mapbox-shapesource')
+      .find((n) => n.props.id === 'detail-route')!;
+    const fc = src.props.shape as { features: Array<{ properties: { leg: string } }> };
+    expect(fc.features).toHaveLength(1);
+    expect(fc.features[0]!.properties.leg).toBe('core');
   });
 });
 

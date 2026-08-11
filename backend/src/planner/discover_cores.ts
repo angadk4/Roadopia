@@ -5,7 +5,7 @@
  * One GiST bbox+quality query (the SECURITY DEFINER `discover_drive_cores`,
  * migration 0016 — pins generator_version + highway_share=0 INSIDE the
  * definer) replaces the isochrone + 5,000-row scan; ONE travelMatrix with the
- * realized no-highway costing prices reachability; drives that would be
+ * realized commute costing prices reachability; drives that would be
  * mostly getting-there are dropped BEFORE any build (never spend a build on a
  * card we can't show); connectors build in parallel.
  *
@@ -40,7 +40,7 @@ import type { MatrixCell, MatrixRequest } from '../valhalla/matrix';
 import { travelMatrix } from '../valhalla/matrix';
 import { routeThrough, type RouteThroughRequest } from '../valhalla/route';
 
-import { BACKROADS } from './costing';
+import { selfIntersections, summarizeCrossings } from './crossings';
 import { DISCOVER_REACH_S } from './discover';
 import { edgeOverlapRatio } from './overlap';
 
@@ -53,9 +53,16 @@ export const CORES_MENU_MAX = 6;
 /** Hard pre-build drop: matrix-estimated connector share of the whole trip. */
 export const CORE_CONNECTOR_SHARE_MAX = 0.6;
 /** Same-way-home: overlap at/over this triggers the ONE retry. */
-export const HOME_OVERLAP_RETRY = 0.5;
+export /** BD-146: the get-there/get-home legs are COMMUTE — direct costing, how a
+ *  person actually drives to the fun road. BACKROADS costing here was the
+ *  measured 'random neighbourhood' defect (hood share to 16.8 %, detour
+ *  factor 1.8x) and inflated every card's honest times. */
+const COMMUTE_COSTING = {} as const; // engine-default fastest — nothing else
+
+/** Overlap above this labels the card "same way there and back" — a LABEL,
+ *  never a retry (BD-149). */
+const SAME_WAY_LABEL = 0.5;
 /** A retried home leg may cost at most this over the direct one. */
-export const HOME_RETRY_MAX_FACTOR = 1.35;
 /**
  * The sweep build tag this deployment serves (flips only after a verified load).
  *
@@ -64,7 +71,13 @@ export const HOME_RETRY_MAX_FACTOR = 1.35;
  * index. drive_first.ts read the SAME env var with a different default, which
  * is exactly how the two paths silently diverged; there is now ONE constant.
  */
-export const DRIVE_CORES_VERSION = process.env['DRIVE_CORES_VERSION'] ?? 'r33-rib';
+// r35-rib (BD-167/170): the LAYERED sweep index — structural bars absolute,
+// sanity floors catastrophic-only, quality RANKS what a cell keeps. 393
+// distinct-standing loops after global dedup (+125 % vs r34's 175), ids
+// version-namespaced, provenance-stamped (migration 0021); r34's ribbons
+// carried. Flipped after all four frozen BD-167 bars passed, incl. the
+// owner's blind review (1-1-14 tie; Uxbridge-90 residual named in BD-170).
+export const DRIVE_CORES_VERSION = process.env['DRIVE_CORES_VERSION'] ?? 'r35-rib';
 
 export interface CoreRowRead {
   id: string;
@@ -72,6 +85,10 @@ export interface CoreRowRead {
   name: string;
   bar_profile: 'strict' | 'cell_relaxed';
   geom_simplified: LineString;
+  /** R34-U9: FULL-resolution measured geometry (migration 0020; `select *`
+   *  carries it automatically). Routing truth — `geom_simplified` is
+   *  display-only. Optional so pre-0020 fixtures stay valid. */
+  geometry?: LineString;
   entry: LatLng;
   exit: LatLng;
   distance_m: number;
@@ -123,6 +140,44 @@ export async function readDriveCores(
   return res.rows;
 }
 
+/**
+ * BD-162 (owner, 2026-08-11): "getting to the drive and back should be the
+ * easiest routes there are — essentially what Google Maps would show; there
+ * and back can be the same route." The stored entry/exit vertex is an
+ * ARBITRARY sweep artifact — routing a fastest path to a far ring vertex is
+ * exactly the weirdness he saw. A loop core is a RING: meet it at the vertex
+ * nearest the user and drive it around from there. Non-ring rows (open
+ * fixtures, legacy kinds) keep their stored endpoints.
+ */
+function rotateRingToNearest(
+  ring: LineString,
+  origin: LatLng,
+): { rotated: LineString; join: LatLng } | null {
+  const raw = ring.coordinates as Array<[number, number]>;
+  if (raw.length < 8) return null;
+  const latM = 111_320;
+  const lngM = 111_320 * Math.cos((origin.lat * Math.PI) / 180);
+  const first = raw[0]!;
+  const last = raw[raw.length - 1]!;
+  const gapM = Math.hypot((last[1] - first[1]) * latM, (last[0] - first[0]) * lngM);
+  if (gapM > 2_000) return null; // not a closed ring
+  const pts = gapM < 1 ? raw.slice(0, -1) : raw.slice();
+  let j = 0;
+  let best = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const d = Math.hypot((pts[i]![1] - origin.lat) * latM, (pts[i]![0] - origin.lng) * lngM);
+    if (d < best) {
+      best = d;
+      j = i;
+    }
+  }
+  const rotated = [...pts.slice(j), ...pts.slice(0, j), pts[j]!];
+  return {
+    rotated: { type: 'LineString', coordinates: rotated },
+    join: { lat: pts[j]![1], lng: pts[j]![0] },
+  };
+}
+
 function legOf(route: RouteThroughOutput): CoreLeg {
   return {
     geometry: route.geometry,
@@ -132,22 +187,6 @@ function legOf(route: RouteThroughOutput): CoreLeg {
 }
 
 /** Deterministic perpendicular offset point for the one home-leg retry. */
-function offsetVia(exit: LatLng, origin: LatLng, offsetM: number): [number, number] {
-  // R29: offsetM may be NEGATIVE — the opposite perpendicular side. The road
-  // network is not symmetric about the exit→origin line (a river valley or a
-  // town often blocks one side), and the single-side retry measured 5/6 cards
-  // stuck sameWayHome at Belfountain while a clean second road sat on the
-  // other side.
-  const mid = { lat: (exit.lat + origin.lat) / 2, lng: (exit.lng + origin.lng) / 2 };
-  const dx = (origin.lng - exit.lng) * Math.cos((mid.lat * Math.PI) / 180);
-  const dy = origin.lat - exit.lat;
-  const len = Math.hypot(dx, dy) || 1;
-  // rotate 90°: (-dy, dx), scaled to offsetM
-  const latM = 111_320;
-  const oLat = mid.lat + (dx / len) * (offsetM / latM);
-  const oLng = mid.lng + (-dy / len) * (offsetM / (latM * Math.cos((mid.lat * Math.PI) / 180)));
-  return [oLng, oLat];
-}
 
 export async function discoverCores(
   origin: LatLng,
@@ -189,14 +228,20 @@ export async function discoverCores(
   }
 
   // ONE matrix: origin + every core's entry + exit (≤ 41 locations), priced on
-  // the same no-highway costing the connectors will use (U2 realizes it).
+  // the same DIRECT commute costing the connectors use (BD-146).
+  // BD-162: per-row JOIN = origin-nearest ring vertex (falls back to the
+  // stored entry for non-ring rows). Both commute legs use the join.
+  const joins = rows.map((r) => {
+    const rot = rotateRingToNearest(r.geometry ?? r.geom_simplified, origin);
+    return rot ? rot.join : r.entry;
+  });
   const locations: Array<[number, number]> = [[origin.lng, origin.lat]];
-  for (const r of rows) {
-    locations.push([r.entry.lng, r.entry.lat], [r.exit.lng, r.exit.lat]);
+  for (const j of joins) {
+    locations.push([j.lng, j.lat], [j.lng, j.lat]);
   }
   const cells = await matrix(deps.valhallaUrl, {
     locations,
-    costingOptions: { ...BACKROADS.options, exclude_highways: true },
+    costingOptions: COMMUTE_COSTING,
   });
 
   interface Reachable {
@@ -228,74 +273,87 @@ export async function discoverCores(
   }
   // RPC order is the quality order (strict first, backroad·curv) — keep it,
   // deterministic id tiebreak already applied server-side.
-  const menu = reachable.slice(0, CORES_MENU_MAX);
+  // DEDUP BY GEOMETRY (BD-150): overlapping sweep cells store the SAME
+  // physical ring many times — measured region-wide: 270 loop cores, 82
+  // distinct names; a live Southfields menu showed "8th Line" twice. Name is
+  // the wrong key (same-name rings of different sizes exist), so a card is a
+  // duplicate when its ring substantially overlaps an already-kept one.
+  const distinct: typeof reachable = [];
+  for (const cand of reachable) {
+    const dup = distinct.some(
+      (k) =>
+        // same physical ring under another cell …
+        edgeOverlapRatio(cand.row.geom_simplified, k.row.geom_simplified) > 0.5 ||
+        // … or a different ring with the SAME HEADLINE NAME — measured live:
+        // a menu of six read "8th Line, 8th Line, Fallbrook Trail, Fallbrook
+        // Trail, King-Vaughan Road, Fallbrook Trail". Distinct geometry is
+        // not distinct ENOUGH for a menu; nobody wants three cards with one
+        // name. (Plan keeps geometry-only dedup — same-name size variants
+        // legitimately fit different asks.)
+        cand.row.name === k.row.name,
+    );
+    if (!dup) distinct.push(cand);
+    if (distinct.length >= CORES_MENU_MAX) break;
+  }
+  const menu = distinct;
 
   const drives = (
     await Promise.all(
       menu.map(async ({ row }): Promise<CoreDrive | null> => {
         try {
+          // BD-165 belt: a crossed ring is not a drive we show, whatever the
+          // index says (71 bowties were stored ungated; the sweep now bars
+          // them, this guards every future load too). ~1 ms per card.
+          const ringGeom = row.geometry ?? row.geom_simplified;
+          const xs = summarizeCrossings(selfIntersections(ringGeom, undefined, 0, 500));
+          if (xs.knots + xs.pierces > 0) return null;
+          const rot = rotateRingToNearest(ringGeom, origin);
+          const join = rot ? rot.join : row.entry;
+          const homeFrom = rot ? rot.join : row.exit;
           const [out, homeDirect] = await Promise.all([
             buildRoute(deps.valhallaUrl, {
               waypoints: [
                 [origin.lng, origin.lat],
-                [row.entry.lng, row.entry.lat],
+                [join.lng, join.lat],
               ],
-              costingOptions: { ...BACKROADS.options, exclude_highways: true },
+              costingOptions: COMMUTE_COSTING,
             }),
             buildRoute(deps.valhallaUrl, {
               waypoints: [
-                [row.exit.lng, row.exit.lat],
+                [homeFrom.lng, homeFrom.lat],
                 [origin.lng, origin.lat],
               ],
-              costingOptions: { ...BACKROADS.options, exclude_highways: true },
+              costingOptions: COMMUTE_COSTING,
             }),
           ]);
-          let home = homeDirect;
-          let sameWayHome = false;
-          if (edgeOverlapRatio(homeDirect.geometry, out.geometry) >= HOME_OVERLAP_RETRY) {
-            sameWayHome = true;
-            // Bounded, deterministic retries: one per perpendicular SIDE (the
-            // network is rarely symmetric about the exit→origin line). Never a
-            // search loop — exactly two extra route calls in the worst case,
-            // and only for cards already stuck on the same road home.
-            // Widening ladder: near offsets first (cheap detour), far ones for
-            // valley origins where every nearby road funnels into one approach
-            // (measured: Belfountain's menu was 5/6 sameWayHome at ±4 km).
-            for (const side of [4000, -4000, 7000, -7000]) {
-              try {
-                const retry = await buildRoute(deps.valhallaUrl, {
-                  waypoints: [
-                    [row.exit.lng, row.exit.lat],
-                    offsetVia(row.exit, origin, side),
-                    [origin.lng, origin.lat],
-                  ],
-                  costingOptions: { ...BACKROADS.options, exclude_highways: true },
-                });
-                if (
-                  retry.duration_s <= homeDirect.duration_s * HOME_RETRY_MAX_FACTOR &&
-                  edgeOverlapRatio(retry.geometry, out.geometry) <
-                    edgeOverlapRatio(homeDirect.geometry, out.geometry)
-                ) {
-                  home = retry;
-                  sameWayHome = false;
-                  break;
-                }
-              } catch {
-                /* try the other side; sameWayHome stays true if both fail */
-              }
-            }
-          }
+          // BD-149 (owner, 2026-08-09): the commute is NOT engineered. "It
+          // should genuinely just take the easiest and fastest way to get to
+          // the drive then get back" — no retry ladders, no overlap steering,
+          // no guards. The R30 offset-via ladder was HIS "getting there is
+          // absolutely terrible". sameWayHome stays as an honest LABEL only.
+          const home = homeDirect;
+          // A card that is mostly commute is still never shown (menu quality,
+          // not connector engineering).
+          const builtShare =
+            (out.duration_s + home.duration_s) /
+            (out.duration_s + home.duration_s + row.duration_s);
+          if (builtShare > CORE_CONNECTOR_SHARE_MAX) return null;
+          const sameWayHome = edgeOverlapRatio(home.geometry, out.geometry) >= SAME_WAY_LABEL;
           return {
             id: row.id,
             kind: row.kind,
             name: row.name,
             barProfile: row.bar_profile,
             core: {
-              geometry: row.geom_simplified, // served as stored — NEVER re-routed
+              // the MEASURED ring, rotated to start at the user's join — the
+              // roads/length/duration are untouched (BD-162); display uses the
+              // simplified line rotated the same way.
+              geometry:
+                rotateRingToNearest(row.geom_simplified, origin)?.rotated ?? row.geom_simplified,
               distance_m: row.distance_m,
               duration_s: row.duration_s,
-              entry: row.entry,
-              exit: row.exit,
+              entry: join,
+              exit: homeFrom,
               curviness: row.curviness,
               backroadShare: row.backroad_share,
               mainShare: row.main_share,

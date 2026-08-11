@@ -35,7 +35,9 @@ import type { AutoCostingOptions } from '../valhalla/route';
 export type CostingProfileId = 'fun' | 'backroads' | 'simple' | 'legacy';
 
 export interface CostingProfile {
-  id: CostingProfileId;
+  /** Shipping profiles use the closed union; R33 experiment arms carry their
+   *  own ids (the `string & {}` keeps union autocomplete working). */
+  id: CostingProfileId | (string & {});
   /** Merged over the loop.ts biasedCosting base (caller options win). */
   options: AutoCostingOptions;
   /** Cluster-sizing speed (replaces the frozen 55 km/h when this profile is on). */
@@ -44,8 +46,10 @@ export interface CostingProfile {
   sizingSpeedNoHighwayKmh: number;
 }
 
-/** Today's behavior, exactly — the rollback path (BD-21 numbers). */
-const LEGACY: CostingProfile = {
+/** Today's behavior, exactly — the rollback path (BD-21 numbers). Also the
+ *  COMMUTE costing for measured trips (BD-146): a connector is how a person
+ *  drives to the fun road, not part of the fun road. */
+export const LEGACY: CostingProfile = {
   id: 'legacy',
   options: { use_highways: 0.2, use_living_streets: 0 },
   sizingSpeedKmh: 55,
@@ -168,6 +172,108 @@ const BACKROADS_ATOB: CostingProfile = atobVariant(BACKROADS);
 /** Simple asked for FEWER turns — shortest ADDS turns; keep fastest-path. */
 const SIMPLE: CostingProfile = { ...LEGACY, id: 'simple' };
 
+/**
+ * R33-U5 (BD-156) — the PRE-REGISTERED `shortest` bake-off grid. Recovery
+ * §5.2: `shortest=true` discards every penalty and factor, so the router
+ * cannot express "prefer good driving roads" — it optimizes metres. These
+ * arms give tuned `auto` its first fair competition. Grid, not roulette:
+ * use_distance {0,.15,.30,.45} × penalty tiers, living-streets/tracks pinned
+ * to 0. Sizing speeds = LEGACY's 55/42 (auto-costing durations, not
+ * shortest's 50/38). PROFILE_EXPERIMENT=<id> serves an arm through the REAL
+ * profileForRequest; unset = byte-identical incumbent.
+ * ⚠️ FROZEN at registration — arms may not be edited after results exist.
+ */
+export const EXPERIMENT_PROFILES: Record<string, CostingProfile> = {
+  P1_auto: {
+    id: 'P1_auto',
+    options: { use_highways: 0.2, use_living_streets: 0, use_tracks: 0 },
+    sizingSpeedKmh: 55,
+    sizingSpeedNoHighwayKmh: 42,
+  },
+  P2_d15: {
+    id: 'P2_d15',
+    options: { use_distance: 0.15, use_highways: 0.2, use_living_streets: 0, use_tracks: 0 },
+    sizingSpeedKmh: 55,
+    sizingSpeedNoHighwayKmh: 42,
+  },
+  P3_d30: {
+    id: 'P3_d30',
+    options: { use_distance: 0.3, use_highways: 0.2, use_living_streets: 0, use_tracks: 0 },
+    sizingSpeedKmh: 53,
+    sizingSpeedNoHighwayKmh: 40,
+  },
+  P4_d45: {
+    id: 'P4_d45',
+    options: { use_distance: 0.45, use_highways: 0.2, use_living_streets: 0, use_tracks: 0 },
+    sizingSpeedKmh: 52,
+    sizingSpeedNoHighwayKmh: 39,
+  },
+  P5_d30_man: {
+    id: 'P5_d30_man',
+    options: {
+      use_distance: 0.3,
+      use_highways: 0.2,
+      use_living_streets: 0,
+      use_tracks: 0,
+      maneuver_penalty: 15,
+    },
+    sizingSpeedKmh: 53,
+    sizingSpeedNoHighwayKmh: 40,
+  },
+  P6_d30_manstrong: {
+    id: 'P6_d30_manstrong',
+    options: {
+      use_distance: 0.3,
+      use_highways: 0.2,
+      use_living_streets: 0,
+      use_tracks: 0,
+      maneuver_penalty: 40,
+    },
+    sizingSpeedKmh: 53,
+    sizingSpeedNoHighwayKmh: 40,
+  },
+  P7_d30_svc: {
+    id: 'P7_d30_svc',
+    options: {
+      use_distance: 0.3,
+      use_highways: 0.2,
+      use_living_streets: 0,
+      use_tracks: 0,
+      service_penalty: 300,
+      service_factor: 5,
+    },
+    sizingSpeedKmh: 53,
+    sizingSpeedNoHighwayKmh: 40,
+  },
+  P8_d30_man_svc: {
+    id: 'P8_d30_man_svc',
+    options: {
+      use_distance: 0.3,
+      use_highways: 0.2,
+      use_living_streets: 0,
+      use_tracks: 0,
+      maneuver_penalty: 15,
+      service_penalty: 300,
+      service_factor: 5,
+    },
+    sizingSpeedKmh: 53,
+    sizingSpeedNoHighwayKmh: 40,
+  },
+  P9_pen_only: {
+    id: 'P9_pen_only',
+    options: {
+      use_highways: 0.2,
+      use_living_streets: 0,
+      use_tracks: 0,
+      maneuver_penalty: 15,
+      service_penalty: 300,
+      service_factor: 5,
+    },
+    sizingSpeedKmh: 55,
+    sizingSpeedNoHighwayKmh: 42,
+  },
+};
+
 export type CostingMode = 'on' | 'legacy';
 
 /**
@@ -214,6 +320,15 @@ export const FUN_DEFAULT_ADOPTED = false;
  *   - everything else → fun (shortest) once adopted; legacy until then.
  */
 export function profileForRequest(c: ParsedConstraints, mode: CostingMode): CostingProfile {
+  // R33-U5: an experiment arm rides the REAL entrypoint (unset = incumbent,
+  // byte-identical). Only twisty/backroads-class requests swap — the arm
+  // replaces BACKROADS, never `simple`.
+  const exp = process.env['PROFILE_EXPERIMENT'];
+  if (exp !== undefined && exp !== '' && EXPERIMENT_PROFILES[exp]) {
+    if (c.preset === 'backroads' || c.preset === 'twisty' || (c.twistiness_pref ?? 0) >= 0.7) {
+      return EXPERIMENT_PROFILES[exp];
+    }
+  }
   if (mode === 'legacy') return LEGACY;
   if (c.preset === 'simple' || c.preset === 'chill') return SIMPLE;
   // BD-111: the connector costing is shape-dependent — see TOPSPEED_ATOB_ON.

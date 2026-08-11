@@ -188,6 +188,7 @@ export function runReducer(state: PlanRunState, action: RunAction): PlanRunState
 export const STEP_LABELS: Record<PipelineStep, string> = {
   parse: 'Understanding your brief',
   validate_constraints: 'Checking the request',
+  drive_first_trip: 'Trying measured drives near you',
   scope: 'Scoping the reachable area',
   retrieve: 'Finding curvy roads and spots',
   generate_candidates: 'Sketching candidate drives',

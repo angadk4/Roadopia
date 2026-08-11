@@ -108,19 +108,31 @@ interface PoolEntry {
 }
 
 /**
+ * Physical-road key for a ribbon row: the way-id suffix after the LAST colon.
+ * Id formats in the wild: `cell:ribbon:ways` (r33), `cell:r34ribbon:ways`
+ * (r34 carry — its rename broke the old `':ribbon:'` marker match and killed
+ * road dedup in production), `version:cell:ribbon:ways` (loader v2). The way
+ * suffix itself never contains ':' so last-colon is format-proof.
+ */
+export function ribbonRoadKey(id: string): string {
+  const cut = id.lastIndexOf(':');
+  return cut >= 0 ? id.slice(cut + 1) : id;
+}
+
+/**
  * Deterministic pool: top ribbons by measured value, capped for the matrix.
  *
  * DEDUPED BY PHYSICAL ROAD first: sweep cells overlap (12 km scope on an 8 km
  * grid), so the SAME road is stored as a ribbon under several cells — measured
  * at Guelph: a 24-entry pool that was only 4 distinct roads. Without this the
  * pool's diversity is an illusion and every sector fills with copies of one
- * road. The physical identity is the way-id suffix after ':ribbon:'.
+ * road.
  */
 export function ribbonPool(origin: LatLng, ribbons: readonly CoreRowRead[]): PoolEntry[] {
   const byRoad = new Map<string, CoreRowRead>();
   for (const r of ribbons) {
     if (r.kind !== 'ribbon') continue;
-    const road = r.id.includes(':ribbon:') ? r.id.slice(r.id.indexOf(':ribbon:') + 8) : r.id;
+    const road = ribbonRoadKey(r.id);
     const cur = byRoad.get(road);
     if (cur === undefined || r.id.localeCompare(cur.id) < 0) byRoad.set(road, r);
   }
@@ -173,7 +185,7 @@ export function ribbonsAsSegments(ribbons: readonly CoreRowRead[]): CandidateSeg
   const byRoad = new Map<string, CoreRowRead>();
   for (const r of ribbons) {
     if (r.kind !== 'ribbon') continue;
-    const road = r.id.includes(':ribbon:') ? r.id.slice(r.id.indexOf(':ribbon:') + 8) : r.id;
+    const road = ribbonRoadKey(r.id);
     const cur = byRoad.get(road);
     if (cur === undefined || r.id.localeCompare(cur.id) < 0) byRoad.set(road, r);
   }

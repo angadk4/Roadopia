@@ -64,14 +64,52 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
   const { name: themeName, colors } = useTheme();
   const { route, explanation, done } = props;
 
-  const shape = useMemo(
-    () => ({
+  // R30 (BD-146): when the served trip carries its three-leg split, the MAP
+  // shows it — the drive amber, the get-there/get-home commutes grey — so the
+  // picture says the same thing the legs bar under it says. Split by walking
+  // the geometry to the legs' measured metre marks.
+  const shape = useMemo(() => {
+    const legs = route.legs;
+    const coords = route.geometry.coordinates as Array<[number, number]>;
+    if (!legs || coords.length < 4) {
+      return {
+        type: 'FeatureCollection' as const,
+        features: [
+          {
+            type: 'Feature' as const,
+            properties: { leg: 'core' },
+            geometry: route.geometry,
+          },
+        ],
+      };
+    }
+    const latM = 111_320;
+    let acc = 0;
+    let i1 = coords.length - 1;
+    let i2 = coords.length - 1;
+    for (let i = 1; i < coords.length; i++) {
+      const a = coords[i - 1]!;
+      const b = coords[i]!;
+      acc += Math.hypot(
+        (b[1] - a[1]) * latM,
+        (b[0] - a[0]) * latM * Math.cos((a[1] * Math.PI) / 180),
+      );
+      if (acc <= legs.there_m) i1 = i;
+      if (acc <= legs.there_m + legs.drive_m) i2 = i;
+    }
+    const seg = (from: number, to: number, leg: string) => ({
       type: 'Feature' as const,
-      properties: {},
-      geometry: route.geometry,
-    }),
-    [route.geometry],
-  );
+      properties: { leg },
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: coords.slice(from, to + 1),
+      },
+    });
+    return {
+      type: 'FeatureCollection' as const,
+      features: [seg(0, i1, 'out'), seg(i1, i2, 'core'), seg(i2, coords.length - 1, 'home')],
+    };
+  }, [route.geometry, route.legs]);
 
   const bounds = useMemo(() => {
     let west = Infinity;
@@ -159,7 +197,14 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
             />
             <LineLayer
               id="detail-route-line"
-              style={{ lineColor: AMBER, lineWidth: 3.5, lineCap: 'round', lineJoin: 'round' }}
+              style={{
+                // one plain-amber feature when there is no split; three
+                // leg-tagged features (grey commutes) when there is
+                lineColor: ['match', ['get', 'leg'], 'core', AMBER, '#8a93a6'],
+                lineWidth: 3.5,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
             />
           </ShapeSource>
           {stops.length > 0 && (

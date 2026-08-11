@@ -50,16 +50,19 @@ import {
 import { CONNECTOR_KEY_TOLERANCE, CONNECTOR_REFINE_ON, refineLoopFinalist } from './connectors';
 import { CORE_REACH_FRAC, CORE_SEED_MAX, CORE_SEED_ON, coreSeedCandidates } from './core_seed';
 import { profileExcludesHighways, profileForRequest, type CostingMode } from './costing';
+import { selfIntersections, summarizeCrossings } from './crossings';
 import { measureCurvatureClassAware } from './curvature';
 import { CORES_BROWSE_LIMIT, DRIVE_CORES_VERSION, readDriveCores } from './discover_cores';
 import { diversify, prefilterByDuration } from './diversify';
-import { DRIVE_FIRST_ON, pickDriveFirst, readDriveFirstCores } from './drive_first';
-import { driveFirstTrip } from './drive_first_trip';
+import { DRIVE_FIRST_ON, readDriveFirstCores } from './drive_first';
+import { atobDriveFirst, ATOB_DRIVE_FIRST_ON } from './drive_first_atob';
+import { driveFirstTrip, STATS_PROVENANCE_MIN } from './drive_first_trip';
 import { driveGeometry, splitLoopLegs, type LegSplit } from './legs';
 import {
   assembleLoop,
   assembleLoopWithRepair,
   EPSILON_CLOSURE_M,
+  OUT_AND_BACK_REJECT_M,
   RELAXED_ASSEMBLY_CAPS,
   RESIDENTIAL_RUN_SOFT_M,
   SELF_OVERLAP_RELAXED,
@@ -67,6 +70,7 @@ import {
   RETRACE_RUN_SOFT_M,
   SELF_OVERLAP_CAP,
 } from './loop';
+import { computeOriginStem, STEM_ON } from './origin_stem';
 import { outAndBack } from './outandback';
 import { corridorDoublingRatio, loopiness } from './overlap';
 import { weightsForPreset } from './presets';
@@ -98,6 +102,7 @@ import {
   type ScoreBreakdown,
 } from './score';
 import { resolveStopArrivals, stopCoverageOf, stopCoverScore, type ResolvedStop } from './stops';
+import { TRIP_EXACT_BAND, tripShapeMetrics } from './trip_gates';
 import {
   URBAN_CONTEXT_ON,
   urbanIndexFor,
@@ -111,6 +116,16 @@ import { DURATION_TOLERANCE_DEFAULT, validateCandidate, type ValidationVerdict }
 const RIBBON_ATOB_ON = (process.env['RIBBON_ATOB'] ?? 'off') !== 'off';
 
 export const WALL_CLOCK_BUDGET_MS = 25_000;
+/** R34-U8: nothing structurally dirty ships — the legacy pipeline's output
+ *  passes the same final judge as measured trips, or the result is an honest
+ *  no-clean state. Off = pre-R34 serving. */
+export const CLEAN_ALTERNATIVES_ON = (process.env['CLEAN_DURATION_ALTERNATIVES'] ?? 'on') !== 'off';
+/** R36 (BD-169): an out-of-band clean ALTERNATE no longer preempts the legacy
+ *  generator — it is HELD while legacy tries for the exact band, and the
+ *  better serve wins at the exits (rq36 measured the preemption: Uxbridge
+ *  60-min ask served 97 min while a clean 66-min legacy loop existed).
+ *  Off = the R34-U8 behavior, byte-identical. */
+export const ALT_HOLD_LEGACY_ON = (process.env['ALT_HOLD_LEGACY'] ?? 'on') !== 'off';
 /** R18-2: 3 → 5 so the ladder's deeper rungs (soft-relax, avoid-relax,
  *  assembly-relax) actually EXECUTE — under 3, rungs 3-4 never ran. Budget
  *  seams unchanged; worst case ≈ 18 s < 25 s. */
@@ -491,70 +506,231 @@ export async function runPlanner(
   const isLoop = constraints.shape === 'loop';
   let durationS = constraints.duration_target_s ?? 5400; // distance-derived below (R18-4)
 
-  // R29 (BD-135, the architecture the owner approved) — DRIVE-FIRST TRIP.
-  // When a MEASURED core fits the ask, Plan returns exactly a Discover trip:
-  // the core + two disclosed connectors, judged as Discover judges them — NOT
-  // pushed through the blob-assembly gates that killed every prior attempt
-  // (BD-130/136/139: seeds, single ribbons and chains all died in
-  // assembleLoop, whose whole-trip rules police invented blobs, not disclosed
-  // commutes). Fail-open: no fitting core → the legacy planner runs unchanged,
-  // with a disclosure saying so.
+  // R30 (BD-146, the owner's ruler) — DRIVE-FIRST TRIP, judged AS DRIVEN.
+  // The ask means the WHOLE TRIP: a measured core is picked so that
+  // out + drive + home fits the requested time, the commutes route DIRECT
+  // (a person driving to the fun road), and `judgeTrip` REJECTS any candidate
+  // that misses the ask, doesn't look like a loop, doubles, stubs, or is
+  // mostly commute. R29's drive-only ruler (BD-135/142) measured as 106 min
+  // served for a 60-minute ask with 0.14 loopiness — the owner drove it and
+  // overrode it. Fail-open: nothing passes → the legacy planner runs
+  // unchanged, and the trace says exactly which gates killed which cores.
+  // R35-U11: the unavoidable-origin stem, measured ONCE per loop request
+  // (8 fastest probes to compass targets; ~0.4 s) — replaces the fixed 1 km
+  // doubling grace with network-proven necessity, for the trip gates AND the
+  // final judge. Long stems are disclosed on served results.
+  let originStemM: number | null = null;
+  if (isLoop && STEM_ON) {
+    originStemM = await computeOriginStem(deps.valhallaUrl, origin, {
+      ...(constraints.avoid.highways === true ? { exclude_highways: true } : {}),
+    });
+  }
+  // R36 (BD-169): a clean out-of-band alternate HELD while the legacy pipeline
+  // tries for the exact band. `heldAlternate` replays the drive-first serve;
+  // `restoreHeld` first resets every field legacy may have touched.
+  let heldAlternate: (() => void) | null = null;
+  let heldServeBase: string[] = [];
+  const restoreHeld = (): void => {
+    result.route = null;
+    result.curviness = null;
+    result.score = null;
+    result.validation = null;
+    result.disclosures = [...heldServeBase];
+    result.elevation = null;
+    result.legs = null;
+    result.classMix = null;
+    result.backroadLongestM = null;
+    result.backroadMeanM = null;
+    result.hoodRunM = null;
+    result.turnsPer10min = null;
+    result.alternates = [];
+    result.stops = [];
+    result.waypoints = [];
+    result.countryScore = null;
+    result.arterialShare = null;
+    result.urbanShare = null;
+    heldAlternate?.();
+  };
   if (isLoop && DRIVE_FIRST_ON && constraints.duration_target_s !== null) {
-    const trip = await driveFirstTrip(
+    const outcome = await driveFirstTrip(
       deps.db,
       deps.valhallaUrl,
       origin,
       constraints.duration_target_s,
+      {
+        avoidHighways: constraints.avoid.highways === true,
+        ...(originStemM !== null ? { oabGraceM: originStemM } : {}),
+        // The attempt may spend at most 40 % of the wall; the legacy planner
+        // keeps the rest (measured: unbounded stacking hit 25.8 s live).
+        deadlineMs: Date.now() + WALL_CLOCK_BUDGET_MS * 0.4,
+      },
     );
+    const trip = outcome.trip;
     if (trip !== null) {
       const mins = (x: number): number => Math.round(x / 60);
+      const exact = trip.tier === 'exact';
+      const applyTripServe = (): void => {
+        result.status = 'ok';
+        // ONE routed request end to end — real geometry, real maneuvers, real
+        // duration, real has_* flags (v4: no glued seams, rq30c).
+        result.route = {
+          geometry: trip.route.geometry,
+          distance_m: trip.route.distance_m,
+          duration_s: trip.route.duration_s,
+          legs: trip.route.legs,
+          maneuvers: trip.route.maneuvers,
+          has_highway: trip.route.has_highway,
+          has_toll: trip.route.has_toll,
+          has_ferry: trip.route.has_ferry,
+          has_unpaved: trip.route.has_unpaved,
+        };
+        // R34-U9 provenance: the core's MEASURED numbers are advertised only
+        // when the routed drive is essentially the measured ring.
+        result.curviness = trip.fidelity >= STATS_PROVENANCE_MIN ? trip.core.curviness : null;
+        // Waypoints mark J1 / arc-mid / J2 — the audit's geometric split needs
+        // them; the USER-facing result carries NO leg framing (BD-149: "that
+        // loop should be the full drive as the loop itself").
+        result.waypoints = [trip.drive.entry, trip.drive.mid, trip.drive.exit];
+        result.legs = null;
+        const driveName = trip.drive.frac < 0.97 ? `most of ${trip.core.name}` : trip.core.name;
+        if (exact) {
+          result.disclosures.push(
+            `Built a ${mins(trip.durationS)}-minute loop around ${driveName} — measured roads, honest time.`,
+          );
+        } else {
+          // R34-U8: an honest ALTERNATE duration — never a silent miss.
+          result.disclosures.push(
+            `No clean ${Math.round((constraints.duration_target_s ?? 0) / 60)}-minute loop fits from here — ` +
+              `built a clean ${mins(trip.durationS)}-minute one around ${driveName} instead.`,
+          );
+        }
+        for (const alt of outcome.alternates) {
+          result.disclosures.push(
+            `Also built a clean ${mins(alt.durationS)}-minute option around ${alt.core.name}.`,
+          );
+        }
+        if (originStemM !== null && originStemM >= 1_500) {
+          result.disclosures.push(
+            `This area has one practical way out — the first and last ~${Math.round(
+              originStemM / 1000,
+            )} km repeat by necessity.`,
+          );
+        }
+        step(
+          emit,
+          'drive_first_trip',
+          'completed',
+          `served ${trip.tier} ${trip.core.id} (x ${trip.metrics.knots}/${trip.metrics.pierces}, stem ${originStemM ?? '\u2014'}m, fidelity ${trip.fidelity.toFixed(2)}, ` +
+            `loopiness ${trip.metrics.loopiness?.toFixed(2) ?? '—'}, ` +
+            `commute ${Math.round(trip.metrics.commuteShare * 100)}%` +
+            (outcome.rejected.length > 0
+              ? `; rejected ${outcome.rejected.map((r) => `${r.id}: ${r.failures.join('+')}`).join(', ')}`
+              : '') +
+            ')',
+        );
+      };
+      if (exact || !ALT_HOLD_LEGACY_ON) {
+        applyTripServe();
+        return result;
+      }
+      // BD-169: hold the out-of-band clean alternate; legacy gets its shot at
+      // the exact band and the better serve wins at the exits.
+      heldServeBase = [...result.disclosures];
+      heldAlternate = applyTripServe;
+      step(
+        emit,
+        'drive_first_trip',
+        'completed',
+        `holding clean ${mins(trip.durationS)}-min alternate ${trip.core.id} — ` +
+          `trying for an exact ${Math.round((constraints.duration_target_s ?? 0) / 60)}-min loop live`,
+      );
+    }
+    if (heldAlternate === null && outcome.rejected.length > 0) {
+      // The truth, not an excuse: which cores were tried and which of the
+      // owner's rules each one broke (BD-146 — gates reject, disclosures
+      // don't excuse).
+      step(
+        emit,
+        'drive_first_trip',
+        'completed',
+        `no candidate passed as-driven gates — ${outcome.rejected
+          .map((r) => `${r.id}: ${r.failures.join('+')}`)
+          .join(', ')}`,
+      );
+    }
+    if (heldAlternate === null) {
+      result.disclosures.push(
+        'No measured drive fits that time cleanly from this start yet — planned live instead.',
+      );
+    }
+  }
+
+  // R31 (BD-151) — A→B DRIVE-FIRST: the best measured ribbon ON THE WAY,
+  // served as one routed request (A → through-samples → B), judged as driven
+  // (fidelity, spurs, doubling, the standing detour cap). Fail-open to the
+  // legacy corridor planner with the rejections in the trace.
+  if (!isLoop && ATOB_DRIVE_FIRST_ON && destination !== null) {
+    const outcome = await atobDriveFirst(deps.db, deps.valhallaUrl, origin, destination, {
+      avoidHighways: constraints.avoid.highways === true,
+      costingOptions: profileForRequest(constraints, deps.costingMode ?? 'on').options,
+      // Date.now(), NOT t0: t0 rides performance.now() (process uptime), and
+      // the module compares epoch — mixing them made the deadline read as
+      // already-expired, silently rejecting every candidate as time_budget.
+      deadlineMs: Date.now() + WALL_CLOCK_BUDGET_MS * 0.4,
+    });
+    const trip = outcome.trip;
+    if (trip !== null) {
       result.status = 'ok';
       result.route = {
-        geometry: trip.geometry,
-        distance_m: trip.distanceM,
-        duration_s: trip.durationS,
-        legs: [...trip.out.legs, ...trip.home.legs],
-        // Maneuvers cover the connectors; the core's own turns are part of its
-        // measured record (turns_per_10min), not re-derived here.
-        maneuvers: [...trip.out.maneuvers, ...trip.home.maneuvers],
-        has_highway: trip.out.has_highway || trip.home.has_highway,
-        has_toll: trip.out.has_toll || trip.home.has_toll,
-        has_ferry: trip.out.has_ferry || trip.home.has_ferry,
-        has_unpaved: trip.out.has_unpaved || trip.home.has_unpaved,
+        geometry: trip.route.geometry,
+        distance_m: trip.route.distance_m,
+        duration_s: trip.route.duration_s,
+        legs: trip.route.legs,
+        maneuvers: trip.route.maneuvers,
+        has_highway: trip.route.has_highway,
+        has_toll: trip.route.has_toll,
+        has_ferry: trip.route.has_ferry,
+        has_unpaved: trip.route.has_unpaved,
       };
-      result.curviness = trip.core.curviness;
-      // A loop core's entry ≈ exit, which collapses the geometric leg split
-      // (both waypoints match the same vertex — measured: drivePct null on
-      // every served trip). A core mid-point forces the walk past the far side.
-      const coreCoords = trip.core.geom_simplified.coordinates as Array<[number, number]>;
-      const coreMid = coreCoords[Math.floor(coreCoords.length / 2)]!;
-      result.waypoints = [trip.core.entry, { lat: coreMid[1], lng: coreMid[0] }, trip.core.exit];
-      result.legs = {
-        therePct: Math.round((trip.out.distance_m / Math.max(1, trip.distanceM)) * 100),
-        drivePct: Math.round((trip.core.distance_m / Math.max(1, trip.distanceM)) * 100),
-        homePct: Math.round((trip.home.distance_m / Math.max(1, trip.distanceM)) * 100),
-        thereM: Math.round(trip.out.distance_m),
-        driveM: Math.round(trip.core.distance_m),
-        homeM: Math.round(trip.home.distance_m),
-        driveBackroadPct: Math.round(trip.core.backroad_share * 100),
-        driveMainPct: Math.round(trip.core.main_share * 100),
-      };
+      // curviness: length-weighted over the chained measured ribbons
+      const chainLen = trip.ribbons.reduce((v, r) => v + r.distance_m, 0);
+      result.curviness =
+        trip.ribbons.reduce((v, r) => v + r.curviness * r.distance_m, 0) / Math.max(1, chainLen);
+      result.waypoints = trip.ribbons.map((r) => r.entry);
+      result.legs = null;
+      const names = trip.ribbons.map((r) => r.name);
+      const nameLine =
+        names.length === 1
+          ? names[0]!
+          : names.length === 2
+            ? `${names[0]} and ${names[1]}`
+            : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
       result.disclosures.push(
-        `A measured drive fit your time: ${trip.core.name} — the drive ${mins(
-          trip.core.duration_s,
-        )} min · getting there ${mins(trip.out.duration_s)} · home ${mins(trip.home.duration_s)}.`,
+        `Routed you along ${nameLine} on the way — measured backroad stretches, ` +
+          `about ${Math.round((trip.detourRatio - 1) * 100)}% longer than the direct route.`,
       );
-      if (trip.sameWayHome) {
-        result.disclosures.push(
-          "You'll come home the way you went out — there isn't a good second road from here.",
-        );
-      }
-      step(emit, 'drive_first_trip', 'completed', `served ${trip.core.id}`);
+      step(
+        emit,
+        'drive_first_trip',
+        'completed',
+        `served atob chain [${trip.ribbons.map((r) => r.id).join('>')}] (fidelity ${trip.metrics.fidelity.toFixed(2)}, detour ${trip.detourRatio.toFixed(2)}×` +
+          (outcome.rejected.length > 0
+            ? `; rejected ${outcome.rejected.map((r) => `${r.id}: ${r.failures.join('+')}`).join(', ')}`
+            : '') +
+          ')',
+      );
       return result;
     }
-    result.disclosures.push(
-      'No measured drive fits that time near this start yet — planned live instead.',
-    );
+    if (outcome.rejected.length > 0) {
+      step(
+        emit,
+        'drive_first_trip',
+        'completed',
+        `no ribbon passed on this corridor — ${outcome.rejected
+          .map((r) => `${r.id}: ${r.failures.join('+')}`)
+          .join(', ')}`,
+      );
+    }
   }
 
   // R18-4 character bundles: the levers a character ACTUALLY moves (costing
@@ -820,9 +996,64 @@ export async function runPlanner(
     }
   };
 
+  /**
+   * BD-163 — THE FINAL STRUCTURAL JUDGE, callable from EVERY exit that ships
+   * a loop route. BD-160 installed it only at the main exit; the
+   * `presentDirtyBest` early returns (ladder-exhausted + budget-exhausted —
+   * by definition the DIRTIEST material in the system) bypassed it, which is
+   * exactly how the owner's X-square survived BD-161/162 (device, 2026-08-11:
+   * "still shows squares exactly same as before"). The R32 invariant said
+   * "no candidate path may bypass the final judge" — now it cannot: returns
+   * true if the route was rejected (result becomes an honest no-clean state).
+   */
+  const applyFinalStructuralJudge = (): boolean => {
+    if (!CLEAN_ALTERNATIVES_ON || !isLoop || result.route === null) return false;
+    const shape = tripShapeMetrics(
+      result.route.geometry,
+      origin,
+      originStemM !== null ? { oabGraceM: originStemM } : {},
+    );
+    const structural: string[] = [];
+    if (shape.spurs > 0) structural.push(`street stubs ×${shape.spurs}`);
+    if (shape.microloops > 0) structural.push(`crescents ×${shape.microloops}`);
+    if (shape.oabLongestM > OUT_AND_BACK_REJECT_M) {
+      structural.push(`${Math.round(shape.oabLongestM)} m doubled`);
+    }
+    const x = summarizeCrossings(selfIntersections(result.route.geometry, origin));
+    const crossings = x.knots + x.pierces;
+    if (crossings > 0) structural.push(`self-crossings ×${crossings}`);
+    if (structural.length === 0) {
+      // forensic PASS line — every shipped loop's shape verdict is in the trace
+      step(
+        emit,
+        'validate_route',
+        'completed',
+        `final judge PASS (x 0/0, stubs 0, crescents 0, oab≤${Math.round(shape.oabLongestM)}m, stem ${originStemM ?? '—'}m)`,
+      );
+      return false;
+    }
+    step(emit, 'validate_route', 'completed', `FINAL JUDGE reject: ${structural.join(', ')}`);
+    result.route = null;
+    result.status = 'unavailable';
+    result.legs = null;
+    result.disclosures = [
+      `No clean ${Math.round((constraints.duration_target_s ?? 3600) / 60)}-minute loop from this exact start right now — ` +
+        `the best live attempt had ${structural.join(' and ')}, which we don't ship.`,
+    ];
+    return true;
+  };
+
   /** Present the least-dirty fallback with honest disclosure (returns false
    *  when no eligible material exists — the true redirect case). */
   const presentDirtyBest = (): boolean => {
+    // BD-169: a HELD clean measured alternate always beats a "least-flawed
+    // dirty" presentation — and rescues the true-redirect case too (the
+    // request IS served, so return true even when dirtyBest is null).
+    if (heldAlternate !== null) {
+      restoreHeld();
+      emit({ type: 'done', status: 'ok' });
+      return true;
+    }
     if (dirtyBest === null) return false;
     const { row, units, curviness } = dirtyBest;
     const effStops = params.dropNiceToHaveStops
@@ -881,6 +1112,11 @@ export async function runPlanner(
     result.urbanShare = URBAN_CONTEXT_ON
       ? urbanShareOf(urbanIndex, row.route.geometry, destination ? [origin, destination] : [origin])
       : null;
+    // BD-163: the dirtiest material meets the judge like everything else.
+    if (applyFinalStructuralJudge()) {
+      emit({ type: 'done', status: 'unavailable' });
+      return true; // the request IS answered — with the honest no-clean state
+    }
     emit({ type: 'done', status: 'relaxed' });
     return true;
   };
@@ -997,22 +1233,11 @@ export async function runPlanner(
           pinnedSpans,
           pinnedPoints,
         });
-    // R29 DRIVE-FIRST (BD-135, owner-approved architecture change): the ask
-    // means THE DRIVE. Measured ribbons whose OWN duration fits the ask enter
-    // the pool; their connectors are the commute, judged as such below. Ribbons
-    // give different-way-home by construction, so the full trip passes the
-    // doubling/revisit gates naturally. Fail-open: index empty -> pool untouched.
-    if (isLoop && DRIVE_FIRST_ON && !outOfBudget()) {
-      const dfCores = await readDriveFirstCores(deps.db, origin, durationS);
-      const picks = pickDriveFirst(dfCores, durationS, origin);
-      if (picks.length > 0) {
-        candidates = [...picks.map((p) => p.candidate), ...candidates];
-      } else {
-        result.disclosures.push(
-          'No measured drive fits that time near this start yet — planned live instead.',
-        );
-      }
-    }
+    // (Removed, BD-149: the R29 single-ribbon prepend was measured VACUOUS —
+    // ribbons average 9 min, nothing fit a loop ask (BD-136) — and its
+    // "planned live" disclosure duplicated the trip attempt's. The measured
+    // path is the early drive-first TRIP; this pipeline is the honest
+    // fallback.)
     // R29 Unit B — RIBBON CHAINS (BD-135/136): 3-6 measured ribbons chained
     // into one drive that FILLS the ask, with routed links between them. One
     // travel matrix; measured durations price the ribbons (the matrix's
@@ -1357,18 +1582,11 @@ export async function runPlanner(
       // outrank a measured-clean pool-mate (audit issue #13)
       if (TRACE_NULL_STRICT_ON && r.trace === null) dirtyClauses.push('trace_null');
       const dirty = dirtyClauses.length > 0;
-      // R29: for a drive-first candidate the promise is THE DRIVE, so the
-      // duration terms judge the drive leg against the ask — judging the trip
-      // is exactly the mis-ruler that killed core seeding (BD-130). The split
-      // is geometric (through-waypoints emit no legs).
-      let judgedDurationS = r.route.duration_s;
-      if (
-        (DRIVE_FIRST_ON && r.candidate.id.startsWith('drive-')) ||
-        (RIBBON_CHAINS_ON && r.candidate.id.startsWith('rchain-'))
-      ) {
-        const sp = splitLoopLegs(r.route.geometry, r.candidate.waypoints);
-        if (sp) judgedDurationS = (r.route.duration_s * sp.drivePct) / 100;
-      }
+      // BD-146: the ask means the TRIP the driver sits through — EVERY
+      // candidate is judged on its real door-to-door duration. (R29 judged
+      // `drive-`/`rchain-` candidates on the drive leg alone; that ruler is
+      // how "1 hour" shipped 106-minute trips, and the owner killed it.)
+      const judgedDurationS = r.route.duration_s;
       // round 14: an on-target route outranks a shorter one of the same
       // quality tier (2nd lexicographic tier, below quality)
       const durOff =
@@ -1643,7 +1861,14 @@ export async function runPlanner(
       // R18-2 never-empty: before any dead end, present the least-dirty
       // closed/routable candidate with honest disclosure
       if (presentDirtyBest()) {
-        step(emit, 'self_correct', 'completed', 'ladder exhausted — least-flawed fallback');
+        step(
+          emit,
+          'self_correct',
+          'completed',
+          heldAlternate !== null
+            ? 'ladder exhausted — held measured alternate served'
+            : 'ladder exhausted — least-flawed fallback',
+        );
         return result;
       }
       step(emit, 'self_correct', 'completed', 'ladder exhausted — redirect');
@@ -1793,6 +2018,25 @@ export async function runPlanner(
           'this is more of an out-and-back than a loop — the roads here don’t form a tighter circuit',
         );
       }
+    }
+  }
+  // BD-163: the single judge closure guards this exit too (see its docstring).
+  applyFinalStructuralJudge();
+  // BD-169: held measured alternate vs the legacy attempt — legacy wins only
+  // with a clean, unrelaxed, exact-band loop; anything else (including a
+  // final-judge reject just above) serves the held alternate.
+  if (heldAlternate !== null) {
+    const target = constraints.duration_target_s;
+    const legacyWins =
+      result.status === 'ok' &&
+      result.route !== null &&
+      params.relaxedConstraints.length === 0 &&
+      target !== null &&
+      Math.abs(result.route.duration_s - target) / target <= TRIP_EXACT_BAND;
+    if (!legacyWins) {
+      restoreHeld();
+      emit({ type: 'done', status: 'ok' });
+      return result;
     }
   }
   emit({

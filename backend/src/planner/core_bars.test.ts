@@ -73,6 +73,11 @@ describe('judgeCore (R25-U13 shared rulebook)', () => {
     expect(v.failures).toContain('untraced');
   });
 
+  it('BD-165: a self-crossed ring can never enter the index', () => {
+    expect(judgeCore({ ...CLEAN_LOOP, selfCrossings: 1 }).failures).toContain('self_crossing');
+    expect(judgeCore({ ...CLEAN_LOOP, selfCrossings: 0 }).pass).toBe(true);
+  });
+
   it('ribbons gate on their own shape bars, never loopiness', () => {
     const doubled = judgeCore({ ...CLEAN_RIBBON, corridorDoubling: 0.3 });
     expect(doubled.failures).toEqual(['corridor_doubling']);

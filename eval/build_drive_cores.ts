@@ -36,11 +36,13 @@ import { Client } from 'pg';
 import { generateLoopCandidates, traversalSpanOf } from '../backend/src/planner/candidates';
 import { mergeRoadPieces } from '../backend/src/planner/chain';
 import {
+  judgeCoreLayered,
   CORE_RIBBON_MIN_LENGTH_M,
   judgeCore,
   type CoreMetrics,
 } from '../backend/src/planner/core_bars';
 import { BACKROADS } from '../backend/src/planner/costing';
+import { selfIntersections, summarizeCrossings } from '../backend/src/planner/crossings';
 import { measureCurvature } from '../backend/src/planner/curvature';
 import { assembleLoopWithRepair } from '../backend/src/planner/loop';
 import {
@@ -59,6 +61,8 @@ import { routeThrough } from '../backend/src/valhalla/route';
 import { traceRoadClasses } from '../backend/src/valhalla/trace';
 import { haversineMeters } from '../data/curvature/geometry';
 import type { LatLng, LineString, RouteThroughOutput } from '../shared/src/types';
+
+import { buildManifest, manifestLine } from './manifest';
 
 const DB_URL =
   process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
@@ -101,10 +105,21 @@ const LOOP_CANDIDATES_PER_ORIGIN = Number(process.env['LOOP_CANDIDATES_PER_ORIGI
  * The index was 1 030 loop cores to 24 ribbons because this was 4 against 48.
  */
 const RIBBONS_PER_CELL = Number(process.env['RIBBONS_PER_CELL'] ?? 4);
+/** BD-167 (R36-U12b): layered judging — structural absolute, floors
+ *  catastrophic-only, quality RANKS. Rows also passing the strict bars keep
+ *  bar_profile='strict' (they outrank layered rows at serve time). */
+const SWEEP_LAYERED = (process.env['SWEEP_LAYERED'] ?? 'off') !== 'off';
 /** Dedup: a kept core may share at most this fraction of another's edges. */
 const CORE_DEDUP_OVERLAP_MAX = 0.5;
 /** Loop core duration target (s) — a 60-90 min DRIVE core. */
-const LOOP_CORE_DURATION_S = 5400;
+/** r34 (BD-151): loop cores are generated at SEVERAL sizes. r33 generated at
+ *  ONE target (5400 s), so 60-min and 2-h asks were served only by assembly's
+ *  accidental over/undershoots — the measured fit histogram was an artifact of
+ *  repair variance, not design. */
+const LOOP_CORE_DURATIONS_S = (process.env['LOOP_CORE_DURATIONS_S'] ?? '5400')
+  .split(',')
+  .map((x) => Number(x.trim()))
+  .filter((x) => Number.isFinite(x) && x > 0);
 
 interface CoreRow {
   id: string;
@@ -112,7 +127,7 @@ interface CoreRow {
   name: string;
   cell: string;
   generator_version: string;
-  bar_profile: 'strict';
+  bar_profile: 'strict' | 'cell_relaxed';
   geometry: LineString;
   geom_simplified: LineString;
   bbox: [number, number, number, number]; // minLng,minLat,maxLng,maxLat
@@ -222,6 +237,13 @@ async function measureRoute(
       endpointSeparationM:
         kind === 'ribbon' ? haversineMeters([entry.lng, entry.lat], [last[0], last[1]]) : null,
       selfOverlap: kind === 'ribbon' ? selfOverlapRatio(route.geometry) : null,
+      // BD-165: bowties can never enter the index again (71 stored r34 rings
+      // were self-crossed; nothing measured it — a figure-eight shares ~zero
+      // overlap cells with itself).
+      selfCrossings: (() => {
+        const x = summarizeCrossings(selfIntersections(route.geometry, undefined, 0, 500));
+        return x.knots + x.pierces;
+      })(),
     },
   };
 }
@@ -311,7 +333,10 @@ async function main(): Promise<void> {
      *  artifact that matches no single configuration. */
     stamp: string;
   }
-  const STAMP = `${GENERATOR_VERSION}|${centres.length}|${CELL_SIZE_M}|${CELL_SCOPE_HALF_M}|${CELL_KEEP_MAX}`;
+  const manifest = await buildManifest({ suite: `sweep-${GENERATOR_VERSION}` });
+  console.log(manifestLine(manifest));
+  writeFileSync(`${OUT}.manifest.json`, JSON.stringify(manifest, null, 1));
+  const STAMP = `${GENERATOR_VERSION}|${centres.length}|${CELL_SIZE_M}|${CELL_SCOPE_HALF_M}|${CELL_KEEP_MAX}|${LOOP_CORE_DURATIONS_S.join('/')}`;
   const resumed: CoreRow[] = [];
   const doneCells = new Set<string>();
   // Every checkpoint record is by construction a LIVE cell: the two `continue`
@@ -460,11 +485,13 @@ async function main(): Promise<void> {
     const origins = merged.slice(0, LOOP_ORIGINS_PER_CELL).map((m) => traversalSpanOf(m)[0]);
     for (let oi = 0; oi < origins.length; oi++) {
       const origin = origins[oi]!;
-      const candidates = generateLoopCandidates(origin, retrieved.segments, [], {
-        durationS: LOOP_CORE_DURATION_S,
-        avgSpeedKmh: BACKROADS.sizingSpeedNoHighwayKmh,
-        idPrefix: `${cellId}-o${oi}-`,
-      }).slice(0, LOOP_CANDIDATES_PER_ORIGIN);
+      const candidates = LOOP_CORE_DURATIONS_S.flatMap((durS, di) =>
+        generateLoopCandidates(origin, retrieved.segments, [], {
+          durationS: durS,
+          avgSpeedKmh: BACKROADS.sizingSpeedNoHighwayKmh,
+          idPrefix: `${cellId}-o${oi}-d${di}-`,
+        }).slice(0, LOOP_CANDIDATES_PER_ORIGIN),
+      );
       for (const cand of candidates) {
         try {
           const a = await assembleLoopWithRepair(
@@ -479,9 +506,18 @@ async function main(): Promise<void> {
             continue;
           }
           const { metrics } = await measureRoute(a.route, 'loop', origin);
-          const verdict = judgeCore(metrics);
-          if (!verdict.pass) {
-            verdict.failures.forEach(bump);
+          const strict = judgeCore(metrics);
+          let profile: 'strict' | 'cell_relaxed' = 'strict';
+          if (SWEEP_LAYERED) {
+            const layered = judgeCoreLayered(metrics);
+            if (layered.structural.length > 0 || layered.floors.length > 0) {
+              [...layered.structural, ...layered.floors].forEach(bump);
+              continue;
+            }
+            // floors-clean; 'strict' only when the OLD bars also pass
+            profile = strict.pass ? 'strict' : 'cell_relaxed';
+          } else if (!strict.pass) {
+            strict.failures.forEach(bump);
             continue;
           }
           if (overlapsKept(a.route.geometry)) continue;
@@ -495,7 +531,7 @@ async function main(): Promise<void> {
               name: merged[0]?.name ?? cellId,
               cell: cellId,
               generator_version: GENERATOR_VERSION,
-              bar_profile: 'strict',
+              bar_profile: profile,
               geometry: a.route.geometry,
               geom_simplified: simplify(a.route.geometry, 10),
               bbox: bboxOf(a.route.geometry),

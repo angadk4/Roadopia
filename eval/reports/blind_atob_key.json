@@ -1,0 +1,22 @@
+{
+  "p01": {
+    "left": "A",
+    "fixture": "Shelburne\u2192Owen Sound|backroads drive"
+  },
+  "p02": {
+    "left": "B",
+    "fixture": "Newmarket\u2192Beaverton|backroads drive"
+  },
+  "p03": {
+    "left": "A",
+    "fixture": "Bolton\u2192Creemore|backroads drive"
+  },
+  "p04": {
+    "left": "A",
+    "fixture": "Ancaster\u2192Port Dover|backroads drive"
+  },
+  "p05": {
+    "left": "A",
+    "fixture": "Georgetown\u2192Elora|backroads drive"
+  }
+}

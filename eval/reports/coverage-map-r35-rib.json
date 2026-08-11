@@ -1,0 +1,8076 @@
+{
+  "version": "r35-rib",
+  "cellKm": 10,
+  "generatedAt": "2026-08-11T20:28:11.123Z",
+  "cells": [
+    {
+      "key": "788:1475",
+      "cls": "true_desert",
+      "materialSegs": 9,
+      "materialKm": 17,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "788:1476",
+      "cls": "weak_generation",
+      "materialSegs": 39,
+      "materialKm": 62,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "788:1477",
+      "cls": "weak_generation",
+      "materialSegs": 46,
+      "materialKm": 64,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "788:1478",
+      "cls": "weak_generation",
+      "materialSegs": 42,
+      "materialKm": 51,
+      "loops": 3,
+      "distinctNames": 1,
+      "strict": 3,
+      "dupRatio": 3,
+      "bands": {
+        "small": 0,
+        "mid": 2,
+        "big": 1
+      }
+    },
+    {
+      "key": "788:1479",
+      "cls": "true_desert",
+      "materialSegs": 13,
+      "materialKm": 37,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "788:1480",
+      "cls": "true_desert",
+      "materialSegs": 13,
+      "materialKm": 34,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "788:1481",
+      "cls": "weak_generation",
+      "materialSegs": 26,
+      "materialKm": 32,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "788:1482",
+      "cls": "weak_generation",
+      "materialSegs": 27,
+      "materialKm": 41,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "788:1483",
+      "cls": "weak_generation",
+      "materialSegs": 39,
+      "materialKm": 39,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1475",
+      "cls": "weak_generation",
+      "materialSegs": 32,
+      "materialKm": 56,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1476",
+      "cls": "weak_generation",
+      "materialSegs": 60,
+      "materialKm": 99,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1477",
+      "cls": "weak_generation",
+      "materialSegs": 90,
+      "materialKm": 129,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1478",
+      "cls": "weak_generation",
+      "materialSegs": 53,
+      "materialKm": 113,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "789:1479",
+      "cls": "weak_generation",
+      "materialSegs": 43,
+      "materialKm": 89,
+      "loops": 3,
+      "distinctNames": 1,
+      "strict": 2,
+      "dupRatio": 3,
+      "bands": {
+        "small": 2,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "789:1480",
+      "cls": "weak_generation",
+      "materialSegs": 33,
+      "materialKm": 73,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1481",
+      "cls": "weak_generation",
+      "materialSegs": 48,
+      "materialKm": 77,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 0,
+        "big": 1
+      }
+    },
+    {
+      "key": "789:1482",
+      "cls": "weak_generation",
+      "materialSegs": 68,
+      "materialKm": 59,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1483",
+      "cls": "weak_generation",
+      "materialSegs": 111,
+      "materialKm": 81,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1484",
+      "cls": "healthy",
+      "materialSegs": 119,
+      "materialKm": 64,
+      "loops": 5,
+      "distinctNames": 3,
+      "strict": 2,
+      "dupRatio": 1.7,
+      "bands": {
+        "small": 3,
+        "mid": 1,
+        "big": 1
+      }
+    },
+    {
+      "key": "789:1485",
+      "cls": "weak_generation",
+      "materialSegs": 68,
+      "materialKm": 62,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "789:1486",
+      "cls": "healthy",
+      "materialSegs": 98,
+      "materialKm": 42,
+      "loops": 3,
+      "distinctNames": 2,
+      "strict": 0,
+      "dupRatio": 1.5,
+      "bands": {
+        "small": 0,
+        "mid": 2,
+        "big": 1
+      }
+    },
+    {
+      "key": "789:1487",
+      "cls": "weak_generation",
+      "materialSegs": 62,
+      "materialKm": 48,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1488",
+      "cls": "weak_generation",
+      "materialSegs": 236,
+      "materialKm": 86,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1489",
+      "cls": "weak_generation",
+      "materialSegs": 76,
+      "materialKm": 54,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1490",
+      "cls": "weak_generation",
+      "materialSegs": 71,
+      "materialKm": 47,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1491",
+      "cls": "weak_generation",
+      "materialSegs": 40,
+      "materialKm": 49,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1492",
+      "cls": "weak_generation",
+      "materialSegs": 133,
+      "materialKm": 68,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "789:1493",
+      "cls": "true_desert",
+      "materialSegs": 17,
+      "materialKm": 7,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1475",
+      "cls": "true_desert",
+      "materialSegs": 20,
+      "materialKm": 67,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1476",
+      "cls": "weak_generation",
+      "materialSegs": 67,
+      "materialKm": 111,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1477",
+      "cls": "healthy",
+      "materialSegs": 56,
+      "materialKm": 94,
+      "loops": 5,
+      "distinctNames": 3,
+      "strict": 3,
+      "dupRatio": 1.7,
+      "bands": {
+        "small": 2,
+        "mid": 3,
+        "big": 0
+      }
+    },
+    {
+      "key": "790:1478",
+      "cls": "weak_generation",
+      "materialSegs": 60,
+      "materialKm": 116,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 0,
+        "big": 1
+      }
+    },
+    {
+      "key": "790:1479",
+      "cls": "weak_generation",
+      "materialSegs": 111,
+      "materialKm": 122,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1480",
+      "cls": "weak_generation",
+      "materialSegs": 216,
+      "materialKm": 119,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1481",
+      "cls": "weak_generation",
+      "materialSegs": 38,
+      "materialKm": 64,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1482",
+      "cls": "healthy",
+      "materialSegs": 33,
+      "materialKm": 63,
+      "loops": 5,
+      "distinctNames": 3,
+      "strict": 5,
+      "dupRatio": 1.7,
+      "bands": {
+        "small": 4,
+        "mid": 0,
+        "big": 1
+      }
+    },
+    {
+      "key": "790:1483",
+      "cls": "weak_generation",
+      "materialSegs": 28,
+      "materialKm": 70,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1484",
+      "cls": "weak_generation",
+      "materialSegs": 37,
+      "materialKm": 63,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1485",
+      "cls": "weak_generation",
+      "materialSegs": 42,
+      "materialKm": 93,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1486",
+      "cls": "weak_generation",
+      "materialSegs": 28,
+      "materialKm": 65,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1487",
+      "cls": "weak_generation",
+      "materialSegs": 63,
+      "materialKm": 75,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "790:1488",
+      "cls": "weak_generation",
+      "materialSegs": 83,
+      "materialKm": 93,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "790:1489",
+      "cls": "weak_generation",
+      "materialSegs": 59,
+      "materialKm": 88,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "790:1490",
+      "cls": "weak_generation",
+      "materialSegs": 46,
+      "materialKm": 96,
+      "loops": 4,
+      "distinctNames": 1,
+      "strict": 4,
+      "dupRatio": 4,
+      "bands": {
+        "small": 4,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "790:1491",
+      "cls": "weak_generation",
+      "materialSegs": 25,
+      "materialKm": 69,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1492",
+      "cls": "weak_generation",
+      "materialSegs": 30,
+      "materialKm": 43,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1493",
+      "cls": "weak_generation",
+      "materialSegs": 208,
+      "materialKm": 97,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "790:1494",
+      "cls": "weak_generation",
+      "materialSegs": 81,
+      "materialKm": 46,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "790:1495",
+      "cls": "true_desert",
+      "materialSegs": 23,
+      "materialKm": 13,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1475",
+      "cls": "true_desert",
+      "materialSegs": 10,
+      "materialKm": 14,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1476",
+      "cls": "weak_generation",
+      "materialSegs": 84,
+      "materialKm": 100,
+      "loops": 4,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 4,
+      "bands": {
+        "small": 3,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "791:1477",
+      "cls": "healthy",
+      "materialSegs": 53,
+      "materialKm": 110,
+      "loops": 2,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 1
+      }
+    },
+    {
+      "key": "791:1478",
+      "cls": "weak_generation",
+      "materialSegs": 67,
+      "materialKm": 102,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "791:1479",
+      "cls": "healthy",
+      "materialSegs": 139,
+      "materialKm": 124,
+      "loops": 3,
+      "distinctNames": 2,
+      "strict": 2,
+      "dupRatio": 1.5,
+      "bands": {
+        "small": 2,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "791:1480",
+      "cls": "weak_generation",
+      "materialSegs": 66,
+      "materialKm": 123,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1481",
+      "cls": "healthy",
+      "materialSegs": 33,
+      "materialKm": 105,
+      "loops": 2,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "791:1482",
+      "cls": "weak_generation",
+      "materialSegs": 48,
+      "materialKm": 66,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1483",
+      "cls": "healthy",
+      "materialSegs": 70,
+      "materialKm": 89,
+      "loops": 5,
+      "distinctNames": 2,
+      "strict": 5,
+      "dupRatio": 2.5,
+      "bands": {
+        "small": 3,
+        "mid": 1,
+        "big": 1
+      }
+    },
+    {
+      "key": "791:1484",
+      "cls": "weak_generation",
+      "materialSegs": 102,
+      "materialKm": 89,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1485",
+      "cls": "weak_generation",
+      "materialSegs": 67,
+      "materialKm": 75,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1486",
+      "cls": "weak_generation",
+      "materialSegs": 41,
+      "materialKm": 89,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1487",
+      "cls": "weak_generation",
+      "materialSegs": 121,
+      "materialKm": 86,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1488",
+      "cls": "weak_generation",
+      "materialSegs": 86,
+      "materialKm": 87,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "791:1489",
+      "cls": "weak_generation",
+      "materialSegs": 62,
+      "materialKm": 93,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1490",
+      "cls": "healthy",
+      "materialSegs": 35,
+      "materialKm": 74,
+      "loops": 2,
+      "distinctNames": 2,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "791:1491",
+      "cls": "healthy",
+      "materialSegs": 62,
+      "materialKm": 86,
+      "loops": 9,
+      "distinctNames": 2,
+      "strict": 3,
+      "dupRatio": 4.5,
+      "bands": {
+        "small": 2,
+        "mid": 5,
+        "big": 2
+      }
+    },
+    {
+      "key": "791:1492",
+      "cls": "weak_generation",
+      "materialSegs": 30,
+      "materialKm": 54,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1493",
+      "cls": "weak_generation",
+      "materialSegs": 43,
+      "materialKm": 74,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1494",
+      "cls": "weak_generation",
+      "materialSegs": 56,
+      "materialKm": 69,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1495",
+      "cls": "weak_generation",
+      "materialSegs": 62,
+      "materialKm": 75,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "791:1496",
+      "cls": "weak_generation",
+      "materialSegs": 39,
+      "materialKm": 22,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1476",
+      "cls": "weak_generation",
+      "materialSegs": 29,
+      "materialKm": 59,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1477",
+      "cls": "weak_generation",
+      "materialSegs": 53,
+      "materialKm": 96,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1478",
+      "cls": "weak_generation",
+      "materialSegs": 63,
+      "materialKm": 109,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1479",
+      "cls": "weak_generation",
+      "materialSegs": 256,
+      "materialKm": 175,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "792:1480",
+      "cls": "weak_generation",
+      "materialSegs": 712,
+      "materialKm": 325,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "792:1481",
+      "cls": "weak_generation",
+      "materialSegs": 86,
+      "materialKm": 128,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1482",
+      "cls": "weak_generation",
+      "materialSegs": 84,
+      "materialKm": 114,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1483",
+      "cls": "weak_generation",
+      "materialSegs": 38,
+      "materialKm": 72,
+      "loops": 3,
+      "distinctNames": 1,
+      "strict": 2,
+      "dupRatio": 3,
+      "bands": {
+        "small": 0,
+        "mid": 2,
+        "big": 1
+      }
+    },
+    {
+      "key": "792:1484",
+      "cls": "weak_generation",
+      "materialSegs": 33,
+      "materialKm": 80,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 2,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 1
+      }
+    },
+    {
+      "key": "792:1485",
+      "cls": "weak_generation",
+      "materialSegs": 32,
+      "materialKm": 87,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1486",
+      "cls": "weak_generation",
+      "materialSegs": 107,
+      "materialKm": 100,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1487",
+      "cls": "weak_generation",
+      "materialSegs": 26,
+      "materialKm": 49,
+      "loops": 3,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 3,
+      "bands": {
+        "small": 3,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "792:1488",
+      "cls": "weak_generation",
+      "materialSegs": 32,
+      "materialKm": 58,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1489",
+      "cls": "weak_generation",
+      "materialSegs": 51,
+      "materialKm": 88,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1490",
+      "cls": "weak_generation",
+      "materialSegs": 115,
+      "materialKm": 105,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1491",
+      "cls": "healthy",
+      "materialSegs": 39,
+      "materialKm": 75,
+      "loops": 9,
+      "distinctNames": 2,
+      "strict": 5,
+      "dupRatio": 4.5,
+      "bands": {
+        "small": 5,
+        "mid": 3,
+        "big": 1
+      }
+    },
+    {
+      "key": "792:1492",
+      "cls": "weak_generation",
+      "materialSegs": 39,
+      "materialKm": 52,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1493",
+      "cls": "true_desert",
+      "materialSegs": 21,
+      "materialKm": 44,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1494",
+      "cls": "weak_generation",
+      "materialSegs": 33,
+      "materialKm": 57,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1495",
+      "cls": "weak_generation",
+      "materialSegs": 42,
+      "materialKm": 62,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1496",
+      "cls": "weak_generation",
+      "materialSegs": 306,
+      "materialKm": 139,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1497",
+      "cls": "weak_generation",
+      "materialSegs": 163,
+      "materialKm": 82,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1498",
+      "cls": "true_desert",
+      "materialSegs": 1,
+      "materialKm": 0,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1500",
+      "cls": "true_desert",
+      "materialSegs": 7,
+      "materialKm": 2,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1501",
+      "cls": "weak_generation",
+      "materialSegs": 62,
+      "materialKm": 39,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "792:1502",
+      "cls": "true_desert",
+      "materialSegs": 10,
+      "materialKm": 11,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1476",
+      "cls": "healthy",
+      "materialSegs": 77,
+      "materialKm": 35,
+      "loops": 3,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 1.5,
+      "bands": {
+        "small": 2,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "793:1477",
+      "cls": "weak_generation",
+      "materialSegs": 184,
+      "materialKm": 141,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1478",
+      "cls": "weak_generation",
+      "materialSegs": 271,
+      "materialKm": 171,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1479",
+      "cls": "weak_generation",
+      "materialSegs": 572,
+      "materialKm": 277,
+      "loops": 5,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 5,
+      "bands": {
+        "small": 2,
+        "mid": 2,
+        "big": 1
+      }
+    },
+    {
+      "key": "793:1480",
+      "cls": "weak_generation",
+      "materialSegs": 1811,
+      "materialKm": 695,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "793:1481",
+      "cls": "weak_generation",
+      "materialSegs": 192,
+      "materialKm": 131,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "793:1482",
+      "cls": "weak_generation",
+      "materialSegs": 43,
+      "materialKm": 101,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1483",
+      "cls": "weak_generation",
+      "materialSegs": 26,
+      "materialKm": 84,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1484",
+      "cls": "healthy",
+      "materialSegs": 43,
+      "materialKm": 85,
+      "loops": 8,
+      "distinctNames": 2,
+      "strict": 3,
+      "dupRatio": 4,
+      "bands": {
+        "small": 2,
+        "mid": 3,
+        "big": 3
+      }
+    },
+    {
+      "key": "793:1485",
+      "cls": "weak_generation",
+      "materialSegs": 104,
+      "materialKm": 101,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1486",
+      "cls": "weak_generation",
+      "materialSegs": 42,
+      "materialKm": 75,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1487",
+      "cls": "weak_generation",
+      "materialSegs": 30,
+      "materialKm": 63,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1488",
+      "cls": "weak_generation",
+      "materialSegs": 71,
+      "materialKm": 70,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "793:1489",
+      "cls": "weak_generation",
+      "materialSegs": 45,
+      "materialKm": 81,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "793:1490",
+      "cls": "weak_generation",
+      "materialSegs": 73,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1491",
+      "cls": "weak_generation",
+      "materialSegs": 72,
+      "materialKm": 76,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "793:1492",
+      "cls": "weak_generation",
+      "materialSegs": 38,
+      "materialKm": 46,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1493",
+      "cls": "weak_generation",
+      "materialSegs": 36,
+      "materialKm": 55,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1494",
+      "cls": "weak_generation",
+      "materialSegs": 47,
+      "materialKm": 60,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1495",
+      "cls": "weak_generation",
+      "materialSegs": 73,
+      "materialKm": 56,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1496",
+      "cls": "weak_generation",
+      "materialSegs": 31,
+      "materialKm": 52,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1497",
+      "cls": "weak_generation",
+      "materialSegs": 66,
+      "materialKm": 57,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1498",
+      "cls": "weak_generation",
+      "materialSegs": 168,
+      "materialKm": 75,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1499",
+      "cls": "weak_generation",
+      "materialSegs": 71,
+      "materialKm": 50,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1500",
+      "cls": "weak_generation",
+      "materialSegs": 96,
+      "materialKm": 71,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1501",
+      "cls": "true_desert",
+      "materialSegs": 20,
+      "materialKm": 39,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "793:1502",
+      "cls": "true_desert",
+      "materialSegs": 10,
+      "materialKm": 18,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1476",
+      "cls": "true_desert",
+      "materialSegs": 16,
+      "materialKm": 23,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1477",
+      "cls": "weak_generation",
+      "materialSegs": 223,
+      "materialKm": 160,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1478",
+      "cls": "weak_generation",
+      "materialSegs": 216,
+      "materialKm": 127,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1479",
+      "cls": "weak_generation",
+      "materialSegs": 85,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1480",
+      "cls": "weak_generation",
+      "materialSegs": 427,
+      "materialKm": 225,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1481",
+      "cls": "weak_generation",
+      "materialSegs": 72,
+      "materialKm": 100,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1482",
+      "cls": "true_desert",
+      "materialSegs": 23,
+      "materialKm": 112,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1483",
+      "cls": "weak_generation",
+      "materialSegs": 192,
+      "materialKm": 128,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 2,
+      "bands": {
+        "small": 0,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "794:1484",
+      "cls": "weak_generation",
+      "materialSegs": 49,
+      "materialKm": 96,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1485",
+      "cls": "healthy",
+      "materialSegs": 49,
+      "materialKm": 88,
+      "loops": 8,
+      "distinctNames": 2,
+      "strict": 5,
+      "dupRatio": 4,
+      "bands": {
+        "small": 2,
+        "mid": 6,
+        "big": 0
+      }
+    },
+    {
+      "key": "794:1486",
+      "cls": "weak_generation",
+      "materialSegs": 34,
+      "materialKm": 69,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1487",
+      "cls": "weak_generation",
+      "materialSegs": 46,
+      "materialKm": 57,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1488",
+      "cls": "weak_generation",
+      "materialSegs": 29,
+      "materialKm": 45,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "794:1489",
+      "cls": "weak_generation",
+      "materialSegs": 67,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1490",
+      "cls": "weak_generation",
+      "materialSegs": 87,
+      "materialKm": 96,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1491",
+      "cls": "healthy",
+      "materialSegs": 62,
+      "materialKm": 92,
+      "loops": 6,
+      "distinctNames": 3,
+      "strict": 2,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 4,
+        "big": 1
+      }
+    },
+    {
+      "key": "794:1492",
+      "cls": "weak_generation",
+      "materialSegs": 101,
+      "materialKm": 90,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1493",
+      "cls": "weak_generation",
+      "materialSegs": 147,
+      "materialKm": 82,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1494",
+      "cls": "weak_generation",
+      "materialSegs": 43,
+      "materialKm": 37,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1495",
+      "cls": "weak_generation",
+      "materialSegs": 37,
+      "materialKm": 34,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1496",
+      "cls": "weak_generation",
+      "materialSegs": 31,
+      "materialKm": 37,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1497",
+      "cls": "weak_generation",
+      "materialSegs": 48,
+      "materialKm": 56,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1498",
+      "cls": "weak_generation",
+      "materialSegs": 46,
+      "materialKm": 44,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1499",
+      "cls": "weak_generation",
+      "materialSegs": 53,
+      "materialKm": 44,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1500",
+      "cls": "weak_generation",
+      "materialSegs": 65,
+      "materialKm": 56,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1501",
+      "cls": "weak_generation",
+      "materialSegs": 46,
+      "materialKm": 57,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "794:1502",
+      "cls": "true_desert",
+      "materialSegs": 10,
+      "materialKm": 10,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1476",
+      "cls": "weak_generation",
+      "materialSegs": 32,
+      "materialKm": 20,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1477",
+      "cls": "healthy",
+      "materialSegs": 67,
+      "materialKm": 96,
+      "loops": 6,
+      "distinctNames": 2,
+      "strict": 2,
+      "dupRatio": 3,
+      "bands": {
+        "small": 3,
+        "mid": 3,
+        "big": 0
+      }
+    },
+    {
+      "key": "795:1478",
+      "cls": "weak_generation",
+      "materialSegs": 98,
+      "materialKm": 116,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 2,
+      "bands": {
+        "small": 2,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "795:1479",
+      "cls": "weak_generation",
+      "materialSegs": 35,
+      "materialKm": 82,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1480",
+      "cls": "weak_generation",
+      "materialSegs": 101,
+      "materialKm": 118,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "795:1481",
+      "cls": "weak_generation",
+      "materialSegs": 97,
+      "materialKm": 108,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1482",
+      "cls": "weak_generation",
+      "materialSegs": 60,
+      "materialKm": 110,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1483",
+      "cls": "healthy",
+      "materialSegs": 64,
+      "materialKm": 95,
+      "loops": 6,
+      "distinctNames": 2,
+      "strict": 4,
+      "dupRatio": 3,
+      "bands": {
+        "small": 3,
+        "mid": 1,
+        "big": 2
+      }
+    },
+    {
+      "key": "795:1484",
+      "cls": "weak_generation",
+      "materialSegs": 585,
+      "materialKm": 242,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1485",
+      "cls": "weak_generation",
+      "materialSegs": 37,
+      "materialKm": 101,
+      "loops": 4,
+      "distinctNames": 1,
+      "strict": 3,
+      "dupRatio": 4,
+      "bands": {
+        "small": 4,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "795:1486",
+      "cls": "weak_generation",
+      "materialSegs": 51,
+      "materialKm": 87,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1487",
+      "cls": "weak_generation",
+      "materialSegs": 53,
+      "materialKm": 67,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1488",
+      "cls": "weak_generation",
+      "materialSegs": 189,
+      "materialKm": 123,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1489",
+      "cls": "weak_generation",
+      "materialSegs": 51,
+      "materialKm": 92,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1490",
+      "cls": "healthy",
+      "materialSegs": 66,
+      "materialKm": 81,
+      "loops": 3,
+      "distinctNames": 2,
+      "strict": 0,
+      "dupRatio": 1.5,
+      "bands": {
+        "small": 1,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "795:1491",
+      "cls": "healthy",
+      "materialSegs": 72,
+      "materialKm": 86,
+      "loops": 3,
+      "distinctNames": 2,
+      "strict": 3,
+      "dupRatio": 1.5,
+      "bands": {
+        "small": 3,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "795:1492",
+      "cls": "weak_generation",
+      "materialSegs": 64,
+      "materialKm": 62,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1493",
+      "cls": "weak_generation",
+      "materialSegs": 181,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1494",
+      "cls": "weak_generation",
+      "materialSegs": 50,
+      "materialKm": 68,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1495",
+      "cls": "weak_generation",
+      "materialSegs": 29,
+      "materialKm": 45,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1496",
+      "cls": "weak_generation",
+      "materialSegs": 40,
+      "materialKm": 60,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1497",
+      "cls": "weak_generation",
+      "materialSegs": 157,
+      "materialKm": 74,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1498",
+      "cls": "weak_generation",
+      "materialSegs": 174,
+      "materialKm": 87,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1499",
+      "cls": "weak_generation",
+      "materialSegs": 50,
+      "materialKm": 51,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1500",
+      "cls": "weak_generation",
+      "materialSegs": 43,
+      "materialKm": 47,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1501",
+      "cls": "true_desert",
+      "materialSegs": 18,
+      "materialKm": 17,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "795:1502",
+      "cls": "true_desert",
+      "materialSegs": 11,
+      "materialKm": 10,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1476",
+      "cls": "weak_generation",
+      "materialSegs": 30,
+      "materialKm": 24,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1477",
+      "cls": "weak_generation",
+      "materialSegs": 48,
+      "materialKm": 79,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "796:1478",
+      "cls": "weak_generation",
+      "materialSegs": 61,
+      "materialKm": 99,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1479",
+      "cls": "healthy",
+      "materialSegs": 35,
+      "materialKm": 87,
+      "loops": 4,
+      "distinctNames": 2,
+      "strict": 2,
+      "dupRatio": 2,
+      "bands": {
+        "small": 2,
+        "mid": 1,
+        "big": 1
+      }
+    },
+    {
+      "key": "796:1480",
+      "cls": "weak_generation",
+      "materialSegs": 162,
+      "materialKm": 130,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1481",
+      "cls": "weak_generation",
+      "materialSegs": 137,
+      "materialKm": 144,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1482",
+      "cls": "weak_generation",
+      "materialSegs": 72,
+      "materialKm": 109,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1483",
+      "cls": "weak_generation",
+      "materialSegs": 61,
+      "materialKm": 113,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1484",
+      "cls": "weak_generation",
+      "materialSegs": 116,
+      "materialKm": 121,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1485",
+      "cls": "weak_generation",
+      "materialSegs": 43,
+      "materialKm": 96,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1486",
+      "cls": "weak_generation",
+      "materialSegs": 123,
+      "materialKm": 99,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1487",
+      "cls": "weak_generation",
+      "materialSegs": 43,
+      "materialKm": 59,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1488",
+      "cls": "weak_generation",
+      "materialSegs": 31,
+      "materialKm": 67,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1489",
+      "cls": "weak_generation",
+      "materialSegs": 76,
+      "materialKm": 103,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1490",
+      "cls": "weak_generation",
+      "materialSegs": 92,
+      "materialKm": 91,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1491",
+      "cls": "weak_generation",
+      "materialSegs": 82,
+      "materialKm": 86,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1492",
+      "cls": "weak_generation",
+      "materialSegs": 67,
+      "materialKm": 76,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1493",
+      "cls": "weak_generation",
+      "materialSegs": 136,
+      "materialKm": 96,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1494",
+      "cls": "weak_generation",
+      "materialSegs": 62,
+      "materialKm": 75,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1495",
+      "cls": "weak_generation",
+      "materialSegs": 66,
+      "materialKm": 78,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1496",
+      "cls": "weak_generation",
+      "materialSegs": 66,
+      "materialKm": 77,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1497",
+      "cls": "weak_generation",
+      "materialSegs": 29,
+      "materialKm": 43,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1498",
+      "cls": "weak_generation",
+      "materialSegs": 111,
+      "materialKm": 73,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1499",
+      "cls": "weak_generation",
+      "materialSegs": 59,
+      "materialKm": 35,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "796:1500",
+      "cls": "true_desert",
+      "materialSegs": 4,
+      "materialKm": 17,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1476",
+      "cls": "weak_generation",
+      "materialSegs": 76,
+      "materialKm": 56,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "797:1477",
+      "cls": "weak_generation",
+      "materialSegs": 72,
+      "materialKm": 115,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "797:1478",
+      "cls": "weak_generation",
+      "materialSegs": 181,
+      "materialKm": 140,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "797:1479",
+      "cls": "weak_generation",
+      "materialSegs": 227,
+      "materialKm": 157,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "797:1480",
+      "cls": "weak_generation",
+      "materialSegs": 48,
+      "materialKm": 93,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1481",
+      "cls": "weak_generation",
+      "materialSegs": 366,
+      "materialKm": 172,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1482",
+      "cls": "weak_generation",
+      "materialSegs": 504,
+      "materialKm": 243,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1483",
+      "cls": "weak_generation",
+      "materialSegs": 58,
+      "materialKm": 102,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "797:1484",
+      "cls": "weak_generation",
+      "materialSegs": 190,
+      "materialKm": 148,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1485",
+      "cls": "healthy",
+      "materialSegs": 124,
+      "materialKm": 113,
+      "loops": 5,
+      "distinctNames": 3,
+      "strict": 1,
+      "dupRatio": 1.7,
+      "bands": {
+        "small": 2,
+        "mid": 3,
+        "big": 0
+      }
+    },
+    {
+      "key": "797:1486",
+      "cls": "weak_generation",
+      "materialSegs": 55,
+      "materialKm": 84,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1487",
+      "cls": "weak_generation",
+      "materialSegs": 62,
+      "materialKm": 82,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1488",
+      "cls": "weak_generation",
+      "materialSegs": 73,
+      "materialKm": 64,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1489",
+      "cls": "weak_generation",
+      "materialSegs": 70,
+      "materialKm": 94,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1490",
+      "cls": "weak_generation",
+      "materialSegs": 40,
+      "materialKm": 75,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1491",
+      "cls": "weak_generation",
+      "materialSegs": 168,
+      "materialKm": 129,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "797:1492",
+      "cls": "weak_generation",
+      "materialSegs": 65,
+      "materialKm": 82,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1493",
+      "cls": "weak_generation",
+      "materialSegs": 69,
+      "materialKm": 98,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1494",
+      "cls": "weak_generation",
+      "materialSegs": 54,
+      "materialKm": 71,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1495",
+      "cls": "weak_generation",
+      "materialSegs": 44,
+      "materialKm": 66,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1496",
+      "cls": "weak_generation",
+      "materialSegs": 45,
+      "materialKm": 40,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1497",
+      "cls": "weak_generation",
+      "materialSegs": 61,
+      "materialKm": 64,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1498",
+      "cls": "weak_generation",
+      "materialSegs": 26,
+      "materialKm": 40,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "797:1499",
+      "cls": "weak_generation",
+      "materialSegs": 27,
+      "materialKm": 41,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "798:1475",
+      "cls": "true_desert",
+      "materialSegs": 7,
+      "materialKm": 13,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1476",
+      "cls": "weak_generation",
+      "materialSegs": 41,
+      "materialKm": 82,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "798:1477",
+      "cls": "weak_generation",
+      "materialSegs": 45,
+      "materialKm": 107,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1478",
+      "cls": "weak_generation",
+      "materialSegs": 73,
+      "materialKm": 115,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1479",
+      "cls": "healthy",
+      "materialSegs": 95,
+      "materialKm": 113,
+      "loops": 2,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 2,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "798:1480",
+      "cls": "weak_generation",
+      "materialSegs": 124,
+      "materialKm": 120,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1481",
+      "cls": "weak_generation",
+      "materialSegs": 61,
+      "materialKm": 120,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1482",
+      "cls": "weak_generation",
+      "materialSegs": 75,
+      "materialKm": 101,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "798:1483",
+      "cls": "weak_generation",
+      "materialSegs": 98,
+      "materialKm": 112,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1484",
+      "cls": "weak_generation",
+      "materialSegs": 96,
+      "materialKm": 122,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "798:1485",
+      "cls": "weak_generation",
+      "materialSegs": 493,
+      "materialKm": 219,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "798:1486",
+      "cls": "weak_generation",
+      "materialSegs": 217,
+      "materialKm": 134,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1487",
+      "cls": "weak_generation",
+      "materialSegs": 238,
+      "materialKm": 125,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1488",
+      "cls": "weak_generation",
+      "materialSegs": 100,
+      "materialKm": 100,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1489",
+      "cls": "weak_generation",
+      "materialSegs": 68,
+      "materialKm": 84,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1490",
+      "cls": "weak_generation",
+      "materialSegs": 62,
+      "materialKm": 78,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1491",
+      "cls": "weak_generation",
+      "materialSegs": 54,
+      "materialKm": 78,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1492",
+      "cls": "weak_generation",
+      "materialSegs": 40,
+      "materialKm": 60,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1493",
+      "cls": "weak_generation",
+      "materialSegs": 70,
+      "materialKm": 80,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1494",
+      "cls": "weak_generation",
+      "materialSegs": 68,
+      "materialKm": 82,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1495",
+      "cls": "weak_generation",
+      "materialSegs": 100,
+      "materialKm": 75,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1496",
+      "cls": "weak_generation",
+      "materialSegs": 30,
+      "materialKm": 62,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1497",
+      "cls": "weak_generation",
+      "materialSegs": 29,
+      "materialKm": 58,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1498",
+      "cls": "weak_generation",
+      "materialSegs": 169,
+      "materialKm": 69,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "798:1499",
+      "cls": "true_desert",
+      "materialSegs": 19,
+      "materialKm": 17,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1475",
+      "cls": "true_desert",
+      "materialSegs": 19,
+      "materialKm": 16,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1476",
+      "cls": "weak_generation",
+      "materialSegs": 90,
+      "materialKm": 92,
+      "loops": 5,
+      "distinctNames": 1,
+      "strict": 3,
+      "dupRatio": 5,
+      "bands": {
+        "small": 4,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "799:1477",
+      "cls": "healthy",
+      "materialSegs": 33,
+      "materialKm": 72,
+      "loops": 3,
+      "distinctNames": 2,
+      "strict": 2,
+      "dupRatio": 1.5,
+      "bands": {
+        "small": 1,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "799:1478",
+      "cls": "healthy",
+      "materialSegs": 159,
+      "materialKm": 122,
+      "loops": 8,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 4,
+      "bands": {
+        "small": 2,
+        "mid": 3,
+        "big": 3
+      }
+    },
+    {
+      "key": "799:1479",
+      "cls": "healthy",
+      "materialSegs": 65,
+      "materialKm": 111,
+      "loops": 6,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 3,
+      "bands": {
+        "small": 6,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "799:1480",
+      "cls": "weak_generation",
+      "materialSegs": 56,
+      "materialKm": 96,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1481",
+      "cls": "weak_generation",
+      "materialSegs": 91,
+      "materialKm": 113,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1482",
+      "cls": "weak_generation",
+      "materialSegs": 75,
+      "materialKm": 102,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1483",
+      "cls": "weak_generation",
+      "materialSegs": 144,
+      "materialKm": 125,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1484",
+      "cls": "weak_generation",
+      "materialSegs": 436,
+      "materialKm": 202,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1485",
+      "cls": "weak_generation",
+      "materialSegs": 2124,
+      "materialKm": 694,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1486",
+      "cls": "weak_generation",
+      "materialSegs": 518,
+      "materialKm": 232,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1487",
+      "cls": "weak_generation",
+      "materialSegs": 139,
+      "materialKm": 110,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "799:1488",
+      "cls": "weak_generation",
+      "materialSegs": 132,
+      "materialKm": 100,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1489",
+      "cls": "weak_generation",
+      "materialSegs": 94,
+      "materialKm": 93,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1490",
+      "cls": "weak_generation",
+      "materialSegs": 27,
+      "materialKm": 45,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1491",
+      "cls": "weak_generation",
+      "materialSegs": 28,
+      "materialKm": 49,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1492",
+      "cls": "weak_generation",
+      "materialSegs": 29,
+      "materialKm": 42,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1493",
+      "cls": "weak_generation",
+      "materialSegs": 48,
+      "materialKm": 56,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1494",
+      "cls": "weak_generation",
+      "materialSegs": 80,
+      "materialKm": 87,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1495",
+      "cls": "weak_generation",
+      "materialSegs": 122,
+      "materialKm": 85,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1496",
+      "cls": "weak_generation",
+      "materialSegs": 73,
+      "materialKm": 81,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1497",
+      "cls": "weak_generation",
+      "materialSegs": 142,
+      "materialKm": 86,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "799:1498",
+      "cls": "weak_generation",
+      "materialSegs": 66,
+      "materialKm": 33,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1475",
+      "cls": "weak_generation",
+      "materialSegs": 26,
+      "materialKm": 8,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1476",
+      "cls": "weak_generation",
+      "materialSegs": 35,
+      "materialKm": 19,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "800:1477",
+      "cls": "healthy",
+      "materialSegs": 88,
+      "materialKm": 103,
+      "loops": 6,
+      "distinctNames": 2,
+      "strict": 6,
+      "dupRatio": 3,
+      "bands": {
+        "small": 5,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "800:1478",
+      "cls": "weak_generation",
+      "materialSegs": 170,
+      "materialKm": 124,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1479",
+      "cls": "weak_generation",
+      "materialSegs": 44,
+      "materialKm": 101,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1480",
+      "cls": "weak_generation",
+      "materialSegs": 72,
+      "materialKm": 103,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1481",
+      "cls": "weak_generation",
+      "materialSegs": 142,
+      "materialKm": 127,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1482",
+      "cls": "weak_generation",
+      "materialSegs": 354,
+      "materialKm": 186,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1483",
+      "cls": "weak_generation",
+      "materialSegs": 103,
+      "materialKm": 116,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1484",
+      "cls": "weak_generation",
+      "materialSegs": 791,
+      "materialKm": 288,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "800:1485",
+      "cls": "weak_generation",
+      "materialSegs": 729,
+      "materialKm": 282,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1486",
+      "cls": "healthy",
+      "materialSegs": 147,
+      "materialKm": 117,
+      "loops": 3,
+      "distinctNames": 2,
+      "strict": 0,
+      "dupRatio": 1.5,
+      "bands": {
+        "small": 1,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "800:1487",
+      "cls": "weak_generation",
+      "materialSegs": 68,
+      "materialKm": 89,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1488",
+      "cls": "weak_generation",
+      "materialSegs": 459,
+      "materialKm": 189,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1489",
+      "cls": "weak_generation",
+      "materialSegs": 85,
+      "materialKm": 60,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1490",
+      "cls": "weak_generation",
+      "materialSegs": 82,
+      "materialKm": 73,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "800:1491",
+      "cls": "weak_generation",
+      "materialSegs": 64,
+      "materialKm": 82,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1492",
+      "cls": "weak_generation",
+      "materialSegs": 54,
+      "materialKm": 85,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1493",
+      "cls": "weak_generation",
+      "materialSegs": 100,
+      "materialKm": 76,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1494",
+      "cls": "weak_generation",
+      "materialSegs": 38,
+      "materialKm": 67,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1495",
+      "cls": "weak_generation",
+      "materialSegs": 64,
+      "materialKm": 88,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "800:1496",
+      "cls": "weak_generation",
+      "materialSegs": 55,
+      "materialKm": 72,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "800:1497",
+      "cls": "weak_generation",
+      "materialSegs": 203,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1477",
+      "cls": "weak_generation",
+      "materialSegs": 37,
+      "materialKm": 28,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1478",
+      "cls": "weak_generation",
+      "materialSegs": 350,
+      "materialKm": 176,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "801:1479",
+      "cls": "weak_generation",
+      "materialSegs": 88,
+      "materialKm": 85,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1480",
+      "cls": "weak_generation",
+      "materialSegs": 36,
+      "materialKm": 74,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1481",
+      "cls": "weak_generation",
+      "materialSegs": 267,
+      "materialKm": 159,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1482",
+      "cls": "weak_generation",
+      "materialSegs": 893,
+      "materialKm": 341,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "801:1483",
+      "cls": "healthy",
+      "materialSegs": 127,
+      "materialKm": 115,
+      "loops": 4,
+      "distinctNames": 4,
+      "strict": 2,
+      "dupRatio": 1,
+      "bands": {
+        "small": 2,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "801:1484",
+      "cls": "weak_generation",
+      "materialSegs": 495,
+      "materialKm": 233,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1485",
+      "cls": "weak_generation",
+      "materialSegs": 299,
+      "materialKm": 174,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1486",
+      "cls": "weak_generation",
+      "materialSegs": 1429,
+      "materialKm": 432,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1487",
+      "cls": "weak_generation",
+      "materialSegs": 144,
+      "materialKm": 106,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1488",
+      "cls": "healthy",
+      "materialSegs": 43,
+      "materialKm": 58,
+      "loops": 2,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 1
+      }
+    },
+    {
+      "key": "801:1489",
+      "cls": "weak_generation",
+      "materialSegs": 56,
+      "materialKm": 78,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1490",
+      "cls": "weak_generation",
+      "materialSegs": 87,
+      "materialKm": 108,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1491",
+      "cls": "healthy",
+      "materialSegs": 54,
+      "materialKm": 87,
+      "loops": 2,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "801:1492",
+      "cls": "weak_generation",
+      "materialSegs": 160,
+      "materialKm": 115,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1493",
+      "cls": "weak_generation",
+      "materialSegs": 74,
+      "materialKm": 94,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1494",
+      "cls": "weak_generation",
+      "materialSegs": 65,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1495",
+      "cls": "weak_generation",
+      "materialSegs": 70,
+      "materialKm": 75,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1496",
+      "cls": "weak_generation",
+      "materialSegs": 99,
+      "materialKm": 86,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1497",
+      "cls": "weak_generation",
+      "materialSegs": 477,
+      "materialKm": 154,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1500",
+      "cls": "true_desert",
+      "materialSegs": 20,
+      "materialKm": 12,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "801:1501",
+      "cls": "true_desert",
+      "materialSegs": 13,
+      "materialKm": 8,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1478",
+      "cls": "weak_generation",
+      "materialSegs": 74,
+      "materialKm": 77,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1479",
+      "cls": "weak_generation",
+      "materialSegs": 132,
+      "materialKm": 85,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1480",
+      "cls": "weak_generation",
+      "materialSegs": 54,
+      "materialKm": 68,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1481",
+      "cls": "weak_generation",
+      "materialSegs": 68,
+      "materialKm": 77,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1482",
+      "cls": "weak_generation",
+      "materialSegs": 90,
+      "materialKm": 97,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1483",
+      "cls": "weak_generation",
+      "materialSegs": 88,
+      "materialKm": 105,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1484",
+      "cls": "weak_generation",
+      "materialSegs": 67,
+      "materialKm": 83,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1485",
+      "cls": "weak_generation",
+      "materialSegs": 158,
+      "materialKm": 114,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1486",
+      "cls": "healthy",
+      "materialSegs": 128,
+      "materialKm": 110,
+      "loops": 6,
+      "distinctNames": 2,
+      "strict": 3,
+      "dupRatio": 3,
+      "bands": {
+        "small": 6,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "802:1487",
+      "cls": "weak_generation",
+      "materialSegs": 157,
+      "materialKm": 107,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "802:1488",
+      "cls": "healthy",
+      "materialSegs": 72,
+      "materialKm": 86,
+      "loops": 2,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 1
+      }
+    },
+    {
+      "key": "802:1489",
+      "cls": "weak_generation",
+      "materialSegs": 149,
+      "materialKm": 97,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1490",
+      "cls": "weak_generation",
+      "materialSegs": 534,
+      "materialKm": 196,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1491",
+      "cls": "weak_generation",
+      "materialSegs": 98,
+      "materialKm": 122,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1492",
+      "cls": "weak_generation",
+      "materialSegs": 81,
+      "materialKm": 86,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "802:1493",
+      "cls": "weak_generation",
+      "materialSegs": 77,
+      "materialKm": 93,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1494",
+      "cls": "weak_generation",
+      "materialSegs": 68,
+      "materialKm": 100,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1495",
+      "cls": "weak_generation",
+      "materialSegs": 108,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1496",
+      "cls": "weak_generation",
+      "materialSegs": 360,
+      "materialKm": 170,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1497",
+      "cls": "weak_generation",
+      "materialSegs": 76,
+      "materialKm": 21,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1499",
+      "cls": "weak_generation",
+      "materialSegs": 41,
+      "materialKm": 15,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "802:1500",
+      "cls": "weak_generation",
+      "materialSegs": 121,
+      "materialKm": 71,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "803:1478",
+      "cls": "weak_generation",
+      "materialSegs": 79,
+      "materialKm": 62,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "803:1479",
+      "cls": "weak_generation",
+      "materialSegs": 73,
+      "materialKm": 94,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "803:1480",
+      "cls": "weak_generation",
+      "materialSegs": 98,
+      "materialKm": 84,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "803:1481",
+      "cls": "healthy",
+      "materialSegs": 192,
+      "materialKm": 98,
+      "loops": 4,
+      "distinctNames": 2,
+      "strict": 2,
+      "dupRatio": 2,
+      "bands": {
+        "small": 3,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "803:1482",
+      "cls": "weak_generation",
+      "materialSegs": 333,
+      "materialKm": 171,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "803:1483",
+      "cls": "weak_generation",
+      "materialSegs": 598,
+      "materialKm": 268,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 2,
+      "bands": {
+        "small": 0,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "803:1484",
+      "cls": "weak_generation",
+      "materialSegs": 92,
+      "materialKm": 104,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "803:1485",
+      "cls": "weak_generation",
+      "materialSegs": 147,
+      "materialKm": 125,
+      "loops": 9,
+      "distinctNames": 1,
+      "strict": 3,
+      "dupRatio": 9,
+      "bands": {
+        "small": 6,
+        "mid": 2,
+        "big": 1
+      }
+    },
+    {
+      "key": "803:1486",
+      "cls": "weak_generation",
+      "materialSegs": 115,
+      "materialKm": 101,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "803:1487",
+      "cls": "weak_generation",
+      "materialSegs": 235,
+      "materialKm": 150,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "803:1488",
+      "cls": "weak_generation",
+      "materialSegs": 126,
+      "materialKm": 111,
+      "loops": 7,
+      "distinctNames": 1,
+      "strict": 5,
+      "dupRatio": 7,
+      "bands": {
+        "small": 5,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "803:1489",
+      "cls": "healthy",
+      "materialSegs": 173,
+      "materialKm": 119,
+      "loops": 3,
+      "distinctNames": 3,
+      "strict": 2,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 2,
+        "big": 1
+      }
+    },
+    {
+      "key": "803:1490",
+      "cls": "weak_generation",
+      "materialSegs": 145,
+      "materialKm": 110,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "803:1491",
+      "cls": "weak_generation",
+      "materialSegs": 113,
+      "materialKm": 105,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "803:1492",
+      "cls": "healthy",
+      "materialSegs": 75,
+      "materialKm": 96,
+      "loops": 4,
+      "distinctNames": 2,
+      "strict": 3,
+      "dupRatio": 2,
+      "bands": {
+        "small": 0,
+        "mid": 3,
+        "big": 1
+      }
+    },
+    {
+      "key": "803:1493",
+      "cls": "weak_generation",
+      "materialSegs": 123,
+      "materialKm": 111,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "803:1494",
+      "cls": "weak_generation",
+      "materialSegs": 85,
+      "materialKm": 79,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "803:1495",
+      "cls": "weak_generation",
+      "materialSegs": 122,
+      "materialKm": 116,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "803:1496",
+      "cls": "weak_generation",
+      "materialSegs": 92,
+      "materialKm": 101,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "803:1497",
+      "cls": "healthy",
+      "materialSegs": 362,
+      "materialKm": 136,
+      "loops": 3,
+      "distinctNames": 2,
+      "strict": 2,
+      "dupRatio": 1.5,
+      "bands": {
+        "small": 2,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "803:1498",
+      "cls": "healthy",
+      "materialSegs": 133,
+      "materialKm": 68,
+      "loops": 2,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 1
+      }
+    },
+    {
+      "key": "803:1499",
+      "cls": "healthy",
+      "materialSegs": 145,
+      "materialKm": 88,
+      "loops": 4,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 2,
+      "bands": {
+        "small": 4,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "803:1500",
+      "cls": "weak_generation",
+      "materialSegs": 185,
+      "materialKm": 113,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 2,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "803:1501",
+      "cls": "weak_generation",
+      "materialSegs": 28,
+      "materialKm": 16,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1478",
+      "cls": "weak_generation",
+      "materialSegs": 61,
+      "materialKm": 42,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1479",
+      "cls": "weak_generation",
+      "materialSegs": 116,
+      "materialKm": 104,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1480",
+      "cls": "weak_generation",
+      "materialSegs": 114,
+      "materialKm": 97,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "804:1481",
+      "cls": "weak_generation",
+      "materialSegs": 192,
+      "materialKm": 121,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "804:1482",
+      "cls": "weak_generation",
+      "materialSegs": 768,
+      "materialKm": 282,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1483",
+      "cls": "weak_generation",
+      "materialSegs": 1779,
+      "materialKm": 555,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1484",
+      "cls": "weak_generation",
+      "materialSegs": 870,
+      "materialKm": 347,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1485",
+      "cls": "weak_generation",
+      "materialSegs": 380,
+      "materialKm": 190,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1486",
+      "cls": "weak_generation",
+      "materialSegs": 1104,
+      "materialKm": 388,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1487",
+      "cls": "weak_generation",
+      "materialSegs": 557,
+      "materialKm": 220,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1488",
+      "cls": "weak_generation",
+      "materialSegs": 1069,
+      "materialKm": 368,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1489",
+      "cls": "weak_generation",
+      "materialSegs": 118,
+      "materialKm": 114,
+      "loops": 3,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 3,
+      "bands": {
+        "small": 2,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "804:1490",
+      "cls": "healthy",
+      "materialSegs": 192,
+      "materialKm": 133,
+      "loops": 2,
+      "distinctNames": 2,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "804:1491",
+      "cls": "weak_generation",
+      "materialSegs": 158,
+      "materialKm": 124,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1492",
+      "cls": "weak_generation",
+      "materialSegs": 89,
+      "materialKm": 113,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1493",
+      "cls": "weak_generation",
+      "materialSegs": 308,
+      "materialKm": 156,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1494",
+      "cls": "healthy",
+      "materialSegs": 193,
+      "materialKm": 107,
+      "loops": 3,
+      "distinctNames": 2,
+      "strict": 0,
+      "dupRatio": 1.5,
+      "bands": {
+        "small": 1,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "804:1495",
+      "cls": "weak_generation",
+      "materialSegs": 238,
+      "materialKm": 117,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1496",
+      "cls": "healthy",
+      "materialSegs": 63,
+      "materialKm": 65,
+      "loops": 4,
+      "distinctNames": 2,
+      "strict": 4,
+      "dupRatio": 2,
+      "bands": {
+        "small": 3,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "804:1497",
+      "cls": "weak_generation",
+      "materialSegs": 79,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1498",
+      "cls": "weak_generation",
+      "materialSegs": 144,
+      "materialKm": 109,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1499",
+      "cls": "weak_generation",
+      "materialSegs": 231,
+      "materialKm": 131,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1500",
+      "cls": "weak_generation",
+      "materialSegs": 305,
+      "materialKm": 101,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "804:1501",
+      "cls": "true_desert",
+      "materialSegs": 19,
+      "materialKm": 15,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1478",
+      "cls": "true_desert",
+      "materialSegs": 23,
+      "materialKm": 21,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1479",
+      "cls": "weak_generation",
+      "materialSegs": 82,
+      "materialKm": 100,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1480",
+      "cls": "weak_generation",
+      "materialSegs": 53,
+      "materialKm": 72,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1481",
+      "cls": "weak_generation",
+      "materialSegs": 195,
+      "materialKm": 110,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1482",
+      "cls": "weak_generation",
+      "materialSegs": 547,
+      "materialKm": 251,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "805:1483",
+      "cls": "weak_generation",
+      "materialSegs": 707,
+      "materialKm": 235,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1484",
+      "cls": "weak_generation",
+      "materialSegs": 830,
+      "materialKm": 307,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1485",
+      "cls": "healthy",
+      "materialSegs": 1682,
+      "materialKm": 578,
+      "loops": 3,
+      "distinctNames": 3,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 2,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "805:1486",
+      "cls": "weak_generation",
+      "materialSegs": 1289,
+      "materialKm": 421,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1487",
+      "cls": "weak_generation",
+      "materialSegs": 1765,
+      "materialKm": 521,
+      "loops": 3,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 3,
+      "bands": {
+        "small": 1,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "805:1488",
+      "cls": "weak_generation",
+      "materialSegs": 2169,
+      "materialKm": 681,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1489",
+      "cls": "weak_generation",
+      "materialSegs": 945,
+      "materialKm": 324,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1490",
+      "cls": "weak_generation",
+      "materialSegs": 425,
+      "materialKm": 203,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1491",
+      "cls": "weak_generation",
+      "materialSegs": 185,
+      "materialKm": 125,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1492",
+      "cls": "weak_generation",
+      "materialSegs": 149,
+      "materialKm": 117,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1493",
+      "cls": "weak_generation",
+      "materialSegs": 173,
+      "materialKm": 123,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1494",
+      "cls": "weak_generation",
+      "materialSegs": 111,
+      "materialKm": 114,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1495",
+      "cls": "weak_generation",
+      "materialSegs": 587,
+      "materialKm": 244,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "805:1496",
+      "cls": "weak_generation",
+      "materialSegs": 569,
+      "materialKm": 238,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1497",
+      "cls": "weak_generation",
+      "materialSegs": 72,
+      "materialKm": 83,
+      "loops": 4,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 4,
+      "bands": {
+        "small": 2,
+        "mid": 1,
+        "big": 1
+      }
+    },
+    {
+      "key": "805:1498",
+      "cls": "weak_generation",
+      "materialSegs": 98,
+      "materialKm": 98,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1499",
+      "cls": "weak_generation",
+      "materialSegs": 125,
+      "materialKm": 116,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1500",
+      "cls": "weak_generation",
+      "materialSegs": 212,
+      "materialKm": 97,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1501",
+      "cls": "weak_generation",
+      "materialSegs": 167,
+      "materialKm": 119,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "805:1502",
+      "cls": "true_desert",
+      "materialSegs": 15,
+      "materialKm": 14,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1478",
+      "cls": "weak_generation",
+      "materialSegs": 33,
+      "materialKm": 20,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1479",
+      "cls": "weak_generation",
+      "materialSegs": 229,
+      "materialKm": 117,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1480",
+      "cls": "weak_generation",
+      "materialSegs": 129,
+      "materialKm": 96,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1481",
+      "cls": "weak_generation",
+      "materialSegs": 156,
+      "materialKm": 92,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "806:1482",
+      "cls": "weak_generation",
+      "materialSegs": 328,
+      "materialKm": 190,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1483",
+      "cls": "weak_generation",
+      "materialSegs": 84,
+      "materialKm": 25,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1485",
+      "cls": "weak_generation",
+      "materialSegs": 382,
+      "materialKm": 128,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1486",
+      "cls": "weak_generation",
+      "materialSegs": 1443,
+      "materialKm": 422,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1487",
+      "cls": "weak_generation",
+      "materialSegs": 1868,
+      "materialKm": 590,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "806:1488",
+      "cls": "weak_generation",
+      "materialSegs": 1236,
+      "materialKm": 387,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1489",
+      "cls": "weak_generation",
+      "materialSegs": 1550,
+      "materialKm": 474,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1490",
+      "cls": "weak_generation",
+      "materialSegs": 390,
+      "materialKm": 171,
+      "loops": 4,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 4,
+      "bands": {
+        "small": 2,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "806:1491",
+      "cls": "weak_generation",
+      "materialSegs": 151,
+      "materialKm": 111,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1492",
+      "cls": "weak_generation",
+      "materialSegs": 335,
+      "materialKm": 196,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1493",
+      "cls": "healthy",
+      "materialSegs": 146,
+      "materialKm": 130,
+      "loops": 3,
+      "distinctNames": 3,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "806:1494",
+      "cls": "weak_generation",
+      "materialSegs": 112,
+      "materialKm": 144,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1495",
+      "cls": "weak_generation",
+      "materialSegs": 691,
+      "materialKm": 274,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1496",
+      "cls": "weak_generation",
+      "materialSegs": 301,
+      "materialKm": 133,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1497",
+      "cls": "healthy",
+      "materialSegs": 108,
+      "materialKm": 155,
+      "loops": 7,
+      "distinctNames": 2,
+      "strict": 6,
+      "dupRatio": 3.5,
+      "bands": {
+        "small": 5,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "806:1498",
+      "cls": "healthy",
+      "materialSegs": 102,
+      "materialKm": 115,
+      "loops": 3,
+      "distinctNames": 2,
+      "strict": 2,
+      "dupRatio": 1.5,
+      "bands": {
+        "small": 2,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "806:1499",
+      "cls": "weak_generation",
+      "materialSegs": 120,
+      "materialKm": 105,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "806:1500",
+      "cls": "weak_generation",
+      "materialSegs": 88,
+      "materialKm": 76,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "806:1501",
+      "cls": "weak_generation",
+      "materialSegs": 60,
+      "materialKm": 40,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1478",
+      "cls": "weak_generation",
+      "materialSegs": 25,
+      "materialKm": 16,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1479",
+      "cls": "weak_generation",
+      "materialSegs": 112,
+      "materialKm": 96,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1480",
+      "cls": "weak_generation",
+      "materialSegs": 153,
+      "materialKm": 94,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1481",
+      "cls": "weak_generation",
+      "materialSegs": 246,
+      "materialKm": 108,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1482",
+      "cls": "healthy",
+      "materialSegs": 443,
+      "materialKm": 213,
+      "loops": 5,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 2.5,
+      "bands": {
+        "small": 5,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "807:1486",
+      "cls": "true_desert",
+      "materialSegs": 7,
+      "materialKm": 3,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1487",
+      "cls": "weak_generation",
+      "materialSegs": 1751,
+      "materialKm": 486,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1488",
+      "cls": "weak_generation",
+      "materialSegs": 2333,
+      "materialKm": 667,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1489",
+      "cls": "weak_generation",
+      "materialSegs": 1738,
+      "materialKm": 550,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1490",
+      "cls": "weak_generation",
+      "materialSegs": 1374,
+      "materialKm": 437,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "807:1491",
+      "cls": "healthy",
+      "materialSegs": 996,
+      "materialKm": 341,
+      "loops": 2,
+      "distinctNames": 2,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 2,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "807:1492",
+      "cls": "weak_generation",
+      "materialSegs": 1054,
+      "materialKm": 347,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "807:1493",
+      "cls": "weak_generation",
+      "materialSegs": 226,
+      "materialKm": 108,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1494",
+      "cls": "weak_generation",
+      "materialSegs": 467,
+      "materialKm": 170,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1495",
+      "cls": "weak_generation",
+      "materialSegs": 303,
+      "materialKm": 90,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1496",
+      "cls": "weak_generation",
+      "materialSegs": 105,
+      "materialKm": 56,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1497",
+      "cls": "weak_generation",
+      "materialSegs": 80,
+      "materialKm": 104,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1498",
+      "cls": "weak_generation",
+      "materialSegs": 236,
+      "materialKm": 151,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1499",
+      "cls": "weak_generation",
+      "materialSegs": 43,
+      "materialKm": 101,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1500",
+      "cls": "true_desert",
+      "materialSegs": 16,
+      "materialKm": 22,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1501",
+      "cls": "weak_generation",
+      "materialSegs": 75,
+      "materialKm": 68,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "807:1502",
+      "cls": "weak_generation",
+      "materialSegs": 30,
+      "materialKm": 43,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1479",
+      "cls": "weak_generation",
+      "materialSegs": 204,
+      "materialKm": 86,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1480",
+      "cls": "weak_generation",
+      "materialSegs": 190,
+      "materialKm": 117,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1481",
+      "cls": "healthy",
+      "materialSegs": 195,
+      "materialKm": 146,
+      "loops": 4,
+      "distinctNames": 3,
+      "strict": 3,
+      "dupRatio": 1.3,
+      "bands": {
+        "small": 4,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "808:1482",
+      "cls": "weak_generation",
+      "materialSegs": 221,
+      "materialKm": 140,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1487",
+      "cls": "weak_generation",
+      "materialSegs": 1028,
+      "materialKm": 251,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1488",
+      "cls": "weak_generation",
+      "materialSegs": 2712,
+      "materialKm": 777,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1489",
+      "cls": "weak_generation",
+      "materialSegs": 2024,
+      "materialKm": 667,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1490",
+      "cls": "weak_generation",
+      "materialSegs": 1514,
+      "materialKm": 468,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1491",
+      "cls": "weak_generation",
+      "materialSegs": 374,
+      "materialKm": 166,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1492",
+      "cls": "weak_generation",
+      "materialSegs": 296,
+      "materialKm": 163,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1493",
+      "cls": "weak_generation",
+      "materialSegs": 118,
+      "materialKm": 112,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1494",
+      "cls": "weak_generation",
+      "materialSegs": 99,
+      "materialKm": 115,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1495",
+      "cls": "weak_generation",
+      "materialSegs": 231,
+      "materialKm": 80,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1496",
+      "cls": "true_desert",
+      "materialSegs": 1,
+      "materialKm": 2,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1497",
+      "cls": "true_desert",
+      "materialSegs": 11,
+      "materialKm": 17,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 2,
+      "bands": {
+        "small": 2,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "808:1498",
+      "cls": "weak_generation",
+      "materialSegs": 501,
+      "materialKm": 178,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1499",
+      "cls": "weak_generation",
+      "materialSegs": 215,
+      "materialKm": 114,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1500",
+      "cls": "weak_generation",
+      "materialSegs": 179,
+      "materialKm": 105,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1501",
+      "cls": "weak_generation",
+      "materialSegs": 199,
+      "materialKm": 119,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "808:1502",
+      "cls": "weak_generation",
+      "materialSegs": 100,
+      "materialKm": 61,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1479",
+      "cls": "weak_generation",
+      "materialSegs": 359,
+      "materialKm": 120,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1480",
+      "cls": "weak_generation",
+      "materialSegs": 962,
+      "materialKm": 270,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1481",
+      "cls": "weak_generation",
+      "materialSegs": 591,
+      "materialKm": 192,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 2,
+      "bands": {
+        "small": 2,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "809:1482",
+      "cls": "weak_generation",
+      "materialSegs": 1333,
+      "materialKm": 339,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1483",
+      "cls": "true_desert",
+      "materialSegs": 22,
+      "materialKm": 6,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1487",
+      "cls": "true_desert",
+      "materialSegs": 15,
+      "materialKm": 5,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1488",
+      "cls": "weak_generation",
+      "materialSegs": 1737,
+      "materialKm": 486,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1489",
+      "cls": "weak_generation",
+      "materialSegs": 1861,
+      "materialKm": 588,
+      "loops": 3,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 3,
+      "bands": {
+        "small": 3,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "809:1490",
+      "cls": "weak_generation",
+      "materialSegs": 1408,
+      "materialKm": 416,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1491",
+      "cls": "weak_generation",
+      "materialSegs": 532,
+      "materialKm": 208,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "809:1492",
+      "cls": "weak_generation",
+      "materialSegs": 227,
+      "materialKm": 137,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 0,
+        "mid": 0,
+        "big": 1
+      }
+    },
+    {
+      "key": "809:1493",
+      "cls": "weak_generation",
+      "materialSegs": 107,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1494",
+      "cls": "weak_generation",
+      "materialSegs": 90,
+      "materialKm": 89,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1495",
+      "cls": "weak_generation",
+      "materialSegs": 166,
+      "materialKm": 94,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "809:1496",
+      "cls": "true_desert",
+      "materialSegs": 7,
+      "materialKm": 8,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1497",
+      "cls": "weak_generation",
+      "materialSegs": 77,
+      "materialKm": 39,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1498",
+      "cls": "weak_generation",
+      "materialSegs": 57,
+      "materialKm": 88,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1499",
+      "cls": "weak_generation",
+      "materialSegs": 36,
+      "materialKm": 52,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1500",
+      "cls": "weak_generation",
+      "materialSegs": 62,
+      "materialKm": 58,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1501",
+      "cls": "weak_generation",
+      "materialSegs": 95,
+      "materialKm": 73,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "809:1502",
+      "cls": "true_desert",
+      "materialSegs": 13,
+      "materialKm": 16,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1478",
+      "cls": "true_desert",
+      "materialSegs": 20,
+      "materialKm": 7,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1479",
+      "cls": "weak_generation",
+      "materialSegs": 302,
+      "materialKm": 116,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1480",
+      "cls": "weak_generation",
+      "materialSegs": 211,
+      "materialKm": 130,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1481",
+      "cls": "healthy",
+      "materialSegs": 1094,
+      "materialKm": 298,
+      "loops": 3,
+      "distinctNames": 2,
+      "strict": 0,
+      "dupRatio": 1.5,
+      "bands": {
+        "small": 2,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "810:1482",
+      "cls": "weak_generation",
+      "materialSegs": 462,
+      "materialKm": 171,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1483",
+      "cls": "weak_generation",
+      "materialSegs": 304,
+      "materialKm": 85,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "810:1488",
+      "cls": "true_desert",
+      "materialSegs": 18,
+      "materialKm": 6,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1489",
+      "cls": "weak_generation",
+      "materialSegs": 1135,
+      "materialKm": 346,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "810:1490",
+      "cls": "weak_generation",
+      "materialSegs": 529,
+      "materialKm": 222,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1491",
+      "cls": "healthy",
+      "materialSegs": 100,
+      "materialKm": 109,
+      "loops": 5,
+      "distinctNames": 3,
+      "strict": 3,
+      "dupRatio": 1.7,
+      "bands": {
+        "small": 4,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "810:1492",
+      "cls": "weak_generation",
+      "materialSegs": 268,
+      "materialKm": 145,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1493",
+      "cls": "weak_generation",
+      "materialSegs": 91,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1494",
+      "cls": "weak_generation",
+      "materialSegs": 103,
+      "materialKm": 103,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "810:1495",
+      "cls": "weak_generation",
+      "materialSegs": 66,
+      "materialKm": 89,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1496",
+      "cls": "healthy",
+      "materialSegs": 137,
+      "materialKm": 91,
+      "loops": 2,
+      "distinctNames": 2,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 1
+      }
+    },
+    {
+      "key": "810:1497",
+      "cls": "weak_generation",
+      "materialSegs": 99,
+      "materialKm": 101,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1498",
+      "cls": "weak_generation",
+      "materialSegs": 44,
+      "materialKm": 70,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1499",
+      "cls": "weak_generation",
+      "materialSegs": 79,
+      "materialKm": 67,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1500",
+      "cls": "true_desert",
+      "materialSegs": 16,
+      "materialKm": 24,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1501",
+      "cls": "true_desert",
+      "materialSegs": 20,
+      "materialKm": 28,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "810:1502",
+      "cls": "true_desert",
+      "materialSegs": 8,
+      "materialKm": 9,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1479",
+      "cls": "weak_generation",
+      "materialSegs": 467,
+      "materialKm": 144,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "811:1480",
+      "cls": "weak_generation",
+      "materialSegs": 157,
+      "materialKm": 76,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1481",
+      "cls": "weak_generation",
+      "materialSegs": 93,
+      "materialKm": 38,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1482",
+      "cls": "weak_generation",
+      "materialSegs": 40,
+      "materialKm": 21,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "811:1483",
+      "cls": "true_desert",
+      "materialSegs": 7,
+      "materialKm": 3,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1489",
+      "cls": "weak_generation",
+      "materialSegs": 345,
+      "materialKm": 102,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "811:1490",
+      "cls": "weak_generation",
+      "materialSegs": 1570,
+      "materialKm": 458,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1491",
+      "cls": "weak_generation",
+      "materialSegs": 353,
+      "materialKm": 179,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1492",
+      "cls": "weak_generation",
+      "materialSegs": 227,
+      "materialKm": 133,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 2,
+      "bands": {
+        "small": 2,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "811:1493",
+      "cls": "weak_generation",
+      "materialSegs": 83,
+      "materialKm": 102,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1494",
+      "cls": "weak_generation",
+      "materialSegs": 48,
+      "materialKm": 92,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1495",
+      "cls": "weak_generation",
+      "materialSegs": 68,
+      "materialKm": 94,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1496",
+      "cls": "healthy",
+      "materialSegs": 51,
+      "materialKm": 90,
+      "loops": 4,
+      "distinctNames": 2,
+      "strict": 2,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 3,
+        "big": 0
+      }
+    },
+    {
+      "key": "811:1497",
+      "cls": "weak_generation",
+      "materialSegs": 60,
+      "materialKm": 93,
+      "loops": 4,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 4,
+      "bands": {
+        "small": 2,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "811:1498",
+      "cls": "weak_generation",
+      "materialSegs": 57,
+      "materialKm": 58,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1499",
+      "cls": "true_desert",
+      "materialSegs": 18,
+      "materialKm": 45,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1500",
+      "cls": "true_desert",
+      "materialSegs": 5,
+      "materialKm": 13,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1501",
+      "cls": "true_desert",
+      "materialSegs": 1,
+      "materialKm": 8,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "811:1502",
+      "cls": "true_desert",
+      "materialSegs": 1,
+      "materialKm": 2,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "812:1479",
+      "cls": "weak_generation",
+      "materialSegs": 156,
+      "materialKm": 40,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "812:1490",
+      "cls": "weak_generation",
+      "materialSegs": 1842,
+      "materialKm": 525,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "812:1491",
+      "cls": "healthy",
+      "materialSegs": 569,
+      "materialKm": 232,
+      "loops": 6,
+      "distinctNames": 2,
+      "strict": 4,
+      "dupRatio": 3,
+      "bands": {
+        "small": 4,
+        "mid": 2,
+        "big": 0
+      }
+    },
+    {
+      "key": "812:1492",
+      "cls": "weak_generation",
+      "materialSegs": 60,
+      "materialKm": 71,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "812:1493",
+      "cls": "weak_generation",
+      "materialSegs": 105,
+      "materialKm": 84,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "812:1494",
+      "cls": "weak_generation",
+      "materialSegs": 62,
+      "materialKm": 83,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "812:1495",
+      "cls": "weak_generation",
+      "materialSegs": 67,
+      "materialKm": 88,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "812:1496",
+      "cls": "weak_generation",
+      "materialSegs": 55,
+      "materialKm": 98,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "812:1497",
+      "cls": "weak_generation",
+      "materialSegs": 74,
+      "materialKm": 94,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "812:1498",
+      "cls": "weak_generation",
+      "materialSegs": 78,
+      "materialKm": 77,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "812:1499",
+      "cls": "weak_generation",
+      "materialSegs": 73,
+      "materialKm": 86,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "812:1500",
+      "cls": "weak_generation",
+      "materialSegs": 35,
+      "materialKm": 31,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "812:1501",
+      "cls": "true_desert",
+      "materialSegs": 4,
+      "materialKm": 2,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "813:1490",
+      "cls": "weak_generation",
+      "materialSegs": 680,
+      "materialKm": 232,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 2,
+      "dupRatio": 2,
+      "bands": {
+        "small": 1,
+        "mid": 1,
+        "big": 0
+      }
+    },
+    {
+      "key": "813:1491",
+      "cls": "weak_generation",
+      "materialSegs": 166,
+      "materialKm": 145,
+      "loops": 2,
+      "distinctNames": 1,
+      "strict": 2,
+      "dupRatio": 2,
+      "bands": {
+        "small": 2,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "813:1492",
+      "cls": "weak_generation",
+      "materialSegs": 62,
+      "materialKm": 90,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "813:1493",
+      "cls": "weak_generation",
+      "materialSegs": 63,
+      "materialKm": 72,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "813:1494",
+      "cls": "weak_generation",
+      "materialSegs": 71,
+      "materialKm": 77,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "813:1495",
+      "cls": "weak_generation",
+      "materialSegs": 460,
+      "materialKm": 194,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "813:1496",
+      "cls": "weak_generation",
+      "materialSegs": 128,
+      "materialKm": 98,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "813:1497",
+      "cls": "weak_generation",
+      "materialSegs": 199,
+      "materialKm": 128,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "813:1498",
+      "cls": "weak_generation",
+      "materialSegs": 137,
+      "materialKm": 109,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "813:1499",
+      "cls": "weak_generation",
+      "materialSegs": 157,
+      "materialKm": 100,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "813:1500",
+      "cls": "weak_generation",
+      "materialSegs": 167,
+      "materialKm": 102,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "813:1501",
+      "cls": "weak_generation",
+      "materialSegs": 184,
+      "materialKm": 112,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "813:1502",
+      "cls": "weak_generation",
+      "materialSegs": 61,
+      "materialKm": 39,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1490",
+      "cls": "weak_generation",
+      "materialSegs": 448,
+      "materialKm": 143,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1491",
+      "cls": "weak_generation",
+      "materialSegs": 136,
+      "materialKm": 101,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1492",
+      "cls": "weak_generation",
+      "materialSegs": 78,
+      "materialKm": 80,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1493",
+      "cls": "weak_generation",
+      "materialSegs": 61,
+      "materialKm": 71,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1494",
+      "cls": "weak_generation",
+      "materialSegs": 58,
+      "materialKm": 76,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1495",
+      "cls": "weak_generation",
+      "materialSegs": 71,
+      "materialKm": 100,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1496",
+      "cls": "weak_generation",
+      "materialSegs": 67,
+      "materialKm": 73,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1497",
+      "cls": "weak_generation",
+      "materialSegs": 117,
+      "materialKm": 113,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1498",
+      "cls": "weak_generation",
+      "materialSegs": 40,
+      "materialKm": 72,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1499",
+      "cls": "weak_generation",
+      "materialSegs": 43,
+      "materialKm": 50,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1500",
+      "cls": "weak_generation",
+      "materialSegs": 82,
+      "materialKm": 80,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1501",
+      "cls": "weak_generation",
+      "materialSegs": 68,
+      "materialKm": 62,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "814:1502",
+      "cls": "weak_generation",
+      "materialSegs": 61,
+      "materialKm": 44,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1490",
+      "cls": "weak_generation",
+      "materialSegs": 60,
+      "materialKm": 54,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 1,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "815:1491",
+      "cls": "weak_generation",
+      "materialSegs": 94,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1492",
+      "cls": "weak_generation",
+      "materialSegs": 52,
+      "materialKm": 60,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1493",
+      "cls": "weak_generation",
+      "materialSegs": 136,
+      "materialKm": 112,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1494",
+      "cls": "weak_generation",
+      "materialSegs": 75,
+      "materialKm": 98,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1495",
+      "cls": "weak_generation",
+      "materialSegs": 135,
+      "materialKm": 99,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1496",
+      "cls": "weak_generation",
+      "materialSegs": 112,
+      "materialKm": 97,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1497",
+      "cls": "weak_generation",
+      "materialSegs": 246,
+      "materialKm": 114,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1498",
+      "cls": "weak_generation",
+      "materialSegs": 100,
+      "materialKm": 69,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1499",
+      "cls": "true_desert",
+      "materialSegs": 24,
+      "materialKm": 33,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1500",
+      "cls": "weak_generation",
+      "materialSegs": 124,
+      "materialKm": 88,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1501",
+      "cls": "weak_generation",
+      "materialSegs": 98,
+      "materialKm": 74,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "815:1502",
+      "cls": "true_desert",
+      "materialSegs": 1,
+      "materialKm": 3,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1490",
+      "cls": "true_desert",
+      "materialSegs": 17,
+      "materialKm": 12,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1491",
+      "cls": "weak_generation",
+      "materialSegs": 144,
+      "materialKm": 113,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1492",
+      "cls": "weak_generation",
+      "materialSegs": 127,
+      "materialKm": 122,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1493",
+      "cls": "weak_generation",
+      "materialSegs": 68,
+      "materialKm": 84,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1494",
+      "cls": "weak_generation",
+      "materialSegs": 486,
+      "materialKm": 212,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "816:1495",
+      "cls": "weak_generation",
+      "materialSegs": 625,
+      "materialKm": 241,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1496",
+      "cls": "weak_generation",
+      "materialSegs": 199,
+      "materialKm": 115,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1497",
+      "cls": "weak_generation",
+      "materialSegs": 205,
+      "materialKm": 126,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1498",
+      "cls": "weak_generation",
+      "materialSegs": 86,
+      "materialKm": 65,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1499",
+      "cls": "weak_generation",
+      "materialSegs": 76,
+      "materialKm": 48,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1500",
+      "cls": "weak_generation",
+      "materialSegs": 83,
+      "materialKm": 47,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1501",
+      "cls": "weak_generation",
+      "materialSegs": 97,
+      "materialKm": 64,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "816:1502",
+      "cls": "weak_generation",
+      "materialSegs": 29,
+      "materialKm": 36,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "817:1491",
+      "cls": "weak_generation",
+      "materialSegs": 389,
+      "materialKm": 149,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "817:1492",
+      "cls": "weak_generation",
+      "materialSegs": 127,
+      "materialKm": 108,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "817:1493",
+      "cls": "weak_generation",
+      "materialSegs": 95,
+      "materialKm": 77,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "817:1494",
+      "cls": "weak_generation",
+      "materialSegs": 157,
+      "materialKm": 126,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "817:1495",
+      "cls": "weak_generation",
+      "materialSegs": 279,
+      "materialKm": 163,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "817:1496",
+      "cls": "weak_generation",
+      "materialSegs": 156,
+      "materialKm": 124,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "817:1497",
+      "cls": "weak_generation",
+      "materialSegs": 154,
+      "materialKm": 102,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "817:1498",
+      "cls": "weak_generation",
+      "materialSegs": 35,
+      "materialKm": 25,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "817:1499",
+      "cls": "weak_generation",
+      "materialSegs": 139,
+      "materialKm": 66,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "817:1500",
+      "cls": "true_desert",
+      "materialSegs": 8,
+      "materialKm": 2,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "817:1501",
+      "cls": "true_desert",
+      "materialSegs": 11,
+      "materialKm": 22,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "817:1502",
+      "cls": "true_desert",
+      "materialSegs": 9,
+      "materialKm": 14,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1491",
+      "cls": "weak_generation",
+      "materialSegs": 424,
+      "materialKm": 151,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1492",
+      "cls": "weak_generation",
+      "materialSegs": 128,
+      "materialKm": 105,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1493",
+      "cls": "weak_generation",
+      "materialSegs": 133,
+      "materialKm": 104,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1494",
+      "cls": "weak_generation",
+      "materialSegs": 97,
+      "materialKm": 93,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1495",
+      "cls": "weak_generation",
+      "materialSegs": 61,
+      "materialKm": 96,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1496",
+      "cls": "weak_generation",
+      "materialSegs": 65,
+      "materialKm": 86,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1497",
+      "cls": "weak_generation",
+      "materialSegs": 114,
+      "materialKm": 76,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1498",
+      "cls": "weak_generation",
+      "materialSegs": 91,
+      "materialKm": 62,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1499",
+      "cls": "weak_generation",
+      "materialSegs": 36,
+      "materialKm": 47,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1500",
+      "cls": "weak_generation",
+      "materialSegs": 58,
+      "materialKm": 44,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1501",
+      "cls": "weak_generation",
+      "materialSegs": 89,
+      "materialKm": 90,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "818:1502",
+      "cls": "true_desert",
+      "materialSegs": 10,
+      "materialKm": 18,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1491",
+      "cls": "weak_generation",
+      "materialSegs": 128,
+      "materialKm": 92,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1492",
+      "cls": "weak_generation",
+      "materialSegs": 103,
+      "materialKm": 94,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1493",
+      "cls": "weak_generation",
+      "materialSegs": 96,
+      "materialKm": 95,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1494",
+      "cls": "weak_generation",
+      "materialSegs": 102,
+      "materialKm": 111,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1495",
+      "cls": "weak_generation",
+      "materialSegs": 143,
+      "materialKm": 117,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1496",
+      "cls": "weak_generation",
+      "materialSegs": 51,
+      "materialKm": 72,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1497",
+      "cls": "weak_generation",
+      "materialSegs": 25,
+      "materialKm": 36,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1498",
+      "cls": "weak_generation",
+      "materialSegs": 115,
+      "materialKm": 63,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1499",
+      "cls": "weak_generation",
+      "materialSegs": 90,
+      "materialKm": 61,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1500",
+      "cls": "weak_generation",
+      "materialSegs": 205,
+      "materialKm": 113,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1501",
+      "cls": "weak_generation",
+      "materialSegs": 45,
+      "materialKm": 47,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "819:1502",
+      "cls": "true_desert",
+      "materialSegs": 17,
+      "materialKm": 16,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1491",
+      "cls": "weak_generation",
+      "materialSegs": 104,
+      "materialKm": 60,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1492",
+      "cls": "weak_generation",
+      "materialSegs": 92,
+      "materialKm": 98,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1493",
+      "cls": "weak_generation",
+      "materialSegs": 110,
+      "materialKm": 109,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1494",
+      "cls": "weak_generation",
+      "materialSegs": 85,
+      "materialKm": 109,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1495",
+      "cls": "weak_generation",
+      "materialSegs": 74,
+      "materialKm": 96,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1496",
+      "cls": "weak_generation",
+      "materialSegs": 97,
+      "materialKm": 83,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1497",
+      "cls": "weak_generation",
+      "materialSegs": 93,
+      "materialKm": 72,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1498",
+      "cls": "weak_generation",
+      "materialSegs": 65,
+      "materialKm": 51,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1499",
+      "cls": "weak_generation",
+      "materialSegs": 51,
+      "materialKm": 49,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1500",
+      "cls": "weak_generation",
+      "materialSegs": 45,
+      "materialKm": 54,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1501",
+      "cls": "weak_generation",
+      "materialSegs": 76,
+      "materialKm": 78,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "820:1502",
+      "cls": "true_desert",
+      "materialSegs": 13,
+      "materialKm": 18,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "821:1491",
+      "cls": "weak_generation",
+      "materialSegs": 97,
+      "materialKm": 49,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "821:1492",
+      "cls": "weak_generation",
+      "materialSegs": 176,
+      "materialKm": 107,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "821:1493",
+      "cls": "weak_generation",
+      "materialSegs": 73,
+      "materialKm": 100,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "821:1494",
+      "cls": "weak_generation",
+      "materialSegs": 79,
+      "materialKm": 76,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "821:1495",
+      "cls": "weak_generation",
+      "materialSegs": 189,
+      "materialKm": 122,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "821:1496",
+      "cls": "weak_generation",
+      "materialSegs": 64,
+      "materialKm": 70,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "821:1497",
+      "cls": "weak_generation",
+      "materialSegs": 134,
+      "materialKm": 82,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "821:1498",
+      "cls": "weak_generation",
+      "materialSegs": 40,
+      "materialKm": 32,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "821:1500",
+      "cls": "weak_generation",
+      "materialSegs": 39,
+      "materialKm": 42,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "821:1501",
+      "cls": "weak_generation",
+      "materialSegs": 25,
+      "materialKm": 65,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "821:1502",
+      "cls": "true_desert",
+      "materialSegs": 4,
+      "materialKm": 8,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "822:1491",
+      "cls": "true_desert",
+      "materialSegs": 16,
+      "materialKm": 13,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "822:1492",
+      "cls": "weak_generation",
+      "materialSegs": 167,
+      "materialKm": 107,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "822:1493",
+      "cls": "weak_generation",
+      "materialSegs": 106,
+      "materialKm": 82,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "822:1494",
+      "cls": "weak_generation",
+      "materialSegs": 91,
+      "materialKm": 80,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "822:1495",
+      "cls": "weak_generation",
+      "materialSegs": 36,
+      "materialKm": 64,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "822:1496",
+      "cls": "weak_generation",
+      "materialSegs": 55,
+      "materialKm": 60,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "822:1497",
+      "cls": "weak_generation",
+      "materialSegs": 76,
+      "materialKm": 58,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "822:1498",
+      "cls": "true_desert",
+      "materialSegs": 14,
+      "materialKm": 21,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "822:1499",
+      "cls": "true_desert",
+      "materialSegs": 11,
+      "materialKm": 40,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "822:1500",
+      "cls": "weak_generation",
+      "materialSegs": 27,
+      "materialKm": 34,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    },
+    {
+      "key": "822:1501",
+      "cls": "weak_generation",
+      "materialSegs": 29,
+      "materialKm": 33,
+      "loops": 1,
+      "distinctNames": 1,
+      "strict": 0,
+      "dupRatio": 1,
+      "bands": {
+        "small": 1,
+        "mid": 0,
+        "big": 0
+      }
+    },
+    {
+      "key": "822:1502",
+      "cls": "true_desert",
+      "materialSegs": 2,
+      "materialKm": 20,
+      "loops": 0,
+      "distinctNames": 0,
+      "strict": 0,
+      "dupRatio": null,
+      "bands": null
+    }
+  ]
+}

@@ -127,35 +127,44 @@ describe('discoverCores (R25-U14)', () => {
     expect(CORE_CONNECTOR_SHARE_MAX).toBeLessThan(1);
   });
 
-  it('same-way-home: retried via a BOUNDED offset ladder, disclosed when no second road exists', async () => {
-    // R29: was "exactly once". The single-side retry measured 5/6 cards stuck
-    // sameWayHome at Belfountain (a valley origin funnels every nearby road
-    // into one approach) while a clean second road sat on the other side or
-    // further out. The contract is now a bounded ladder — up to 4 deterministic
-    // offset attempts (±4 km, ±7 km), never a search loop — and this pins the
-    // BOUND rather than the old count.
-    // routeFn returns the SAME line for out and direct home (total overlap);
-    // every retry (3 waypoints) also fails to differ → sameWayHome stays true
+  it('BD-150: the menu never shows the same physical ring twice', async () => {
+    // Overlapping sweep cells store one ring many times (measured: 270 loop
+    // cores / 82 distinct names; a live menu showed "8th Line" twice). Two
+    // rows with identical geometry must yield ONE card — and a genuinely
+    // different ring still gets its slot.
+    const twinA = coreRow('twinA', { lat: 43.55, lng: -80.05 }, { lat: 43.6, lng: -80.1 }, 3600);
+    const twinB = { ...twinA, id: 'twinB', name: 'Core twinB (other cell)' };
+    const other = coreRow('other', { lat: 43.62, lng: -79.95 }, { lat: 43.66, lng: -79.9 }, 3000);
+    const res = await discoverCores(ORIGIN, depsWith([twinA, twinB, other]));
+    expect(res.drives).toHaveLength(2);
+    expect(res.drives.map((d) => d.id)).toEqual(['twinA', 'other']);
+  });
+
+  it('BD-149: the commute is NEVER engineered — no retries, sameWayHome is a label only', async () => {
+    // The owner, from the device: getting there/back "should genuinely just
+    // take the easiest and fastest way". The R29/R30 offset-via ladders WERE
+    // his "getting there is absolutely terrible". Contract now: exactly one
+    // out call + one home call (2 waypoints each, no vias), and total overlap
+    // simply LABELS the card sameWayHome — an honest fact, not a defect.
     const outLine = straightRoute([
       [ORIGIN.lng, ORIGIN.lat],
       [near.entry.lng, near.entry.lat],
     ]);
-    let retries = 0;
+    let calls = 0;
+    let viaCalls = 0;
     const res = await discoverCores(
       ORIGIN,
       depsWith([near], {
         routeFn: async (_url, req) => {
-          if (req.waypoints.length === 3) {
-            retries++;
-            return outLine; // retry cannot find a second road either
-          }
+          calls++;
+          if (req.waypoints.length > 2) viaCalls++;
           return outLine; // out and home ride the same line
         },
       }),
     );
     expect(res.drives[0]!.sameWayHome).toBe(true);
-    expect(retries).toBeGreaterThanOrEqual(1);
-    expect(retries).toBeLessThanOrEqual(4); // the ladder is BOUNDED, never a search loop
+    expect(viaCalls).toBe(0); // no via retries, ever
+    expect(calls).toBe(2); // one out + one home — nothing else
     expect(res.disclosures.join(' ')).toMatch(/way you went out/);
   });
 

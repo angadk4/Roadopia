@@ -65,6 +65,9 @@ export const ManeuverSchema = z.object({
   type: z.string(),
   instruction: z.string(),
   distance_m: z.number().nonnegative().optional(),
+  /** R33-U6: the maneuver's road name(s) straight from the engine — the
+   *  continuity metric counts NAME RUNS, not instruction-string parses. */
+  street_names: z.array(z.string()).optional(),
 });
 export type Maneuver = z.infer<typeof ManeuverSchema>;
 
@@ -88,6 +91,10 @@ export const RouteThroughOutputSchema = z.object({
   has_toll: z.boolean(),
   has_ferry: z.boolean(),
   has_unpaved: z.boolean(),
+  /** R32-U4: Valhalla response `warnings` (e.g. an ignored hard exclusion).
+   *  Optional-additive; absent on old fixtures. The engine talks — we now
+   *  LISTEN (they were silently discarded for the project's whole life). */
+  warnings: z.array(z.string()).optional(),
 });
 export type RouteThroughOutput = z.infer<typeof RouteThroughOutputSchema>;
 

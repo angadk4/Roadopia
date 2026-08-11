@@ -4,7 +4,13 @@ import { describe, expect, it } from 'vitest';
 import type { MatrixCell } from '../valhalla/matrix';
 
 import type { CoreRowRead } from './discover_cores';
-import { chainRibbons, RIBBON_CHAIN_MAX, ribbonMatrixLocations, ribbonPool } from './ribbon_chain';
+import {
+  chainRibbons,
+  RIBBON_CHAIN_MAX,
+  ribbonMatrixLocations,
+  ribbonPool,
+  ribbonRoadKey,
+} from './ribbon_chain';
 
 /**
  * R29 Unit B — the chain that fills the ask from measured ribbons. Pinned
@@ -84,6 +90,25 @@ describe('ribbonPool / ribbonMatrixLocations', () => {
     const a = ribbonPool(ORIGIN, POOL4).map((p) => p.row.id);
     const b = ribbonPool(ORIGIN, [...POOL4].reverse()).map((p) => p.row.id);
     expect(a).toEqual(b);
+  });
+
+  it('road key survives every id format in the wild (the r34 rename broke the old marker)', () => {
+    // Same physical road (way suffix 9007) under three format generations:
+    expect(ribbonRoadKey('c-79.1_43.7:ribbon:9007')).toBe('9007');
+    expect(ribbonRoadKey('c-79.1_43.7:r34ribbon:9007')).toBe('9007'); // the live-bug format
+    expect(ribbonRoadKey('r35-rib:c-79.1_43.7:ribbon:9007')).toBe('9007'); // loader-v2 namespaced
+    expect(ribbonRoadKey('c-77.5_44.9:ribbon:131525+8393+8420')).toBe('131525+8393+8420');
+  });
+
+  it('pool dedups the SAME road stored under different cells and formats', () => {
+    // Two copies of one physical road from adjacent overlapping sweep cells,
+    // one in the r34-carry format — exactly the production shape that
+    // resurrected the Guelph 24-entries-4-roads pool.
+    const copyA = { ...ribbon('c-79.83_43.75:ribbon:9007', -79.83, 43.7815, 600) };
+    const copyB = { ...ribbon('c-79.90_43.75:r34ribbon:9007', -79.83, 43.7815, 600) };
+    const pool = ribbonPool(ORIGIN, [copyA, copyB]);
+    expect(pool).toHaveLength(1);
+    expect(pool[0]!.row.id).toBe(copyA.id); // deterministic winner: lexicographic id
   });
 });
 

@@ -7,7 +7,8 @@
  * BARS (pre-registered in the R29 plan):
  *   - menus of >=5 drives at >=6/8 sample origins (index gaps disclosed, not padded)
  *   - EVERY card: connector share <= 0.6 of trip time (the pre-build drop working)
- *   - sameWayHome <= 2 per menu (ribbons make different-way-home structural)
+ *   - sameWayHome is REPORTED, never barred (BD-149: the commute is the
+ *     fastest route by owner decision; same-way is an honest label)
  *   - per-leg times present and consistent (out + core + home == trip)
  *   - same-session determinism (two calls, identical ids in identical order)
  *
@@ -80,7 +81,6 @@ async function main(): Promise<void> {
   const bars: Array<[string, boolean]> = [
     [`menus >=5 drives at >=6/8 origins (got ${menusOk}/8)`, menusOk >= 6],
     ['connector share <=0.6 on every card', allConnectorOk],
-    [`sameWayHome <=2 per menu (worst ${sameWayWorst})`, sameWayWorst <= 2],
     ['per-leg times present on every card', allLegsOk],
     ['same-session determinism', allDeterministic],
   ];

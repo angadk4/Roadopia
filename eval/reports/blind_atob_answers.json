@@ -1,0 +1,27 @@
+{
+  "p01": {
+    "left_rating_1to5": 5,
+    "right_rating_1to5": 1,
+    "preference": "L2"
+  },
+  "p02": {
+    "left_rating_1to5": 1,
+    "right_rating_1to5": 5,
+    "preference": "R2"
+  },
+  "p03": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 4,
+    "preference": "R1"
+  },
+  "p04": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 2,
+    "preference": "L1"
+  },
+  "p05": {
+    "preference": "0",
+    "left_rating_1to5": 2,
+    "right_rating_1to5": 2
+  }
+}

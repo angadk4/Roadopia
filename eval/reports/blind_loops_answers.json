@@ -1,0 +1,102 @@
+{
+  "p01": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 4,
+    "preference": "R1"
+  },
+  "p02": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 3,
+    "preference": "L1"
+  },
+  "p03": {
+    "left_rating_1to5": 5,
+    "right_rating_1to5": 4,
+    "preference": "L1"
+  },
+  "p04": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 2,
+    "preference": "L1"
+  },
+  "p05": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 4,
+    "preference": "L1"
+  },
+  "p06": {
+    "left_rating_1to5": 2,
+    "right_rating_1to5": 3,
+    "preference": "R1"
+  },
+  "p07": {
+    "left_rating_1to5": 1,
+    "right_rating_1to5": 3,
+    "preference": "R2"
+  },
+  "p08": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 2,
+    "preference": "L1"
+  },
+  "p09": {
+    "left_rating_1to5": 5,
+    "right_rating_1to5": 4,
+    "preference": "L1"
+  },
+  "p10": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 1,
+    "preference": "L2"
+  },
+  "p11": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 2,
+    "preference": "L1"
+  },
+  "p12": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 2,
+    "preference": "L2"
+  },
+  "p13": {
+    "left_rating_1to5": 5,
+    "right_rating_1to5": 4,
+    "preference": "L1"
+  },
+  "p14": {
+    "preference": "0",
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 4
+  },
+  "p15": {
+    "left_rating_1to5": 1,
+    "right_rating_1to5": 2,
+    "preference": "R1"
+  },
+  "p16": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 3,
+    "preference": "R1"
+  },
+  "p17": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 2,
+    "preference": "L1"
+  },
+  "p18": {
+    "left_rating_1to5": 1,
+    "right_rating_1to5": 3,
+    "preference": "R1"
+  },
+  "p19": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 3,
+    "preference": "L1"
+  },
+  "p20": {
+    "left_rating_1to5": 2,
+    "right_rating_1to5": 4,
+    "preference": "R2"
+  }
+}

@@ -3520,3 +3520,521 @@ REJECT a candidate rather than disclose it; (d) fix the audit to judge what he d
 targeted coverage near him (13 rows within 15 km of Southfields are ~5 distinct drives from one entry
 point). Ruler reversal (a) contradicts BD-135/142, which were his calls — his to re-decide, with these
 numbers in hand.
+
+**BD-146 — OWNER OVERRIDE (2026-08-08, plain words, supersedes BD-135/BD-142): THE TRIP AS DRIVEN IS
+THE PRODUCT.** "This app is genuinely unusable... The drives dont look like loops... random street or
+random neighbourhood for no reason makes us do a u turn or go around a crescent, then continue on the
+same road... why couldnt you use that [my own BD-145 numbers] to understand that this is not what i
+want." The ask means the WHOLE TRIP; the drive-only ruler is dead. His words, converted to hard REJECT
+gates on every served trip (not disclosures): trip duration within tolerance of the ask · trip
+loopiness ≥ the same 0.25 bar cores must pass · whole-trip doubling ≤ the same 1200 m bar legacy loops
+are rejected at · zero spurs/microloops (small origin grace) · commute ≤ half the trip · connectors
+routed like a person drives (direct costing — BACKROADS commute costing was the "random neighbourhood")
+· connector-vs-core and out-vs-home overlap capped. Standing instruction recorded with it: when my own
+measurements contradict the owner's known desiderata, ACT on them — do not wait for him to drive the
+defect and report it.
+
+**BD-147 — THE REBUILD ON THE OWNER'S RULER (2026-08-08): from 0/36 honest to 22/36 honest on his two
+hardest areas, with every served trip passing every gate derived from his words.** Applying BD-146's
+gates to the R29 builder served 0/36 — the gates were right and the CONSTRUCTION was wrong, five
+mechanisms deep. Each found by measurement (rq30b gate histogram; rq30c single-trip anatomy), each
+fixed structurally, none by loosening a bar:
+ 1. **Single-junction lollipop** (spurs 153/156, not_a_loop 151/156): a loop core's entry ≈ exit forced
+    out+home through ONE junction. Fix: **ring-arc joins** — enter the ring at the origin-nearest
+    vertex J1, drive the LONG way round to a separated J2 (≥1.5 km apart), come home from J2. The
+    skipped short arc makes the drive a DIAL: J2 placement targets (ask − commutes), floor 0.6×ring,
+    with a full-ring retry when the partial arc fails loop-shape.
+ 2. **'break' retry vias** — the offset via full-stopped on whatever street it snapped to (u-turn
+    allowed, any road class): literally the owner's "into a random street, u-turn, back out", planted
+    by MY OWN ladder. All ladder vias now 'through' (no stop, no u-turn, ≥unclassified snap). The same
+    defect existed in Discover's home-retry since Unit A — fixed there too.
+ 3. **Routed-vs-simplified seams** (rq30c: a "spur" + 310 m double sat EXACTLY at the connector→arc
+    glue point): fake defects manufactured by concatenating Valhalla geometry with simplified ring
+    geometry. Fix: **the whole trip is ONE /route call** — origin → ≤15 'through' samples along the arc
+    → origin. No seams; real maneuvers end-to-end; engine-priced duration; real has_highway; plus an
+    ARC_FIDELITY_MIN=0.6 gate (reject 'arc_deviation') so a shortcut can't silently replace the ring.
+ 4. **Isoperimetric spoke penalty** (not_a_loop 167/167 at one point): whole-trip loopiness punishes
+    DISTANCE-TO-SUPPLY quadratically — a perfect ring with two clean 11 km spokes scores 0.21. The
+    owner asked for get-there/get-home spokes explicitly; "loops should look like loops" is about the
+    DRIVE. Gate moved to **drive-closed loopiness** (routed arc + its chord) at the same 0.25 core bar;
+    the spokes keep their own gates (different roads ≤0.2 overlap, doubling, stubs, commute ≤50 %).
+ 5. **Distance-scaled leg times** overpriced commutes ~30 % (arterial spokes vs twisty ring) → false
+    commute_majority. Leg times now use the core's own measured pace for the drive; spokes split the
+    engine remainder. And **origin-entrance doubling ≤1 km is exempt** (TRIP_OAB_ORIGIN_GRACE_M): one
+    road into a subdivision is the owner's own "unless absolutely necessary" (measured 863 m at
+    Southfields); doubling beyond it still rejects.
+**Result (rq30b, Southfields ×6 + Brampton ×6 origins × 3 briefs):** served **22/36** (was 0 under
+honest gates; R29's "36/36" was the broken ruler). Sample served trips: "Fallbrook Trail all-in 118 min
+for a 120 ask, drive-loopiness 0.40, commute 32 %". The 14 unserved fall back to legacy WITH the gate
+rejections in the trace — a supply/coverage gap, not a lie. **Discover v2**: commute costing direct +
+built-share card gate (a 60 % Hamilton card slipped the matrix prefilter) → gate PASS (7/8 menus ≥5,
+all cards ≤0.6 share, determinism held). **Audit v18 taxonomy** (uturn/street_stub/crescent/
+commute_majority rows; not_a_loop at 0.25 on the as-driven shape) so v13–v17's blindness cannot recur.
+Suites: backend 448 (was 439; +9 gate tests) · shared 24 · SSE step enum gained 'drive_first_trip'.
+
+**BD-148 — R30 CLOSED REGION-WIDE (2026-08-08 evening): audit v18 (fresh seed 20260808, 90 runs, the
+new taxonomy) + the last mile of honesty fixes.** Region-wide loops: **served 33/60 from the measured
+index · served duration 1.07× mean, worst 1.22×, wrong_length 0/33 · DRIVE backroad 78 % · street
+stubs 0 · crescents 0 · u-turns 1**. Under audit rulers STRICTER than the gates (250 m doubling
+visibility vs the 1 200 m gate; distance-based commute check vs the time-based gate), 19/33 served
+trips carry zero flags of any kind; the commonest residual flag is whole-trip main_majority — the
+arterial COMMUTE diluting the whole-route class mix, which is the design (the DRIVE is 78 % backroad).
+Legacy fallback (27/60) remains what it always was — 30 % backroad, duration worst 2.43×, 1/27
+defect-free — and is now VISIBLE in every audit row rather than averaged away. Also this pass:
+· **Audit rulers aligned with the gates** (drive-closed loopiness for split trips; origin-graced
+  doubling) — the audit had kept judging whole-trip loopiness, mis-flagging 20/33 served trips;
+  re-scored v18 confirms 4/33 → 19/33 defect-free under aligned rulers (rescore_v18.ts).
+· **ResultScreen map now shows the split** (out/core/home features; amber drive, grey commutes) with
+  2 layer-style tests — the BD-144 lesson applied to the second map surface; `drive_first_trip` step
+  label added ("Trying measured drives near you").
+· **Wall handoff**: the trip attempt gets ≤40 % of WALL_CLOCK_BUDGET_MS, the legacy planner keeps the
+  rest ('time_budget' in the trace when it binds). Measured live: served plans ~8 s; the 25–27 s at a
+  fallback-heavy origin is the legacy search under its own budget (pre-existing), not trip stacking.
+· `frozen-r30-v1` cut. e2e canonical-brief failure during the audit was Valhalla CONTENTION (passes
+  clean immediately after) — noted so nobody chases it.
+**Left for R31, in value order:** (1) coverage sweep for the 27 legacy-fallback areas (queued — not
+run tonight so the owner's device pass isn't degraded by Valhalla contention); (2) A→B drive-first via
+measured ribbons through the one-shot builder; (3) the legacy fallback's own duration tail; (4) Save
+surface + titleSummaryTags.
+
+**BD-149 — OWNER DECISIONS FROM THE DEVICE (2026-08-09): commutes are DUMB-FAST; the Plan loop is ONE
+DRIVE.** His words: Discover drives "a lot better, but the getting there and getting back is absolutely
+terrible... it should genuinely just take the easiest and fastest way"; and "For the planner loop there
+shouldnt be any getting there or going home. That loop should be the full drive as the loop itself."
+Implemented, both surfaces, same session:
+· **Discover connectors: zero engineering.** The R30 offset-via retry ladder (±4/7 km) — MY
+  anti-same-way machinery — WAS his "absolutely terrible": deleted. Connector costing is now engine-
+  default fastest ({} — even LEGACY's use_highways 0.2 softener removed). sameWayHome remains as an
+  honest LABEL, never a retry. The built-share card gate stays (menu quality, not connector
+  engineering). Gate re-run: **PASS, and BETTER — 8/8 menus ≥5 drives (was 7/8), worst connector share
+  54 % (was 60 %)** — fastest commutes are shorter, so more drives clear the bar. The eval bar
+  "sameWayHome ≤2/menu" retired (it now REPORTS, owner decision). Test rewritten: exactly 2 route
+  calls per card, 0 vias, ever.
+· **Plan loops: no legs, no commute framing.** result.legs = null; disclosure is now "Built a
+  90-minute loop around most of Fallbrook Trail — measured roads, honest time"; the three-leg bar and
+  grey map legs simply don't render for Plan loops (they keyed off result.legs); waypoints [J1, mid,
+  J2] stay for the AUDIT's geometric split only. The vacuous R29 single-ribbon prepend (BD-136) and
+  its duplicate "planned live" disclosure removed from the fallback pipeline.
+· **One measured refinement during implementation:** gating the whole shape's isoperimetric loopiness
+  (first reading of "the loop is the full drive") HALVED serving (22→11/36) by rejecting ELONGATION —
+  a perfect ring stretched 8:1 by distance-to-supply fails 0.25 — while lollipops are ALREADY
+  structurally impossible (out≠home ≤0.2 overlap + doubling + stub gates forbid the stem). Kept:
+  drive-closed ring bar + stem-free whole shape; elongation is where you live, not a defect. Serving
+  back at 22/36 (his areas); live smoke: 90-min ask → 90-min loop, legs null, Discover 6 drives with
+  symmetric fastest commutes (28/28, 23/23, 20/20 min), sameWay labeled true.
+Suites: backend 448 · app 163 · shared 24; tsc + eslint clean; backend restarted on this code.
+
+**BD-150 — THE CRITICAL AUDIT THE OWNER ORDERED (2026-08-09, "be extremely critical of any flaws at
+all"): audit v19 (fresh seed, 90 runs) + the flaws it and the live smokes named, fixed same-day.**
+SERVED loops are clean by every as-driven measure (32/60 served; wrong_length 0, not_a_loop 0, stubs 0,
+crescents 0, uturns 0; duration 1.06×, worst 1.24×; DRIVE backroad 76 %; 20/32 zero-flag). The CRITICAL
+findings were one level deeper:
+ 1. **Monotony — 13 of 32 served loops are the SAME RING (Fallbrook Trail; 8th Line ×5).** The planner
+    is honest but reality's menu is thin: 270 stored loop cores are only 82 distinct names, and r33
+    generated every loop at ONE size (LOOP_CORE_DURATION_S=5400), so 60-min and 2-h asks were served by
+    assembly's accidental over/undershoots. FIXES: (a) geometric dedup (overlap >0.5) in Plan candidate
+    selection and Discover menus, so build attempts and card slots are never spent on copies (a live
+    menu read "8th Line, 8th Line, Fallbrook, Fallbrook, King-Vaughan, Fallbrook"); (b) menus
+    additionally never repeat a headline NAME (distinct geometry is not distinct enough for a menu) —
+    live after: 5 cards, 5 names; (c) the **r34 sweep now generating at THREE sizes (60/90/140-min
+    targets) × 3 origins/cell** — the supply fix; loads tonight, then re-audit.
+ 2. The audit itself confirmed legacy fallback (28/60) unchanged-and-bad: not_a_loop 20, wrong_len 9,
+    main_majority 22, 30 % backroad — serve-rate (supply) remains the lever, not legacy surgery.
+
+**BD-151 — A→B DRIVE-FIRST: BUILT, DEBUGGED, MEASURED, REFUSED (2026-08-09).** The loop architecture
+(one-shot through-routing over measured material) was extended to A→B: best corridor ribbon, oriented,
+detour-capped, gates + fidelity. A clock bug (performance.now t0 vs Date.now deadline) silently
+rejected everything as time_budget — found via a standalone-vs-pipeline discrepancy, fixed, and only
+then judged. Measured on 10 audit corridors through the REAL runPlanner: vanilla fill 27.4 % backroad,
+profile fill 30.0 %, vs **legacy corridor 43.1 %** (registered bar +8 pp → measured −13). The corridor
+planner's CHAINED spans beat any single-ribbon serve — its pool already holds the ribbon material,
+exactly as BD-139 recorded. `ATOB_DRIVE_FIRST` defaults OFF; code + probe kept as the record. A→B
+stays on the legacy corridor planner (routed 10/10, detour ≤1.92×) — not transformed, and not lied
+about. Suites at close: backend 449 · app 163 · shared 24.
+
+**BD-153 — A→B MULTI-RIBBON CHAIN: BUILT, MEASURED, REFUSED — AND THE VERDICT IS NOW SOLID
+(2026-08-09).** U2 of the approved R31 plan: axis-projected corridor ordering, greedy per-ribbon
+orientation, 1–3-ribbon combos under the standing 1.8× detour cap, one-shot through-routing, per-member
+fidelity gates. Served 10/10 with 0 doubling and detours ≤1.76×. **Backroad mean 41.0 % vs legacy
+43.1 % (registered bar ≥51 %) → REFUSED.** Per-corridor: chains win where legacy is weak
+(Cobourg→Uxbridge 29→71 %, Hamilton→Guelph 48→52 %) and lose where it is strong (Southfields→Hockley
+68→53 %, Stratford 39→27 %) — and there is no live per-corridor signal (no trace under the 25 s wall)
+to serve selectively. Two architectures, four arms, one conclusion: **the legacy corridor planner is
+genuinely competitive at A→B** — today it measures 43 % backroad, 10/10 routed, 0 doubling >1.2 km,
+detours bounded. The v13-era "33 %" grievance predates the current profile config. A→B keeps the
+legacy planner; `ATOB_DRIVE_FIRST` stays default-off with the chain as its best-known challenger,
+recorded in the module header. This closes the owner's ask #2 honestly: A→B *works properly* by every
+measured bar except a backroad ceiling that two serious architectures failed to raise.
+
+**BD-152 — R31 U1 LANDED: r34 MULTI-SIZE SUPPLY (2026-08-10).** The sweep generated loop cores at
+THREE size targets (60/90/140 min; r33 generated only 90) with per-cell dedup unchanged: **403 loops /
+91 distinct rings** (r33: 270/82), r33's measured ribbons carried forward untouched. Per-area within
+25 km: Southfields 23→30, Collingwood 6→14, Hamilton 3→11, Barrie 21→32; all three size bands
+populated everywhere but Cobourg (2 cores under BOTH configs — a genuine geography desert, served by
+the designed v1 Discover fallback; a heavier local re-sweep is NOT expected to help and was skipped
+honestly; the loader is delete-per-version so top-ups need a merge path first). Version flipped after
+verification; backend restarted. **Measured on r34:** his-areas serve 22→26/36 (bar ≥30 MISSED —
+honest; binding gate is now doubling at funnel origins, i.e. geography); live smoke: "1 hour" → 63-min
+loop; Southfields menu = 6 cards / 6 distinct rings incl. brand-new r34 material (Twiss Road, Duffy's
+Lane, Hockley Road). **Audit v20** (fresh seed): served 33/60 with ZERO served defects again
+(wrong_length/not_a_loop/stubs/crescents/uturns all 0; 1.08×/1.23×; DRIVE 75 %), monotony top-ring
+41 %→33 % (Duffy's Lane, new in r34, already serves 5), **Discover 0 empty menus at 30 origins**,
+Discover gate PASS. Artifact: audit-v20 (claude.ai/code/artifact/831ec2de). `frozen-r31-v1` cut.
+The R31 "fix everything" plan is complete: U1 landed, U2 refused with receipts (BD-153), U3 verified
+already-correct, U4 this record. Remaining honest gaps are geography (Cobourg, funnel-origin doubling)
+and the legacy fallback's known quality — both visible in every audit row, neither lied about.
+
+**BD-154 — R32-U4: THE HARD-EXCLUSION "NO-OP" WAS A FALSE MEASURED FACT; THE ENGINE TALKS AND WE NOW
+LISTEN (2026-08-09).** The Recovery plan's top P0 (verify hard exclusions) paid out immediately, in an
+unexpected direction. Facts: `allow_hard_exclusions: true` was ALREADY set in both Valhalla configs;
+rq32 probed the RUNNING 3.7.0 with proper control pairs — highway-optional Mississauga→Brampton and a
+410-corridor pair — and `exclude_highways: true` **rerouted both highway-free** (20.2 km/hwy=true →
+15.6 km/hwy=false; 18.8→19.7 km). R25-U2's "verified byte-identical no-op" was an artifact of an
+inconclusive probe pair (my rural control reproduces the failure mode exactly: identical routes
+because the baseline had no highway to remove). Doubly instructive: the wire has carried the hard key
+ALL ALONG (the options spread never deleted it) — production avoid-highways requests were already
+protected by a lever we documented as inert. Changes: (1) `RouteThroughOutput.warnings` — Valhalla's
+warnings array is now parsed and carried instead of silently discarded (it was discarded for the
+project's entire life; an ignored hard exclusion would have told us here); (2) `HARD_EXCLUSIONS` flag
+(default on = today's wire bytes, now understood; off = soft-only diagnostic arm); (3) all stale
+"verified no-op" comments corrected. Zero behavior change; two false beliefs removed. Suites 449 green.
+The rq32 probe file stays as the reusable exclusion-verification battery (tolls/ferries pairs can be
+added when relevant).
+
+**BD-155 — R32 "TRUTH FIRST" COMPLETE (2026-08-09): the measurement system is now hard to fool, and
+its first day of existence overturned one "fact" and caught one latent bug.** Units, all landed, zero
+planner-behavior change:
+· **U0 manifest** — every audit/sweep artifact now embeds git describe, Valhalla version + tileset id
+  + config hash, cores version, wall budget, tracked env overrides (eval/manifest.ts; sweep writes a
+  sidecar). The BD-119 class of contaminated comparison is structurally closed.
+· **U1 frozen suites** — eval/suites/: gold loop suite (16 origins across 15 network-structure
+  classes × 45/60/90/120 ladder, incl. every historical complaint site), A→B gold (25 corridors,
+  8 classes), and the NEVER-TUNE holdout (10 origins + 5 corridors, acceptance-only, loud contract in
+  the file). `AUDIT_SUITE=gold-v1|holdout-v1` swaps the audit onto them; default unchanged. Smoked.
+· **U2 blind review harness** — make_blind_pairs.py renders unlabeled side-by-side route cards with
+  seeded side-randomization; score_blind.py computes per-arm ratings + pairwise wins. Smoke proved the
+  anti-bias property (identical arms + uniform answers → exact 2–2 split). From R33 on this is an
+  ADOPTION GATE (owner is the panel).
+· **U3 invariants + metamorphic tests** — new invariants.test.ts. FIRST RUN CAUGHT A REAL LATENT BUG:
+  `judgeTrip` passed a NaN duration through the ±25 % gate (NaN compares false against every
+  threshold) — fixed with a finiteness check. Also pinned: hard-exclusion survives translation; the
+  canonical detour denominator is the ROUTED direct distance — and the rq31 probe re-run under it
+  restates A→B truth: **worst detour 1.51× (the old 1.92× was crow-flies inflation; the 1.8× cap
+  never leaked)**; `shortest` inertness; judge monotonicity.
+· **U4** — BD-154 (hard-exclusion no-op overturned; warnings surfaced) + the 3.8.3 upgrade experiment
+  STAGED as infra/valhalla/upgrade_383_experiment.sh (isolated port 8003, tiles rebuilt by 3.8.3
+  itself, A/B commands embedded; [HUMAN] runs the Docker steps).
+Suites at close: **backend 455 (57 files) · app 163 · shared 24**, tsc + eslint clean. Next: R33 —
+the `shortest` bake-off (pre-registered auto-profile competition, blind-review gated).
+
+**BD-156 — R33-U5 PRE-REGISTRATION: the `shortest` bake-off (2026-08-09, FROZEN BEFORE ANY ARM RAN).**
+Recovery §5.2's central lever gets its first fair competition. Incumbent: BACKROADS-`shortest`
+(adopted R18-1 vs the then-LEGACY; tuned-`auto` arms were never in that bake-off). Challengers: the
+frozen 9-arm grid in `EXPERIMENT_PROFILES` (costing.ts) — use_distance {0,.15,.30,.45} × maneuver
+{0,15,40 s} × service {default, 300 s/×5}, living-streets and tracks pinned to 0, sizing speeds
+derated with use_distance. Served through the REAL `runPlanner` via the per-call PROFILE_EXPERIMENT
+hook (unset = byte-identical incumbent); ONE ARM PER PROCESS (module-load flags). Surfaces judged
+separately (BD-111): LOOPS = legacy generation (DRIVE_FIRST=off) on the gold fallback-class subset
+(8 origins × 60/90); A→B = the 25-corridor gold suite. **Adoption rules, all must hold on GOLD:**
+(1) structural defects (spurs+crescents+uturns+doubling>1.2 km) not up; (2) backroad +5 pp OR (flat
+backroad AND continuity meanRun +25 %); (3) duration |err| p80 not worse >3 pp; (4) wall not up
+>20 %; (5) turns/10min not up >10 %. Then the BLIND HOLDOUT review (owner panel, Recovery §17.4)
+must prefer the challenger — no adoption on metrics alone. New instrument feeding judgment: the
+continuity metric (U6 — engine street_names → name-run lengths + hops/10min; unnamed stretches
+extend runs). Refusals recorded per arm. The grid may not be edited now that this entry exists.
+
+**BD-157 — R33 BAKE-OFF VERDICT: ALL NINE CHALLENGERS REFUSED ON THE FROZEN RULES — AND THE REFUSAL
+QUANTIFIES `shortest`'s PRICE FOR THE FIRST TIME (2026-08-09).** Mechanical judgment (rq33_rank, the
+registered referee) vs P0_incumbent on the gold suites:
+· **Every arm fails Rule 2**: `shortest` genuinely maximizes backroad share — challengers lose
+  −1.6…−5.0 pp (A→B) and **−9.3…−19.0 pp (loops)**. R18-1's adoption reason is CONFIRMED, not
+  overturned.
+· **But the challengers dominate every OTHER axis, decisively, on loops**: structural defects
+  **5 → 0** (P4_d45; most arms ≤1) · duration |err| p80 **48 % → 22–32 %** · continuity meanRun
+  **+37…+61 %** · turns 3.9 → 2.7–3.0 · wall −25…−40 %. On A→B: structural 17 → 8–13, continuity
+  +22…+29 %, wall −15 %, backroad −2…−5 pp.
+**The Recovery doc's prediction is confirmed in numbers: distance-only routing buys its backroad
+share by road-hopping, structural junk, and duration blindness.** The pre-registered Rule 2 made
+backroad-share the near-mandatory axis — our own detector — so the incumbent SURVIVES under BD-156,
+and no flag flips. Per the discipline: refusal recorded, grid untouched, holdout untouched (its
+sanctioned use was acceptance of a rule-passing challenger; none passed).
+**OPEN QUESTION FOR THE OWNER (this is a product-values call, not a metrics call):** is 40 %
+backroad with 5 structural defects, 48 % p80 duration error and constant road-hopping better than
+~31 % backroad with ZERO structural defects, 32 % error and +42 % longer sustained runs? If the
+answer might be no, the path is a **re-registration (BD-158)** whose rules weight structural/
+duration/continuity and whose arbiter is the BLIND HOLDOUT review — the owner's 15-minute session,
+exactly what Recovery §17.4 exists for (human preference prevents overfitting our own detectors).
+Nothing changes until he chooses. e2e re-verified clean post-grid (the best_so_far blip was the
+BD-148 contention ghost, again).
+
+**BD-158 — RE-REGISTRATION (owner-authorized 2026-08-09: "do what you recommend"): the `shortest`
+question goes to the BLIND HOLDOUT, with rules weighted to the owner's lived complaints. FROZEN
+BEFORE ANY HOLDOUT ARM RAN.**
+· **Challenger selection rule** (mechanical, from the already-seen GOLD data — gold is the tuning
+  set): per surface, lexicographic min structural defects → min duration p80 error → max backroad →
+  max continuity. Applied: **loops challenger = P4_d45** (structural 0 vs incumbent 5; durErr p80
+  32 % vs 48 %; backroad 31.1 % vs 40.4 %; continuity +42 %). **A→B challenger = P6_d30_manstrong**
+  (structural 8 vs 17; backroad 30.7 % vs 33.2 %; continuity +29 %).
+· **Adoption rule:** a challenger ships on its surface iff the OWNER'S BLIND REVIEW of the holdout
+  pairs prefers it — clear pairwise majority AND no new hard-defect class visible in the holdout
+  artifacts (Recovery §17.4). Holdout metrics are recorded for the log but do NOT decide; the metric
+  trial already happened (BD-156/157) and split. Ties or unclear → incumbent stays, question closed.
+· Holdout use is hereby its sanctioned acceptance use. Sheets: seeded side-randomized blind pairs
+  (R32-U2 harness). One session, ~15 minutes, two sheets (loops, A→B).
+
+**BD-159 — THE BLIND VERDICT: THE OWNER'S OWN EYES RATIFIED `shortest` ON BOTH SURFACES; THE QUESTION
+IS CLOSED (2026-08-09).** BD-158's arbiter ran: 25 sealed pairs (20 loops, 5 A→B), sides randomized,
+keys opened only after his answers were downloaded (answer files preserved in eval/reports/).
+· **Loops (P0 `shortest` vs P4_d45):** pairwise 9–10–1 (challenger 10), mean ratings 3.00 vs 3.15 —
+  a statistical coin flip, NOT the "clear majority" the frozen rule requires. The measured trade
+  (−9 pp backroad for structural 5→0, durErr 48→32 %, continuity +42 %) nets out to "same feel" in
+  blind human judgment. Incumbent stays.
+· **A→B (P0 vs P6_d30_manstrong):** the incumbent CLEARLY preferred — pairwise 3–1–1, mean 3.80 vs
+  2.00. Challenger refused decisively by the only judge that outranks the metrics.
+**Standing outcome:** BACKROADS-`shortest` survives the full gauntlet — nine metric arms (BD-157),
+then human blind review (this entry) — and per the frozen BD-158 rule the `shortest` question is
+CLOSED; no further re-litigation without new evidence of a different KIND (e.g. R38 dynamic costing,
+whose preference-model corpus starts with exactly this 25-pair distribution — the first human
+calibration data the project has). The Recovery doc's #1 recommendation was tested to the end and
+the incumbent won honestly; the review's VALUE stands anyway: the price of `shortest` is now known
+and pinned (BD-157), the continuity metric exists, and the blind harness is proven end-to-end.
+Next per the approved plan: **R34 — serve the best clean candidate, retire the dirty fallback.**
+
+**BD-160 — R34 SHIPPED: SERVE THE BEST, RETIRE THE DIRTY FALLBACK (2026-08-09).** The three units of
+the approved plan, all live and measured on the GOLD suite (the deliberately hard one — 16 origins
+across 15 network classes; not comparable 1:1 to old region-spread seeds):
+· **U7 best-clean serving** — `driveFirstTrip` builds every viable candidate in its wall slice and
+  serves the best CLEAN one (exact band → |duration err| → measured backroad → curviness → commute →
+  id), not the first passer.
+· **U8 duration tiers + the FINAL STRUCTURAL JUDGE** — cleanliness is judged without a duration
+  cliff; ±15 % (TRIP_EXACT_BAND) classifies exact vs honest ALTERNATE ("No clean 60-minute loop fits
+  from here — built a clean 84-minute one instead", plus up to 2 distinct-ring alternate mentions).
+  The legacy pipeline is now a candidate generator: its output passes the same structural trio
+  (stubs/crescents/graced-doubling>1.2 km) or the result is an HONEST NO-CLEAN state naming exactly
+  what it refused to ship. Live-verified at Cobourg: "the best live attempt had crescents ×1, which
+  we don't ship" → status unavailable. Audit taxonomy gained servedTier + the serve triple;
+  wrong_length is skipped for alternates (their mismatch IS the disclosed product).
+· **U9 fidelity honesty** — through-samples come from FULL-resolution geometry (migration 0020,
+  applied; simplified is display-only), ARC_FIDELITY_MIN 0.6→0.85, and measured core stats are
+  advertised only at fidelity ≥0.95 (STATS_PROVENANCE_MIN) — else curviness is withheld rather than
+  approximated (comparability to the frozen GATE-C formula beats a lookalike recompute).
+**Gold audit v21 (fresh seed, serve triple on 60 loop fixtures):** clean_exact 17 · clean_alternate
+17 → **34/60 clean-served** · legacy 22 (now guaranteed structurally clean on the trio) ·
+true_no_clean 4 (deserts, honestly stated). EXACT tier: duration **1.02× mean / 1.10× worst**, zero
+wrong-length/not-a-loop/stubs/crescents, 61 % backroad. ALTERNATE tier: structure clean, durations
+disclosed (1.32× vs the ask BY DESIGN). Live smokes: Southfields 60-min → exact @ fidelity 0.96;
+Cobourg 2 h → honest no-clean. Suites 460/163/24; his-areas probe 25/36 clean.
+**Known residuals, honest:** legacy tier still carries wrong_length 10 + not_a_loop 8 (structurally
+clean but soft-dirty — the next lever is supply/coverage, not more gating: 4 no-clean states already
+exist); one served-exact trip carried 1 u-turn (trip gates never gated u-turns — candidate follow-up,
+one line, registered next round); A→B gold 17/20 routed (3 no-routes on the NEW harder long
+corridors — legacy A→B limit, logged for the R38 adaptive-candidates round).
+
+**BD-161 — THE OWNER'S "SQUARE WITHIN THE LOOP": A WHOLE DEFECT CLASS NOBODY MEASURED, FOUND, GATED,
+AND SHIPPED SAME-SESSION (2026-08-09).** Device report: "weird overlaps... like it randomly produces a
+square within the loop... can't figure out how that portion would be driven in order." Root cause: a
+route that CROSSES itself encloses a sub-loop — and every existing detector misses it by construction
+(microloops cap at 3 km perimeter; doubling needs retraced road; overlap needs shared cells; a
+clean-roads figure-eight passes everything). Recovery §6.3 named "self-crossing" as a geometry
+question; no detector existed.
+· **New detector** (`crossings.ts`): transversal segment-segment self-intersections over a 60 m
+  resample with spatial hashing; origin grace 500 m; near-adjacent hairpins excluded; and the
+  critical TRANSVERSAL filter (≥25°) — two passes down the same legal retrace sit ~1 m apart after
+  rounding and WEAVE, producing 79 phantom crossings on one route before the filter.
+· **The knot/pierce split, measured into existence**: a blunt zero-crossing gate rejected 164/185
+  candidates at funnel origins — mostly legitimate lasso PIERCES (a spoke crossing the ring once to
+  reach its far entry, enclosed length ≈ half the trip). The owner's unreadable SQUARE is a KNOT: a
+  crossing whose enclosed sub-loop is short (≤10 km). Gates: **knots = 0 (zero tolerance), pierces
+  ≤ 2** (out + home may each pierce once), weaving (>2) rejects. Plus the registered U-TURN gate on
+  trips (v21 had caught 1 on a served exact).
+· Applied EVERYWHERE: trip gates, the legacy final structural judge, the audit (self_crossing row +
+  crossings column), offline scan tool (rq34_crossings_scan).
+· **Offline truth on what we had been serving** (v21 artifacts, post-filter): exact tier 5/17 routes
+  carried real crossings, alternates 10/17 — the owner saw a real, common defect the instruments
+  were blind to. **Serving cost, measured**: his-areas 25 → 23/36 (blunt gate would have been 15) —
+  two asks traded for zero squares in anything served, under his standing quality-over-quantity
+  direction. Live smoke: served 90-min Southfields trip = {knots 0, pierces 0}.
+· Residual for R35: arc_deviation is now the top candidate-killer (117) — the 0.85 full-res fidelity
+  bar is strict against r34 rings; J1/J2 optimization + denser sampling are the planned levers.
+Suites 466/163/24; backend restarted on the gates.
+
+**BD-162 — TWO DEVICE REPORTS, TWO ROOT CAUSES, SHIPPED (2026-08-11).**
+**(1) Discover "getting there/back is now weird."** Root cause: connectors routed to the STORED
+entry/exit vertex — an arbitrary sweep artifact; the fastest path to a far ring vertex is exactly the
+weirdness he saw (amplified by BD-150's name-dedup surfacing new cards with awkward stored entries).
+Owner's spec, verbatim: "essentially match what Google Maps would show… there and back can be the same
+route." Fix: a loop core is a RING — `rotateRingToNearest` meets it at the origin-nearest vertex; the
+measured ring is served rotated (roads/length/duration untouched), both commute legs are plain
+engine-fastest to/from that single join, same-way home fully blessed. Live: Duffy's Lane get-there
+38 min→**2 min**; menus symmetric (18/18, 15/15); Discover gate PASS.
+**(2) Loops "still have squares" (screenshot).** The circled X = out+home piercing the ring SIDE BY
+SIDE — enclosed length > 10 km, so the BD-161 enclosed-length rule classified them as two *allowed*
+pierces. The discriminator his eyes use is SPATIAL: two crossings near each other are a knot
+regardless of enclosure. Fix: `PIERCE_CLUSTER_M = 3 km` — any crossing pair within it becomes knots
+(zero tolerance); genuinely separated pierces (≤2) stay tolerated. The test debugging itself proved
+the rule: a FULL-ring lasso structurally re-crosses beside its entry (clustered → rejected — that IS
+the screenshot), which is why real serves use partial arcs with separated J1/J2. Serve rate held
+23/36 at his areas (weaving rejections 45→4 as clustered pairs reclassified). His diagnosis was also
+correct: loops ARE built as get-there + ring + get-home internally; R35's J1/J2 matrix optimization
+attacks the piercing at the SOURCE (better join pairs) — these gates are the guarantee meanwhile.
+Suites 468/163/24; backend live on both fixes.
+
+**BD-163 — THE SQUARE'S REAL DOOR: TWO SERVING EXITS BYPASSED THE FINAL JUDGE; SEALED AND
+LIVE-VERIFIED ON THE SCREENSHOT REGION (2026-08-11).** The owner: "loops still show squares exactly
+same as before." He was right because the BD-160 final judge ran only at the MAIN exit —
+`presentDirtyBest()` (the ladder-exhausted and budget-exhausted "least-flawed fallback": by
+definition the DIRTIEST material in the system) returned routes from two earlier exits without ever
+meeting the judge. The R32 invariant "no candidate path may bypass the final judge — asserted, not
+assumed" had been written and never asserted; the owner's device asserted it instead. Fix: the judge
+is now a single closure (`applyFinalStructuralJudge` — stubs, crescents, graced doubling, and
+BD-162's clustered-knot crossings) invoked inside `presentDirtyBest` before it emits AND at the main
+exit; a judged-away dirty-best becomes the honest no-clean state. **Live verification, his exact
+region** (Norval/Terra Cotta/Georgetown NE/Glen Williams/Southfields/Cheltenham × 45/90/120-min =
+18 briefs through the running API): 17 served with **knots = 0 on every route** (pierces ≤ 2, all
+spatially separated), 1 honest refusal — including a `best_so_far` and `relaxed` serves that
+previously escaped. His architecture question answered on the record: a served loop IS one
+continuous route origin→around→origin (no separate commute is drawn or driven); the ring-arc is the
+internal construction that finds the good roads, and the X he saw was dirty LEGACY material leaking
+through the bypass — now impossible. R35's J1/J2 optimization remains the construction-side cure for
+the residual pierces. Suites 468/163/24; backend live on the seal.
+
+**BD-164 — "NAH MAN ITS FUCKED": THE FIGURE-EIGHT, AND THE END OF THE PIERCE TOLERANCE (2026-08-11).**
+The owner's second screenshot was a BOWTIE — one self-crossing, two big lobes. It passed every gate
+because BD-161/162's "pierce tolerance" (≤2 spatially-separated crossings) was MY invention to protect
+serve rate, theorizing that single far crossings were readable lasso topology. His eyes rejected the
+theory twice; the theory was wrong. **New law: a served loop is a SIMPLE CLOSED CURVE — zero
+self-crossings of any kind** (the ≤500 m origin grace survives only for invisible driveway
+crossovers; the knot/pierce split survives only as audit diagnostics). Applied at the trip gates AND
+the every-exit final judge (BD-163's closure). **Measured immediately, his region, live API (18
+briefs):** 17 served / 1 honest refusal — serve rate HELD — and the four routes that previously
+served with pierces were REBUILT crossing-free by the candidate machinery rather than lost. All
+suites green (468/163/24). The defect's full arc: BD-161 (detector, transversal filter) → BD-162
+(cluster rule, Discover joins) → BD-163 (the judge-bypass seal) → BD-164 (zero tolerance). Each round
+was driven by his device against my instruments; the instruments now encode what his eyes always
+meant: origin → around → origin, one unbroken non-crossing line.
+
+**BD-165 — THE ACTUAL SOURCE OF HIS BOWTIES: 18 % OF THE STORED INDEX WAS SELF-CROSSED, AND NOTHING
+HAD EVER MEASURED IT (2026-08-11).** His question "do you think R35 will help" forced the right
+investigation: the Plan API was provably serving zero crossings (18-brief live probe), yet his screen
+showed a bowtie — so the material itself was the suspect. Scan of the stored r34 loop cores:
+**71/403 rings self-crossed** (figure-eights share ~zero overlap cells with themselves — every
+offline bar was blind; among the crossed: Ingram Road and Oro-Medonte rings that had SERVED in
+audits). Discover serves stored rings ungated → his screenshots. Fixes, all shipped: (1) **purge** —
+71 crossed rings deleted from serving (332 loops / 86 names remain; the sweep artifact on disk stays
+as the record); (2) **source bar** — `judgeCore` gains `self_crossing` (zero tolerance), the sweep's
+`measureRoute` computes it for loops AND ribbons: a bowtie can never enter the index again;
+(3) **Discover belt** — cards assert crossing-free at build (~1 ms) so a future bad load can't leak.
+**Live after purge:** region probe 17/18 served all-zero-crossings; Discover gate PASS with **8/8
+full menus** (the purge cost nothing visible — better cards filled in); Southfields menu 6 distinct
+clean rings. R35's honest answer, on the record: it optimizes Plan's join selection (serve-rate
+recovery at funnels) — it would NOT have fixed this; bad stored material needed the purge + source
+bar. Suites 469/163/24. Defect arc complete: BD-161 detector → BD-162 cluster+joins → BD-163 bypass
+seal → BD-164 simple-closed-curve law → BD-165 the material itself.
+
+**BD-166 — R35 SHIPPED: J1/J2 MATRIX OPTIMIZATION + THE MEASURED ORIGIN STEM (2026-08-11).**
+· **U10** (`J1J2_MATRIX_OPT`, on): each candidate ring gets ≤12 PORTS sampled around its full-res
+  geometry; ONE `/sources_to_targets` prices origin↔every port with real network costs; all feasible
+  (J1, J2, direction) pairs are enumerated (separation ≥1.5 km, arc-frac 0.6–1, predicted commute
+  ≤0.55) and ranked exact-band-first by predicted duration error; the top 3 pairs are BUILT. The
+  perpendicular home-via ladder is retired on this path — a different legitimate ring exit replaces
+  artificial via points (Recovery §7.4). Off = the pre-R35 nearest-vertex heuristic, byte-identical.
+· **U11** (`UNAVOIDABLE_STEM`, on): the fixed 1 km doubling grace is replaced by a MEASURED stem —
+  8 engine-fastest probes to compass targets, quorum shared-prefix, floor 300 m / cap 4 km, honest
+  fallback to 1 km on engine errors. Wired into the trip gates AND the final judge; stems ≥1.5 km are
+  disclosed ("this area has one practical way out…"). Metamorphic test: funnel > connected origin.
+· **Forensics**: every served loop's trace now carries `x knots/pierces, stem, fidelity` and the
+  final judge logs an explicit PASS line — the owner's next device report maps to machine evidence.
+**Measured:** hardest-areas serve **15 → 19/36** under the full zero-crossing law (the pre-law 23
+required serving crossed shapes); live smoke: served exact, **fidelity 1.00** (full-res pair slicing),
+**stem 540 m measured** at Southfields (vs the 1 km guess), x 0/0. Region probe re-run exposed a
+false regression that was actually **SPK-14's rate limiter 429-ing an 18-brief burst** — the limiter
+works; the probe now paces itself. Wall at funnel origins ~14 s (stem + 5 matrices + pair builds,
+inside the 25 s contract and the 40 % attempt slice). Suites **472/163/24**. The BD-161→166 arc
+stands: gates guarantee the law; R35 construction wins serves back inside it.
+
+**BD-167 — R36 PRE-REGISTRATION: LAYERED SWEEP JUDGING (frozen 2026-08-11, BEFORE the r35 sweep
+runs; Recovery §10 applied to the INDEX).** The r34 histogram shows thousands of near-miss quality
+rejections (a 54.9 %-backroad ring is not categorically worse than a 55.0 % one) while structural
+defects are absolute. The layers, frozen:
+· **Layer A — structural, reject always:** untraced · uturns>0 · spurs>0 · microloops>0 ·
+  self_crossing>0 (BD-165) · ribbons: corridor_doubling>0.1, self_overlap>0.05, endpoint separation.
+· **Layer B — sanity floors, reject:** backroad <0.40 · main >0.45 · hood >0.10 · turns >8/10min ·
+  loop loopiness <0.18 · any highway metres (unchanged).
+· **Layer C — quality RANKING** decides what a cell keeps (CELL_KEEP_MAX unchanged):
+  q = backroad_share + 0.25·min(curviness,3)/3 − 0.5·hood_share − 0.15·max(0, turns−5)/5.
+· Rows passing the OLD strict bars keep `bar_profile='strict'`; floors-only rows are `'layered'` —
+  and the serving RPC already orders strict-first, so layered supply serves only where strict supply
+  is absent. Zero live-behavior change until an index built this way is verified and flipped.
+**Adoption bars (frozen):** distinct clean rings ≥ +25 % vs r34 · served-quality distribution on the
+gold probe NOT degraded (backroad/curviness/turns flat-or-better on served trips) · all as-driven
+gates unchanged · the OWNER'S BLIND REVIEW of r34-vs-r35 holdout serves prefers-or-ties the new index
+(no new defect classes). The staging version is `r35-rib`; production stays `r34-rib` until all bars
+pass and he reviews.
+
+**BD-168 — R36 SUPPLY TOOLING + TWO LATENT DEFECTS FOUND BY IT (2026-08-11).** While the r35
+layered sweep grinds, the supply system landed: **loader v2** (`eval/load_drive_cores_v2.ts`:
+replace-version / `--merge` upsert / `--replace-cells`; stamps `sweep_run_id` / `config_stamp` /
+`tileset_id` from the manifest sidecar — migration 0021, applied locally), **global dedup**
+(`eval/dedup_index.ts`: production's own `edgeOverlapRatio` >0.5 mutual + duration within 15 %,
+keep-best strict→quality→id, DRY-RUN default), **coverage map** (`eval/coverage_map.ts`: per-10 km
+supply×material classification → healthy / weak_generation / true_desert + a material-ranked CELLS
+line for targeted top-ups), and **ribbon carry v2** (`eval/carry_ribbons.ts`). Two defects the
+tooling itself exposed:
+· **The id-collision law.** Sweep ids (`cell:loop:cand`) carry NO version, and `id` is the global
+  PK — the r35 artifact regenerates ids format-identical to r34-rib rows, so an un-namespaced merge
+  would silently STEAL production rows into the staging version. Loader v2 + carry v2 namespace
+  every id `<version>:…` at insert; each version owns a disjoint id space; re-loads idempotent.
+· **The r34ribbon dedup breakage (production bug, fixed + shipped).** The r34 carry dodged that
+  same collision by hand-renaming ids `:ribbon:`→`:r34ribbon:` — which silently killed
+  `ribbon_chain`'s physical-road dedup (its `':ribbon:'` marker no longer matched; every cell-copy
+  of a road counted as distinct). **Measured on live rows: Guelph pool 54 "distinct" = 6 real
+  roads; Southfields 63→7; Cobourg 18→2** — the documented Guelph 24→4 hazard, back in production
+  since the r34 flip. Fixed with format-proof `ribbonRoadKey` (last-colon suffix) + tests
+  (474 green), backend restarted on the fix.
+**Baselines for the BD-167 bars (measured, honest denominators):** r34-rib = 332 stored loops =
+**175 distinct-standing** after geometric dedup (47 % storage bloat; one 50-min Grasshopper ring
+stored ×6) → the +25 % bar means r35-rib ≥ **219 distinct-standing**. Coverage: 679 material
+cells = **33 healthy · 586 weak_generation · 60 true_desert** — the structural case for layered
+judging in one line. Manifest `TRACKED_ENV` now also freezes the sweep knobs (SWEEP_LAYERED,
+GENERATOR_VERSION, durations, caps — the r35 sidecar predates this and misses them; recorded).
+
+**BD-169 — ALT_HOLD_LEGACY ADOPTED: an out-of-band clean alternate no longer preempts the exact
+band (2026-08-11).** The rq36 index A/B caught it: at Uxbridge's 60-min ask, r35's richer index
+produced a CLEAN 97-min alternate and served it immediately — the legacy generator (which builds a
+clean 66-min in-band loop there) never ran. Under r34 the same policy accidentally did the right
+thing only because every core candidate FAILED, forcing the legacy path. R34-U8's law ("legacy is a
+candidate generator under the same judge") was implemented as fail-open only, not as competition.
+**The change (flag `ALT_HOLD_LEGACY`, off = R34-U8 behavior byte-identical):** an alternate-tier
+drive-first serve is HELD; the legacy pipeline runs; the legacy result wins ONLY as a clean,
+unrelaxed, exact-band (±15 %) loop passing the final structural judge — everything else (dirty-best,
+relaxed, out-of-band, judge-reject, true no-route) serves the held measured alternate. Every exit
+funnels through the arbitration (presentDirtyBest short-circuits to the held serve; the trace says
+"holding clean N-min alternate — trying for an exact M-min loop live").
+**Pre-registered rule (frozen before measuring):** previously-exact serves byte-identical ·
+alternate fixtures unchanged or → exact-band clean · serve count not lower · wall in contract.
+**Measured on the 20-fixture holdout (r35 pin):** 19/20 byte-identical; Uxbridge 60m 97→65 min
+(8 % err, final judge PASS, backroad 54→50 — the priced trade, duration fit first); serves 17→17;
+wall in contract. **ADOPTED, default on**; suite 474 green; live wire smoke at Uxbridge serves
+66 min/ok. **BD-167 bars under the adopted policy:** distinct 175→**393 (+125 %, bar ≥219)** ✓ ·
+served quality BETTER on every aggregate (serves 16→17, backroad 45.8→46.4 %, dur-err 15.5→12.4 %,
+structural 0=0; one noted per-fixture trade: Uxbridge 90m backroad 75→54, in-band both) ✓ · gates
+unchanged ✓ · **owner blind review = PENDING (the STOP)** — sheet eval/reports/blind_r36_review.html
+(16 pairs, key fp fde434c77fc8, seed 36). Production stays r34-rib until he reviews.
+
+**BD-170 — PRODUCTION FLIPPED TO r35-rib (2026-08-11).** The owner's blind review (16 pairs, seed
+36, key fp fde434c77fc8) came back **1-1-14**: r35 preferred at Newmarket-60 (his 5-vs-4 — the
+57-min 62 %-backroad serve over the 88-min 21 % one), r34 preferred at Uxbridge-90 (his strongest
+call, strength 2 — the 75 %-backroad ring over r35's 54 % one), every other pair a tie ("most were
+the exact same route" — 14/16 were, byte-identical; his eyes independently confirmed the
+instrument). **Prefers-or-ties + no new defect class → bar 4 PASS; all four frozen BD-167 bars
+pass.** Flip = the one-constant mechanism (discover_cores default 'r34-rib'→'r35-rib'); suite 474
+green; live wire proof: `served exact r35-rib:c-79.863_43.708:loop:…` at Southfields (69-min
+exact for a 60 ask, x 0/0, stem 540 m) and a 6-card all-distinct Discover menu (Forks of the
+Credit, Hockley Valley Road present). r34-rib rows stay loaded for instant rollback
+(`DRIVE_CORES_VERSION=r34-rib` env).
+**Named residual (not chased, recorded):** Uxbridge-90 — r35's richer candidate field diluted the
+build attempts (browse-order + TRIP_PAIRS_MAX cap) so the br77 Mast ring that r34 served was never
+attempted; the served br54 ring is in-band and clean, just less pretty. Follow-up candidate for a
+future adopt-or-refuse round: quality-aware attempt ordering under rich supply. NOT tuned now —
+the bars passed and tuning post-hoc against the review would be exactly the over-fitting the
+blind harness exists to prevent.
