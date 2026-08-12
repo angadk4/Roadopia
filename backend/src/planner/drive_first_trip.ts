@@ -29,7 +29,7 @@ import { travelMatrix } from '../valhalla/matrix';
 import { routeThrough } from '../valhalla/route';
 
 import { LEGACY } from './costing';
-import { selfIntersections, summarizeCrossings } from './crossings';
+import { selfIntersections, summarizeCrossings, segIntersect } from './crossings';
 import { DRIVE_CORES_VERSION, readDriveCores, type CoreRowRead } from './discover_cores';
 import { edgeOverlapRatio } from './overlap';
 import { uturnCount } from './score';
@@ -416,6 +416,13 @@ export const ALT_BAND_LADDER_ON = (process.env['ALT_BAND_LADDER'] ?? 'off') !== 
  *  band → quality tiebreak → id. Off = the unsound comparator, byte-identical. */
 export const TRIP_RANK_SOUND_ON = (process.env['TRIP_RANK_SOUND'] ?? 'on') !== 'off';
 
+/** BD-177: crossing-aware pair PRE-SCREEN — pairs whose spoke CHORDS cross
+ *  the kept arc (or each other) rank after non-crossing pairs, so the ≤3
+ *  build attempts stop burning on configurations the judge will reject.
+ *  Geometric heuristic ONLY for ordering; the as-driven judge stays the law.
+ *  Off = byte-identical. */
+export const PAIR_CROSS_SCREEN_ON = (process.env['PAIR_CROSS_SCREEN'] ?? 'on') !== 'off';
+
 /** The BD-167 Layer C row quality, verbatim (index keep-competition formula). */
 export const rowQualityQ = (r: CoreRowRead): number =>
   r.backroad_share +
@@ -746,9 +753,61 @@ export async function driveFirstTrip(
             }
           }
           const err = (x: Pair): number => Math.abs(x.predS - durationTargetS) / durationTargetS;
+          // BD-177: predicted spoke-crossings per pair (0 = clean configuration).
+          const crossOf = (x: Pair): number => {
+            if (!PAIR_CROSS_SCREEN_ON) return 0;
+            const A: [number, number] = [origin.lng, origin.lat];
+            const n = rp.ring.length;
+            const ai = rp.ports[x.a]!;
+            const bi = rp.ports[x.b]!;
+            const j1 = rp.ring[ai]!;
+            const j2 = rp.ring[bi]!;
+            let hits = 0;
+            // walk the kept arc ai→bi in x.dir, strided; skip 500 m around joins
+            const arcLenM =
+              x.dir === 1
+                ? (rp.cum[bi]! - rp.cum[ai]! + rp.totalM) % rp.totalM
+                : (rp.cum[ai]! - rp.cum[bi]! + rp.totalM) % rp.totalM;
+            const STRIDE = 4;
+            let i = ai;
+            let walked = 0;
+            while (walked < arcLenM && hits === 0) {
+              const j = (i + x.dir * STRIDE + n * STRIDE) % n;
+              const p0 = rp.ring[i]!;
+              const p1 = rp.ring[j]!;
+              const segStartM =
+                x.dir === 1
+                  ? (rp.cum[i]! - rp.cum[ai]! + rp.totalM) % rp.totalM
+                  : (rp.cum[ai]! - rp.cum[i]! + rp.totalM) % rp.totalM;
+              const fromJ1 = segStartM;
+              const toJ2 = arcLenM - segStartM;
+              if (fromJ1 > 500 && segIntersect(A, j1, p0, p1) !== null) hits++;
+              if (toJ2 > 500 && segIntersect(j2, A, p0, p1) !== null) hits++;
+              const stepM =
+                x.dir === 1
+                  ? (rp.cum[j]! - rp.cum[i]! + rp.totalM) % rp.totalM
+                  : (rp.cum[i]! - rp.cum[j]! + rp.totalM) % rp.totalM;
+              walked += stepM > 0 ? stepM : rp.totalM / n;
+              i = j;
+            }
+            // out spoke vs home spoke (shared origin endpoint is excluded by
+            // the strict-interior test)
+            if (hits === 0 && segIntersect(A, j1, j2, A) !== null) hits++;
+            return hits;
+          };
+          const crossCache = new Map<Pair, number>();
+          const crossKey = (x: Pair): number => {
+            let v = crossCache.get(x);
+            if (v === undefined) {
+              v = crossOf(x) > 0 ? 1 : 0;
+              crossCache.set(x, v);
+            }
+            return v;
+          };
           pairs.sort(
             (x, y) =>
               (err(x) <= TRIP_EXACT_BAND ? 0 : 1) - (err(y) <= TRIP_EXACT_BAND ? 0 : 1) ||
+              crossKey(x) - crossKey(y) ||
               err(x) - err(y) ||
               x.commutePred - y.commutePred ||
               x.a - y.a ||

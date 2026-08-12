@@ -142,3 +142,90 @@ export async function traceRoadClasses(
   }
   return { edges, matchedShape };
 }
+
+// --- R37-U13 (BD-178): DIRECTED EDGE IDENTITY capture -----------------------
+
+const EdgeIdSchema = z.object({
+  id: z.number().optional(), // GraphId value (tileset-scoped!)
+  way_id: z.number().optional(),
+  length: z.number().nonnegative(),
+  forward: z.boolean().optional(),
+  source_percent_along: z.number().min(0).max(1).optional(),
+  target_percent_along: z.number().min(0).max(1).optional(),
+});
+const EdgeIdResponseSchema = z.object({
+  units: z.string().optional(),
+  edges: z.array(EdgeIdSchema).default([]),
+});
+
+/** One matched directed edge: OSM way + travel direction + trimmed metres.
+ *  GraphIds are NEVER stored without tileset identity (Recovery §6.1) —
+ *  callers persist them alongside `tileset_id`. */
+export interface DirectedEdge {
+  /** Valhalla GraphId value — valid ONLY for the tileset it was traced on. */
+  graphId: number | null;
+  wayId: number | null;
+  forward: boolean;
+  lengthM: number;
+}
+
+/** Map a route geometry to its DIRECTED EDGE sequence (way ids + direction).
+ *  Same walk_or_snap contract as traceRoadClasses; throws on engine error. */
+export async function traceEdgeIds(
+  baseUrl: string,
+  geometry: LineString,
+  { timeoutMs = 10_000 }: { timeoutMs?: number } = {},
+): Promise<DirectedEdge[]> {
+  const payload = {
+    shape: geometry.coordinates.map(([lon, lat]) => ({ lat, lon })),
+    costing: 'auto',
+    shape_match: 'walk_or_snap',
+    filters: {
+      attributes: ['edge.id', 'edge.way_id', 'edge.length', 'edge.forward'],
+      action: 'include',
+    },
+  };
+  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/trace_attributes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const body: unknown = await res.json();
+  if (!res.ok) {
+    const msg =
+      typeof body === 'object' && body !== null && 'error' in body
+        ? String((body as { error: unknown }).error)
+        : 'unexpected error shape';
+    throw new ValhallaTraceError(res.status, msg);
+  }
+  const parsed = EdgeIdResponseSchema.parse(body);
+  const toMetres = parsed.units === 'miles' ? 1609.344 : 1000;
+  return parsed.edges.map((e) => {
+    const from = e.source_percent_along ?? 0;
+    const to = e.target_percent_along ?? 1;
+    return {
+      graphId: e.id ?? null,
+      wayId: e.way_id ?? null,
+      forward: e.forward ?? true,
+      lengthM: e.length * toMetres * Math.max(0, to - from),
+    };
+  });
+}
+
+/** Compact directed-road signature: consecutive same-(way,dir) edges coalesce
+ *  to runs; the signature is the run sequence. Stable across shape resampling;
+ *  survives tileset rebuilds (way ids are OSM identity, not GraphIds). */
+export function edgeSignature(edges: readonly DirectedEdge[]): string {
+  const runs: string[] = [];
+  let prev: string | null = null;
+  for (const e of edges) {
+    if (e.wayId === null) continue;
+    const key = `${e.wayId}${e.forward ? '+' : '-'}`;
+    if (key !== prev) {
+      runs.push(key);
+      prev = key;
+    }
+  }
+  return runs.join(',');
+}

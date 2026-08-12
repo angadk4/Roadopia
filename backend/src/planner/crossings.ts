@@ -106,7 +106,9 @@ function resample(coords: Array<[number, number]>): {
   return { pts, cum };
 }
 
-function segIntersect(
+/** Strict-interior segment intersection (exported for BD-177's pair screen —
+ *  affine-invariant, so raw lng/lat is sound for existence tests). */
+export function segIntersect(
   p1: [number, number],
   p2: [number, number],
   p3: [number, number],

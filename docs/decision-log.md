@@ -4140,3 +4140,48 @@ ask and ALL fail with doubling+self_crossing+same_way_home — systematic, not s
 rings from this funnel origin need long spokes that cross their own ring. Refusal recorded per the
 frozen criteria; the fix is CONSTRUCTION-level (crossing-aware J1/J2 pair pre-screening, R37-class)
 — the named first target of the edge-native round. ALT_BAND_LADDER default off (code kept).
+
+**BD-177 — PRE-REGISTRATION: CROSSING-AWARE J1/J2 PAIR PRE-SCREEN (frozen 2026-08-11 BEFORE
+measurement; R37's first unit).** Measured root (BD-176): from funnel origins at long asks, EVERY
+built pair fails doubling+self_crossing — the spokes cross the kept arc; the builder discovers this
+only AFTER routing (TRIP_PAIRS_MAX=3 attempts burn on crossing configurations). **Mechanism:** for
+each feasible (J1, J2, dir) pair, a geometric pre-screen approximates the spokes as chords
+(origin→J1, J2→origin) and tests (a) chord-vs-kept-arc intersection (excluding a 500 m join
+neighborhood) and (b) chord-vs-chord intersection away from the origin; crossing pairs rank AFTER
+non-crossing pairs — never filtered outright, the as-driven judge stays the only law. Flag
+`PAIR_CROSS_SCREEN`, off = byte-identical.
+**Adoption rule (frozen):** on the 26-fixture combined ladder under current defaults: serve count
+not lower · every off-arm exact-tier fixture stays exact-tier with quality aggregates
+flat-or-better · at least one currently-failing ask flips to a clean serve OR ladder-wide
+self_crossing rejections drop ≥25 % · zero structural defects · wall in contract. Refuse otherwise.
+
+**BD-177 — ADOPTED (2026-08-11): the crossing-aware pair pre-screen is the strongest measured
+lever of the project.** Frozen-rule verdict on the 26-fixture ladder: serves **22→24** (Ancaster-60
+and the owner's dead 2-hour-at-home BOTH flip unavailable→clean), every changed existing serve
+better on BOTH axes (Uxbridge-60 65→62 min & br 50→58; Georgetown-60 76→69 & 60→68; Georgetown-90
+82→76 & 48→60), 21/26 byte-identical, structural defects 0, wall in contract. Default ON; suite
+478 green; live wire: the 2-hour ask serves `exact` 114 min, fidelity 1.00, x 0/0 at his home.
+Mechanism confirmed: the funnel failures were CONFIGURATION, not material — non-crossing (J1,J2)
+pairs existed at the same rings and simply never ranked into the ≤3 build attempts. The screen is
+ordering-only; the as-driven judge remains the only law. (BD-176's diagnosis chain — rescue rung
+refused → variants insufficient → comparator unsound → construction-level — ends here, resolved.)
+
+**BD-178 — R37-U13 EDGE-NATIVE TRUTH, offline-first core COMPLETE (2026-08-11).** Directed edge
+identity now exists beside geometry, validated before any cutover (Recovery §6 discipline):
+· **Capture:** `traceEdgeIds` (way_id + GraphId + direction + trimmed metres via /trace_attributes)
+  and `edgeSignature` (coalesced wayId±dir runs — OSM-stable across tileset rebuilds) in the trace
+  layer; migration **0022** (`edges` jsonb + `edge_sig` text, tileset-scoped per 0021's id) applied
+  locally; GraphIds never stored without tileset identity.
+· **Backfill:** r35-rib 392/393 · r36-rib 536/537 loops carry directed signatures (mean ~60
+  directed-road runs per loop; 1 trace failure each, recorded).
+· **Validation (the cutover gate):** edge-vs-geometric same-ring verdicts over every same-band
+  neighbor pair — r35: 323 pairs, 98.1 % agreement; r36: 589 pairs, 99.2 %. **ZERO geometric
+  over-merges in either corpus** (cells never fused genuinely-distinct rings); all disagreements
+  are GEO-distinct/EDGE-dup — ~2 % residual same-road variants the geometric rule under-merges
+  (e.g. two same-cell Oro-Medonte rings sharing >50 % of directed road-metres). **Verdict: geometry
+  STAYS canonical** for both shape and dedup this round; edge signatures are the recorded
+  refinement for a future supply pass (they'd remove the ~6 residual near-dups per version).
+· **Anti-fool pin (PASS):** a curvy ribbon vs its reversal — cell overlap 0.81 (same pavement,
+  above the 0.5 production dup bar) vs directed-edge overlap **0.00**: edges answer "same road,
+  same DIRECTION", which cells cannot — the primitive same-way-home/opposed-retrace logic needs
+  when it goes edge-native.
