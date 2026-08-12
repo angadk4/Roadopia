@@ -1,0 +1,112 @@
+{
+  "p01": {
+    "left_rating_1to5": 5,
+    "right_rating_1to5": 5,
+    "preference": "0"
+  },
+  "p02": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 3,
+    "preference": "0"
+  },
+  "p03": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 3,
+    "preference": "0"
+  },
+  "p04": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 3,
+    "preference": "L1"
+  },
+  "p05": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 3,
+    "preference": "L1"
+  },
+  "p06": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 4,
+    "preference": "0"
+  },
+  "p07": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 3,
+    "preference": "0"
+  },
+  "p08": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 3,
+    "preference": "0"
+  },
+  "p09": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 4,
+    "preference": "0"
+  },
+  "p10": {
+    "left_rating_1to5": 2,
+    "right_rating_1to5": 2,
+    "preference": "0"
+  },
+  "p11": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 3,
+    "preference": "0"
+  },
+  "p12": {
+    "right_rating_1to5": 4,
+    "left_rating_1to5": 3,
+    "preference": "R1"
+  },
+  "p13": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 3,
+    "preference": "0"
+  },
+  "p14": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 3,
+    "preference": "0"
+  },
+  "p15": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 4,
+    "preference": "0"
+  },
+  "p16": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 3,
+    "preference": "0"
+  },
+  "p17": {
+    "right_rating_1to5": 4,
+    "left_rating_1to5": 3,
+    "preference": "R1"
+  },
+  "p18": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 4,
+    "preference": "0"
+  },
+  "p19": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 4,
+    "preference": "0"
+  },
+  "p20": {
+    "left_rating_1to5": 3,
+    "right_rating_1to5": 3,
+    "preference": "0"
+  },
+  "p21": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 4,
+    "preference": "0"
+  },
+  "p22": {
+    "left_rating_1to5": 4,
+    "right_rating_1to5": 4,
+    "preference": "0"
+  }
+}

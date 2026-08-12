@@ -559,6 +559,7 @@ export async function runPlanner(
       constraints.duration_target_s,
       {
         avoidHighways: constraints.avoid.highways === true,
+        character: constraints.character,
         ...(originStemM !== null ? { oabGraceM: originStemM } : {}),
         // The attempt may spend at most 40 % of the wall; the legacy planner
         // keeps the rest (measured: unbounded stacking hit 25.8 s live).

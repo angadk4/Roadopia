@@ -4038,3 +4038,105 @@ attempted; the served br54 ring is in-band and clean, just less pretty. Follow-u
 future adopt-or-refuse round: quality-aware attempt ordering under rich supply. NOT tuned now —
 the bars passed and tuning post-hoc against the review would be exactly the over-fitting the
 blind harness exists to prevent.
+
+**BD-172 — THE ZERO-CURVINESS DEFECT: every loop core in every index version scored curviness 0
+(found 2026-08-11, device-driven).** His post-r35 device verdict ("still quite broken, same old
+mistakes") contradicted green instruments, so the session was reconstructed from the backend log and
+replayed at his home origin: three different asks served the IDENTICAL 69-min ring (commute 45 %),
+the 45-min ask fell to legacy at 39 min, the 2-hour ask died honestly (final judge: self-crossings
+in the legacy build). Root cause found while probing why: **`computeCurvature` skips CLOSED RINGS**
+(the cul-de-sac corpus-poison guard, commit 3bf5403) — and every loop ROUTE is a closed ring, so
+`measureCurvature` returned 0 for every loop the sweeps ever measured (ribbons: unaffected, mean
+1.37). Consequences: the RPC's backroad·curv order, Discover ranking, sweep Layer C quality, dedup
+keep-best, and any twisty differentiation were all CURVATURE-BLIND on loops — a straight
+concession-road SQUARE ranked equal to a river-valley ring, which is precisely the owner's oldest
+complaint. **Fix:** `allowClosedRing` param (default false — corpus behavior byte-identical, data
+suite 18/18) passed as true by route-level `measureCurvature`; pinned by a test (closed square
+scores, closed twisty ring ≫ square). **Backfill:** r35-rib 393/393 and r34-rib 332/332 loops
+recomputed in place from full-res geometry (r35 spread: p10 0.56 · median 1.03 · p90 1.68 · max
+3.82 — the p10 tail below θ=0.6 IS the squares, now measurable). **Evidence line at his home:** the
+served 60-min ring is curv 1.13 while a 59-min Creditview Road ring at curv 2.04 sits within 18 km
+— the supply existed; nothing could see it. **r36-rib full resweep launched** with real curvature
+live in Layer C (staging; BD-167-style bars + owner blind review before any flip).
+
+**BD-171 — TWISTY_TRIP_RANK REFUSED (2026-08-11; rule frozen pre-run).** Measured at his home:
+"1 hour twisty" and "1 hour backroads" served the identical core because `driveFirstTrip` never saw
+`constraints.character`. Lever: twisty asks flip the quality tiebreak to curvature-first (BD-70's
+legacy precedent), flag `TWISTY_TRIP_RANK`. Pre-registered rule: non-twisty byte-identical ·
+twisty serves different+curvier where distinct cores exist · mean served curviness strictly up ·
+serves not lower. **Result (12 twisty fixtures, post-backfill): REFUSE** — non-twisty 12/12
+byte-identical and serves 12→12, but mean served curviness 1.04→1.02 and the only changed fixture
+(Port Perry 90) degraded to a legacy fallback: the tiebreak fires AFTER fit-band and the 2 km
+distance rule, so it can only reorder near-equals — and near-equals rarely differ in curvature.
+Flag stays default-off (code+test kept, refusal recorded). The real twisty lever is (a) SUPPLY —
+the r36 curvature-aware resweep — and (b) a future pre-registered serve-ordering round where
+curvature enters the RANK (Recovery §10.3), not the tiebreak; the Creditview-2.04-unpicked-at-home
+evidence line is its motivation. Character plumbing (run.ts → driveFirstTrip opts) ships inert.
+
+**BD-173 — r36-rib ADOPTION BARS (frozen 2026-08-11 BEFORE serve-side measurement; artifact-level
+stats only were visible: 362 loops/100 names, curv p10 0.68/median 1.12/zeros 0, hash dc71b58).**
+r36 is a QUALITY re-orientation (de-squaring via real curvature in Layer C), not a supply
+expansion — BD-167's "+25 % distinct" bar does not transfer. Its bars:
+· **Served curviness strictly UP** on the combined home+holdout ladder (mean served-core curviness
+  and/or as-driven measured curviness r36 > r35) — the defect being fixed must show up in serves;
+· **Structural law unchanged:** zero served defects (crossings/uturns/spurs/microloops) both arms;
+· **Serve count flat-or-better** on the same ladder (honest refusals may shift WHICH asks, not net
+  count down);
+· **Coverage usefulness flat-or-better:** healthy-cell count (coverage map) not below r35's 53
+  after the belt top-up merges;
+· **The owner's blind review prefers-or-ties** r36 serves (no new defect classes).
+Staging only until all five pass; production stays r35-rib. Rollback stays two envs
+(DRIVE_CORES_VERSION, ALT_HOLD_LEGACY).
+
+**BD-174 — RANK_QUALITY_V2 REFUSED · BD-173 VERDICT: 4/5 BARS PASS, curviness bar fails with a
+named cause — the flip decision goes to the owner's blind review (2026-08-11).**
+· **The union index.** The r36 curvature-aware sweep alone collapsed coverage (healthy 53→25) —
+  the frozen coverage bar caught it. Recorded remedy: UNION r35's loops into r36-rib via the merge
+  path (carry generalized to loops), dedup keep-best across generations → **537 distinct-standing
+  loops, healthy 68 (> r35's 53)**, plus the 49-cell belt top-up (28 rings; the belt's failure
+  histogram says main/backroad floors — much of "weak_generation" is honest near-desert).
+· **RANK_QUALITY_V2 (frozen rule, one-arm-per-process, 26-fixture ladder): REFUSED** — 25/26
+  byte-identical; the one change LOST a serve (Ancaster 90m → unavailable: the reorder spent the
+  build budget on a structurally-failing candidate). With BD-171 this is the second serve-side
+  ordering lever refused in one round; the binding constraints are supply-at-duration×radius and
+  trip construction, not ordering. Flag default-off, kept for a post-R37 revisit.
+· **The 2-hour-at-home anatomy (traced):** every in-band ring's from-home construction fails real
+  gates (spoke-crosses-ring; doubling), legacy assembly overshoots (median 263 min for 120) and
+  its dirty best is judge-rejected — honest unavailable. NAMED FOLLOW-UP, not built: the build cap
+  exhausts on structural failures before reaching a buildable clean 89-min alternate one fit-band
+  down (candidate: continue the ladder into alternate bands while the wall allows). Also named:
+  crossing-aware J1/J2 pair pre-screening.
+· **BD-173 bars, combined 26-fixture ladder (r35 vs r36-union):** serves 22=22 ✓ · structural 0=0
+  ✓ · coverage 68>53 ✓ · duration error 12.2→9.4 % ✓ · backroad 45.0→48.2 % (↑) · **served
+  curviness 1.42→1.30 ✗** — the failing bar decomposes into exactly 4 changed fixtures, each
+  better on OTHER frozen laws: Shelburne 60m serves EXACT 60 (was a 91-min alternate) and the
+  three home 60-min asks swap to a home-cell ring (backroad 32→61 %, commute slashed, curv
+  1.37→1.17). Per the discipline a failed bar blocks the flip; the owner's blind review (always
+  the final bar) decides with full disclosure — sheet `eval/reports/blind_r37_review.html`
+  (22 pairs, seed 37, key fp fce778804571). Production stays r35-rib.
+
+**BD-175 — r36-rib NOT ADOPTED (owner blind review, 2026-08-11).** The deciding bar came back
+**3-1-18 to the INCUMBENT** (all weak, strength 1): he preferred r36's home ring once but r35's
+twice on the SAME physical pair (a coin flip — the home swap is visually a wash) and preferred
+r35's out-of-band-but-prettier Shelburne serve over r36's exact-60. With the curviness bar already
+failed, r36-union is refused; **production stays r35-rib**; the r36-rib staging rows remain loaded
+for future rounds. **Recorded product signal (first counter-evidence to duration-primacy):** in
+3 of 4 non-ties he chose the prettier drive over the duration-exact or commute-light one. Future
+serve-rule rounds must weigh this; the 25+16+22-pair preference corpus now spans three reviews.
+
+**BD-176 — ALT_BAND_LADDER REFUSED · TRIP_RANK_SOUND ADOPTED (2026-08-11).** Chasing the dead
+2-hour-at-home through three mechanisms, each measured:
+· **Rescue rung** (continue past the build cap into farther fit bands when everything failed
+  structurally): fired, tried 5 more — all failed with the same signature.
+· **Variant retries** (the geometric dedup swallows same-material VARIANTS whose builds differ —
+  the ring serving the 90-ask cleanly was deduped under a failed sibling): pool widened — still
+  not reached.
+· **The comparator was UNSOUND** — "distance if >2 km apart else quality" is non-transitive, so
+  the candidate order was arbitrary-though-deterministic. Fixed as fit-band → 2 km distance band →
+  quality → id (`TRIP_RANK_SOUND`): **26/26 ladder fixtures byte-identical, serves 22=22 —
+  adopted default-on as a pure correctness fix with measured zero behavior change.**
+**The honest endpoint:** with sound ranking, TEN candidates from all directions build for the 2h
+ask and ALL fail with doubling+self_crossing+same_way_home — systematic, not selectional: 120-min
+rings from this funnel origin need long spokes that cross their own ring. Refusal recorded per the
+frozen criteria; the fix is CONSTRUCTION-level (crossing-aware J1/J2 pair pre-screening, R37-class)
+— the named first target of the edge-native round. ALT_BAND_LADDER default off (code kept).

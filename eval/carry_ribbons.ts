@@ -10,7 +10,11 @@
  * `<to>:<original id>` — collision-proof and road-key-safe.
  *
  * Run (from eval/):
- *   TSX_TSCONFIG_PATH=../backend/tsconfig.json npx tsx carry_ribbons.ts r34-rib r35-rib
+ *   TSX_TSCONFIG_PATH=../backend/tsconfig.json npx tsx carry_ribbons.ts r34-rib r35-rib [kind]
+ * `kind` defaults to 'ribbon'; pass 'loop' to union loop supply across sweep
+ * generations (BD-173: the r36 curvature-aware sweep traded coverage for
+ * curviness — the union restores coverage and lets dedup keep the best of
+ * any physical duplicate).
  */
 import { Client } from 'pg';
 
@@ -20,8 +24,9 @@ const DB_URL =
 async function main(): Promise<void> {
   const from = process.argv[2];
   const to = process.argv[3];
-  if (!from || !to || from === to) {
-    throw new Error('usage: carry_ribbons.ts <from-version> <to-version>');
+  const kind = process.argv[4] ?? 'ribbon';
+  if (!from || !to || from === to || (kind !== 'ribbon' && kind !== 'loop')) {
+    throw new Error('usage: carry_ribbons.ts <from-version> <to-version> [ribbon|loop]');
   }
   const db = new Client({ connectionString: DB_URL });
   await db.connect();
@@ -45,17 +50,17 @@ async function main(): Promise<void> {
          highway_share, hood_share, turns_per_10min, loopiness,
          'carried:' || $1, config_stamp, tileset_id
        from drive_cores
-       where generator_version = $1 and kind = 'ribbon'
+       where generator_version = $1 and kind = $3
        on conflict (id) do nothing`,
-      [from, to],
+      [from, to, kind],
     );
     await db.query('commit');
     const check = await db.query<{ n: string }>(
-      `select count(*)::text n from drive_cores where generator_version=$1 and kind='ribbon'`,
-      [to],
+      `select count(*)::text n from drive_cores where generator_version=$1 and kind=$2`,
+      [to, kind],
     );
     console.log(
-      `carried ${res.rowCount ?? 0} ribbons ${from} → ${to}; ${to} ribbons now ${check.rows[0]!.n} — verified.`,
+      `carried ${res.rowCount ?? 0} ${kind}s ${from} → ${to}; ${to} ${kind}s now ${check.rows[0]!.n} — verified.`,
     );
   } catch (err) {
     await db.query('rollback');

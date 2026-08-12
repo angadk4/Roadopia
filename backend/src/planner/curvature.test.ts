@@ -76,6 +76,45 @@ describe('measureCurvature — synthetic (M3-T05)', () => {
     };
     expect(measureCurvature(tiny).skipped).toBe(true);
   });
+
+  it('BD-172: a CLOSED LOOP route measures (route-level), and twisty ring ≫ square ring', () => {
+    // Every loop core in every index version scored curviness 0 because the
+    // corpus builder's closed-ring skip (cul-de-sac poison, 3bf5403) also
+    // caught loop ROUTES — so rankers could not tell a concession-road square
+    // from a river-valley ring. Route-level measurement must score both, and
+    // must rank the twisty ring far above the square.
+    const D2R = Math.PI / 180;
+    const refLat = 43.2;
+    const R = 6_371_008.8;
+    const toLL = (x: number, y: number): [number, number] => [
+      -79.9 + x / (D2R * R * Math.cos(refLat * D2R)),
+      refLat + y / (D2R * R),
+    ];
+    // 8 km × 8 km closed square (grid country), 60 m spacing
+    const sq: [number, number][] = [];
+    const side = 8_000;
+    const step = 60;
+    for (let d = 0; d < side; d += step) sq.push(toLL(d, 0));
+    for (let d = 0; d < side; d += step) sq.push(toLL(side, d));
+    for (let d = side; d > 0; d -= step) sq.push(toLL(d, side));
+    for (let d = side; d > 0; d -= step) sq.push(toLL(0, d));
+    sq.push(sq[0]!); // closed
+    const square = measureCurvature({ type: 'LineString', coordinates: sq });
+    expect(square.skipped).toBe(false); // the old behavior returned skipped/0 here
+
+    // closed ring of the same scale whose path wiggles continuously (R~250 m)
+    const tw: [number, number][] = [];
+    const laps = 220;
+    for (let i = 0; i <= laps; i++) {
+      const t = (2 * Math.PI * i) / laps;
+      const rr = 4_000 + 400 * Math.sin(12 * t);
+      tw.push(toLL(4_000 + rr * Math.cos(t), 4_000 + rr * Math.sin(t)));
+    }
+    tw[tw.length - 1] = tw[0]!;
+    const twisty = measureCurvature({ type: 'LineString', coordinates: tw });
+    expect(twisty.skipped).toBe(false);
+    expect(twisty.curviness).toBeGreaterThan(square.curviness * 3);
+  });
 });
 
 // --- round 15/FB-5: class-aware route measurement ---------------------------

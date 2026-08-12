@@ -384,12 +384,62 @@ function nearestIdx(coords: Array<[number, number]>, p: LatLng, from: number, to
  * geometry), real maneuvers everywhere, engine-priced duration. `trip: null`
  * when nothing passes — with the rejection list for the trace.
  */
+/** BD-171: twisty asks rank curvature FIRST among fit-equal, similarly-near
+ *  cores (BD-70 gave legacy retrieval the same emphasis; the drive-first
+ *  picker ignored character entirely — measured at the owner's home:
+ *  "1 hour twisty" and "1 hour backroads" served the IDENTICAL core).
+ *  Off = character-blind ranking, byte-identical. */
+export const TWISTY_TRIP_RANK_ON = (process.env['TWISTY_TRIP_RANK'] ?? 'off') !== 'off';
+
+/** BD-174 (Recovery §10.3/§10.4): rank clean candidates by QUALITY — the
+ *  frozen BD-167 Layer C row score minus a predicted-commute penalty —
+ *  instead of the hard 2 km distance trump + backroad-first tiebreak.
+ *  Evidence: the union index put a curv-2.04 ring in reach of the owner's
+ *  home and the distance rule kept serving the nearer curv-1.17 ring
+ *  (same mechanism as the Uxbridge-90 residual and the BD-171 refusal).
+ *  Off = distance-trump ordering, byte-identical. */
+export const RANK_QUALITY_V2_ON = (process.env['RANK_QUALITY_V2'] ?? 'off') !== 'off';
+
+/** BD-176: when EVERY near-band candidate fails STRUCTURALLY and wall budget
+ *  remains, continue down the ranked list into farther fit bands instead of
+ *  returning empty-handed — the honest-alternate tier then serves it with
+ *  plain words. Traced at the owner's home: the 2-hour ask died with a
+ *  buildable clean 89-min alternate sitting one band past the build cap.
+ *  Off = cap-and-stop, byte-identical. */
+export const ALT_BAND_LADDER_ON = (process.env['ALT_BAND_LADDER'] ?? 'off') !== 'off';
+
+/** BD-176b: the candidate comparator was UNSOUND — "distance if >2 km apart,
+ *  else quality" is non-transitive, so Array.sort produced an arbitrary
+ *  (input-order-dependent) ranking; measured at the owner's home the ring
+ *  that cleanly serves the 90-ask sorted BELOW five farther candidates for
+ *  the 120-ask and was never built. Sound order: fit band → 2 km distance
+ *  band → quality tiebreak → id. Off = the unsound comparator, byte-identical. */
+export const TRIP_RANK_SOUND_ON = (process.env['TRIP_RANK_SOUND'] ?? 'on') !== 'off';
+
+/** The BD-167 Layer C row quality, verbatim (index keep-competition formula). */
+export const rowQualityQ = (r: CoreRowRead): number =>
+  r.backroad_share +
+  (0.25 * Math.min(r.curviness, 3)) / 3 -
+  0.5 * r.hood_share -
+  (0.15 * Math.max(0, r.turns_per_10min - 5)) / 5;
+
+/** Quality tiebreak among fit-banded, similarly-near candidates. */
+export const tripQualityTiebreak = (a: CoreRowRead, b: CoreRowRead, twisty: boolean): number =>
+  twisty
+    ? b.curviness - a.curviness || b.backroad_share - a.backroad_share || a.id.localeCompare(b.id)
+    : b.backroad_share - a.backroad_share || b.curviness - a.curviness || a.id.localeCompare(b.id);
+
 export async function driveFirstTrip(
   db: Client,
   valhallaUrl: string,
   origin: LatLng,
   durationTargetS: number | null,
-  opts: { avoidHighways?: boolean; deadlineMs?: number; oabGraceM?: number } = {},
+  opts: {
+    avoidHighways?: boolean;
+    deadlineMs?: number;
+    oabGraceM?: number;
+    character?: readonly string[];
+  } = {},
 ): Promise<DriveFirstOutcome> {
   // Wall honesty (BD-119's lesson, re-learned live: a fallback-heavy origin
   // measured 25.8 s because the trip attempt STACKED on the legacy planner's
@@ -439,18 +489,32 @@ export async function driveFirstTrip(
     return 0;
   };
 
+  const twisty = TWISTY_TRIP_RANK_ON && (opts.character?.includes('twisty') ?? false);
+  // BD-174: predicted commute SHARE of the whole ask (0..1) — the penalty term.
+  const commuteShare = (r: CoreRowRead): number =>
+    durationTargetS > 0 ? Math.min(1, commutePredS(r) / durationTargetS) : 1;
   const candidates = rows
     .filter((r) => fit(r) <= TRIP_DURATION_TOL + 0.1) // predictor slack; the real gate decides
     .sort((a, b) => {
       const fa = Math.floor(fit(a) * 10);
       const fb = Math.floor(fit(b) * 10);
       if (fa !== fb) return fa - fb;
+      if (RANK_QUALITY_V2_ON) {
+        const qa = rowQualityQ(a) - 0.5 * commuteShare(a);
+        const qb = rowQualityQ(b) - 0.5 * commuteShare(b);
+        if (qa !== qb) return qb - qa;
+        return a.id.localeCompare(b.id);
+      }
       const da = nearestRingM(a);
       const dbd = nearestRingM(b);
+      if (TRIP_RANK_SOUND_ON) {
+        const ba = Math.floor(da / 2000);
+        const bb = Math.floor(dbd / 2000);
+        if (ba !== bb) return ba - bb;
+        return tripQualityTiebreak(a, b, twisty);
+      }
       if (Math.abs(da - dbd) > 2000) return da - dbd;
-      return (
-        b.backroad_share - a.backroad_share || b.curviness - a.curviness || a.id.localeCompare(b.id)
-      );
+      return tripQualityTiebreak(a, b, twisty);
     })
     .slice(0, TRIP_BUILD_MAX * 3); // pre-slice, then geometric dedup below
 
@@ -747,6 +811,40 @@ export async function driveFirstTrip(
       else rejected.push({ id: `${row.id}(full)`, failures: attempt.failures });
     } catch {
       /* recorded already at partial-arc */
+    }
+  }
+
+  // BD-176 rescue rung: single-arc heuristic builds (cheap), first clean wins.
+  if (ALT_BAND_LADDER_ON && clean.length === 0 && !outOfTime()) {
+    // The pool deliberately SKIPS the geometric dedup: a swallowed >0.5
+    // "copy" is a different stored VARIANT of failed material (other entry
+    // geometry, other arc) — measured at the owner's home: the ring that
+    // serves the 90-ask cleanly was deduped under the 120-ask's FAILED
+    // variant and never tried. Copies are not interchangeable at build time.
+    const extended: CoreRowRead[] = [];
+    for (const cand of candidates) {
+      if (distinct.some((k) => k.id === cand.id)) continue;
+      extended.push(cand);
+      if (extended.length >= TRIP_BUILD_MAX) break;
+    }
+    for (const row of extended) {
+      if (outOfTime()) break;
+      try {
+        const arc = ringArc(
+          row,
+          origin,
+          ((durationTargetS - commutePredS(row)) / Math.max(1, row.duration_s)) * row.distance_m,
+        );
+        if (arc === null) continue;
+        const attempt = await buildAndJudge(row, arc);
+        if (attempt.trip !== null) {
+          clean.push(attempt.trip);
+          break;
+        }
+        rejected.push({ id: `${row.id}(ext)`, failures: attempt.failures });
+      } catch {
+        rejected.push({ id: `${row.id}(ext)`, failures: ['build_error'] });
+      }
     }
   }
 

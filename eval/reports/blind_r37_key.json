@@ -1,0 +1,90 @@
+{
+  "p01": {
+    "left": "A",
+    "fixture": "Newmarket|60 minute backroads loop"
+  },
+  "p02": {
+    "left": "B",
+    "fixture": "Uxbridge|60 minute backroads loop"
+  },
+  "p03": {
+    "left": "B",
+    "fixture": "Ancaster|90 minute backroads loop"
+  },
+  "p04": {
+    "left": "B",
+    "fixture": "Home|60 minute backroads loop"
+  },
+  "p05": {
+    "left": "A",
+    "fixture": "Shelburne|60 minute backroads loop"
+  },
+  "p06": {
+    "left": "B",
+    "fixture": "Creemore|60 minute backroads loop"
+  },
+  "p07": {
+    "left": "A",
+    "fixture": "Dunnville|60 minute backroads loop"
+  },
+  "p08": {
+    "left": "B",
+    "fixture": "Fergus|60 minute backroads loop"
+  },
+  "p09": {
+    "left": "B",
+    "fixture": "Creemore|90 minute backroads loop"
+  },
+  "p10": {
+    "left": "B",
+    "fixture": "Georgetown|90 minute backroads loop"
+  },
+  "p11": {
+    "left": "B",
+    "fixture": "Fergus|90 minute backroads loop"
+  },
+  "p12": {
+    "left": "B",
+    "fixture": "Home|1 hour backroads loop"
+  },
+  "p13": {
+    "left": "A",
+    "fixture": "Port Perry|90 minute backroads loop"
+  },
+  "p14": {
+    "left": "A",
+    "fixture": "Home|45 minute backroads loop"
+  },
+  "p15": {
+    "left": "B",
+    "fixture": "Georgetown|60 minute backroads loop"
+  },
+  "p16": {
+    "left": "A",
+    "fixture": "Home|90 minute backroads loop"
+  },
+  "p17": {
+    "left": "B",
+    "fixture": "Home|1 hour twisty loop"
+  },
+  "p18": {
+    "left": "A",
+    "fixture": "Bolton|60 minute backroads loop"
+  },
+  "p19": {
+    "left": "A",
+    "fixture": "Port Perry|60 minute backroads loop"
+  },
+  "p20": {
+    "left": "B",
+    "fixture": "Bolton|90 minute backroads loop"
+  },
+  "p21": {
+    "left": "B",
+    "fixture": "Shelburne|90 minute backroads loop"
+  },
+  "p22": {
+    "left": "A",
+    "fixture": "Uxbridge|90 minute backroads loop"
+  }
+}

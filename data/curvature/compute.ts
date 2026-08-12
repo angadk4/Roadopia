@@ -109,13 +109,18 @@ export function computeCurvature(
   params: CurvatureParams = DEFAULT_PARAMS,
   highway?: string,
   tags: Tags = {},
+  /** BD-172: the closed-ring skip is CORPUS hygiene (cul-de-sac bulb ways,
+   *  the Kuehne+Nagel poison) — but a planner LOOP ROUTE is a closed ring by
+   *  definition, and this guard silently zeroed every loop core's curviness
+   *  in every index version. Route-level callers pass true. */
+  allowClosedRing = false,
 ): CurvatureResult {
   const rawLen = lineLengthMeters(coords);
   if (
     coords.length < 3 ||
     rawLen < params.minLengthM ||
     isJunctionGeometry(highway, tags) ||
-    isClosedRing(coords)
+    (!allowClosedRing && isClosedRing(coords))
   ) {
     return { ...ZERO, lengthM: rawLen };
   }

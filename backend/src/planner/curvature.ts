@@ -49,6 +49,11 @@ export function measureCurvature(
   const result = computeCurvature(
     geometry.coordinates.map(([lon, lat]) => [lon, lat] as const),
     params,
+    undefined,
+    {},
+    // BD-172: routes are legitimately closed (loops); only corpus WAYS treat
+    // closure as degeneracy.
+    true,
   );
   return {
     curviness: result.circumCurvaturePerKm,
