@@ -25,6 +25,9 @@ export default tseslint.config(
       '**/coverage/**',
       'data/**',
       'docs/**',
+      // Local-only throwaway probes (gitignored — CI never sees them, so
+      // linting them locally only produced noise that could mask a real error).
+      'scratchpad/**',
     ],
   },
   js.configs.recommended,

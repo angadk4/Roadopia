@@ -22,6 +22,13 @@ data
 # Generated Valhalla config (valhalla_build_config output — keep as generated)
 infra/valhalla/valhalla.json
 
+# Generated evaluation artifacts (audit reports, blind-review sheets, replays —
+# emitted by eval/audit_v13.ts, eval/make_blind_pairs.py and the rq probes).
+# They are committed as EVIDENCE for the decision log; reformatting them would
+# churn on every regeneration and break the byte-identity we compare runs by.
+eval/reports/**/*.html
+eval/reports/**/*.json
+
 # Supabase CLI local artifacts (machine-generated; ignored by db/supabase/.gitignore,
 # but prettier only reads root ignores, so list them here too)
 db/supabase/.temp
