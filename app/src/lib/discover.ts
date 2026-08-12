@@ -79,6 +79,17 @@ export async function fetchDiscoverCores(
  */
 export const DISCOVER_V2 = true;
 
+/**
+ * U12c / BD-180 — the v1 FALLBACK switch. Recovery §15: never silently
+ * downgrade a premium surface; a true desert deserves the honest "no measured
+ * drives here" state, not a lower-quality out-and-back lookalike wearing the
+ * same UI. Measured before flipping (rq40, 2026-08-12): **0 of 27 gold +
+ * holdout origins** — including Cobourg, the known supply desert — return an
+ * empty v2 menu, so retiring the fallback costs no menu anywhere we measure.
+ * Set true to restore the old behavior.
+ */
+export const DISCOVER_V1_FALLBACK = false;
+
 /** Total trip time (s) of a three-leg core drive. */
 export function coreTripDurationS(d: CoreDrive): number {
   return d.core.duration_s + d.connectorOut.duration_s + d.connectorHome.duration_s;

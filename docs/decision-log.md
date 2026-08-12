@@ -4185,3 +4185,92 @@ identity now exists beside geometry, validated before any cutover (Recovery §6 
   above the 0.5 production dup bar) vs directed-edge overlap **0.00**: edges answer "same road,
   same DIRECTION", which cells cannot — the primitive same-way-home/opposed-retrace logic needs
   when it goes edge-native.
+
+**BD-179 — PRE-REGISTRATION: THE A→B STRUCTURAL LAW (frozen 2026-08-12 BEFORE measurement; owner
+approved option (a) with the tradeoff stated: "sure lets go with (a)"). Owner's shape verdict this
+session, recorded: "the loops look a lot better now"** — first positive device read on loop shape
+since the BD-146 crisis; the loop law + BD-177 construction fix hold on his eyes, not just gates.
+**The gap (audit v21, measured):** 9/25 gold corridors ship self_crossing / crescent / uturn with
+status ok — A→B never received the structural judge that loops have had since BD-160/163.
+**Mechanism:** one `applyAtoBStructuralJudge` closure at EVERY A→B serve exit (mirroring BD-163's
+loop closure): reject on self-crossings, microloops/crescents, u-turns, street stubs. NOT applied:
+loop-only laws (closure, loopiness, doubling — a point-to-point drive legitimately never returns).
+On reject → honest no-clean state naming the defect, same words-pattern as loops. Flag
+`ATOB_STRUCTURAL_LAW`, off = byte-identical.
+**Adoption rule (frozen):** on the 25-corridor gold suite — served law-class defects go to **ZERO**
+(the point of the change) · corridors that were already clean stay byte-identical · quality
+aggregates on still-served corridors flat-or-better (backroad, detour ratio) · refusals are honest
+states, never silent empties · wall in contract. **Serve-rate loss is EXPECTED and ACCEPTED by the
+owner** (his call: quality over serve rate) — but if losses exceed 9/25 (i.e. the law kills
+corridors that were already clean), that is a BUG, not a tradeoff → refuse and investigate.
+
+**BD-179 VERDICT — the A→B law WORKS but its blast radius exceeds the number the owner approved on;
+DEFAULT STAYS OFF pending his call (2026-08-12).** Built as pre-registered: `applyAtoBStructuralJudge`
+closure (crossings/crescents/stubs/u-turns; loop-only laws excluded), self-crossings added as a
+SELECTION dirty-clause (they were never one on any surface — Recovery §11.3 applied to A→B), and
+**a second BD-163-class bypass found and sealed**: the A→B drive-first exit returned before any
+judge — measured live, 2 chain serves shipped crossings under the law until sealed.
+**Measured, 25-corridor gold suite:**
+· **Law alone (recommended):** served 24→**12/25** · served law-class defects **13→0** ✓ ·
+  already-clean corridors **11/11 byte-identical** ✓ · quality flat (backroad 29.0→28.3 %, detour
+  1.27→1.25×) ✓ · refusals all honest-worded ✓ · **every refused corridor was genuinely dirty
+  (13/13, then 12/12 — no clean corridor was killed)** ✓.
+· **Law + the 2nd generator (ATOB_DRIVE_FIRST):** served 14/25, defects 0 — but it REWRITES 5
+  already-clean corridors and drops served backroad 29.0→26.0 %, failing the "clean stays
+  byte-identical" bar. Consistent with BD-159's independent refusal; **stays off**.
+**The frozen ceiling FAILED literally: 12 losses > the 9 I pre-registered.** Investigated per the
+rule: not a bug — the 9 came from audit v21's narrower A→B defect vocabulary (it never counted
+street stubs), and selection-level rescue recovered only 1 corridor because these corridors are
+dirty in EVERY candidate their generator produces (generation-level, exactly like the loop funnels
+before BD-177). **I will not move a goalpost after seeing results, and the owner approved (a) on
+"9/25": the real cost is ~half the A→B surface refusing. ESCALATED — his decision**, options
+recorded: (i) ship the law as measured; (ii) ship it with a plain-direct-route fallback ("no clean
+backroads route — here's the direct way", new copy, not built); (iii) hold the law until A→B
+candidate competition (Recovery §16.2) can rescue corridors at generation time. Code + probes land
+flag-gated OFF; the bypass seal ships regardless (it is a correctness fix, inert while the flag is
+off since nothing else judges A→B).
+
+**BD-180 — U12c ADOPTED: the silent Discover v1 downgrade is retired (2026-08-12).** Recovery §15:
+an empty measured menu used to load v1 out-and-backs — a lower-quality lookalike wearing the same
+UI. **Measured the blast radius BEFORE flipping (rq40_discover_fallback, live over gold + holdout):
+0 of 27 origins return an empty v2 menu** — every origin gets measured cards (Cobourg, the known
+desert, gets 2; the rest 6). So the fallback is a path nothing measured reaches, and when it does
+fire it downgrades silently. Now: empty v2 → the server's honest state verbatim ("No measured
+drives near here yet…"). Flag `DISCOVER_V1_FALLBACK = false` (set true to restore); the v1 route
+branch itself stays for old installed apps (contract version, removable ≥2026-09-01 per its own
+note). Test flipped from pinning the fallback to pinning the honest state; suites 478/163/24 green.
+
+**BD-181 — PRE-REGISTRATION: A→B LAW + PLAIN-DIRECT FALLBACK (option (ii), owner-approved
+2026-08-12; frozen BEFORE measurement).** The approved product: the BD-179 structural law stands,
+and a corridor the law refuses serves THE DIRECT ROUTE with honest words ("No clean backroads route
+between these two points right now — routed you the direct way instead."), status `relaxed`, NO
+backroads framing (curviness null, no measured claims), user avoids honored on the direct route
+(hard highway exclusion when asked). The direct route is judged too — if even it fails structure,
+the honest unavailable stands. Scope: LAW REJECTS ONLY — corridors that were already unavailable
+pre-law (true no-material) stay unchanged. One flag = one decision: `ATOB_STRUCTURAL_LAW` now
+gates the whole (ii) package.
+**Adoption rule (frozen):** on the 25-corridor gold suite, flag on vs off:
+· zero law-class defects on any backroads-framed serve;
+· already-clean corridors byte-identical (11/11);
+· every law-refused corridor serves the labeled direct route (status relaxed + the honest words)
+  OR an honest unavailable if even the direct fails structure;
+· serve count ≥ the off-arm's 24/25 minus only direct-route structural failures (expected 0);
+· no direct serve carries curviness/measured framing;
+· wall in contract. Refuse otherwise.
+
+**BD-181 — ADOPTED (2026-08-12): the A→B law + plain-direct fallback is live.** All frozen bars
+pass on the 25-corridor suite: clean corridors **11/11 byte-identical** · zero law-class defects on
+every backroads-framed serve · **9 direct fallbacks, all structurally clean** (full law applied to
+the direct too — an earlier draft judged only crossings+u-turns and shipped 2 crescent-carrying
+directs; completed to the frozen spec before judging) · London→Grand Bend UPGRADED to a clean
+backroads serve (the selection clause let a clean candidate win) · serves 24→20/25 with the 4 dark
+corridors exactly the rule's allowed case (even the direct fails 2D structure). Off-arm re-run
+proved the async refactor byte-neutral (25/25). Default ON; suites 478/163/24; live wire:
+Oakville→St. Catharines serves the labeled direct fallback (45 min, x 0/0, relaxed).
+**Named finding — the 4 dark corridors are a DETECTOR-DOMAIN artifact, not missing roads:**
+engine-fastest directs through grade-separated interchanges self-cross in 2D while being 3D-clean
+(ramp bridges over the just-driven mainline), and mandatory jug-handles read as "crescents" — the
+structural detectors were designed for backroads loop shapes. BD-178's edge capture provides the
+exact tool for the refinement (edge-class-aware crossing/crescent tests on has_highway directs);
+owner-optional small round, frozen rule first as always. Until then those four corridors say the
+honest words rather than shipping anything the law can't verify.

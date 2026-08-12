@@ -265,7 +265,10 @@ describe('DiscoverHome v2 (R29 Unit A — the drive + get-there + get-home)', ()
     expect(Math.round(arg!.route.duration_s / 60)).toBe(81);
   });
 
-  it('an EMPTY v2 menu falls back to v1 so no origin loses its menu', async () => {
+  it('U12c/BD-180: an EMPTY v2 menu shows the HONEST state, never a v1 downgrade', async () => {
+    // Recovery §15: a lower-quality out-and-back lookalike wearing the same UI
+    // is worse than the truth. Measured before flipping (rq40): 0 of 27
+    // gold+holdout origins return an empty v2 menu, so nothing loses a menu.
     const v1 = vi.fn(
       async (): Promise<DiscoverResult> => ({
         reachMinutes: 60,
@@ -273,8 +276,17 @@ describe('DiscoverHome v2 (R29 Unit A — the drive + get-there + get-home)', ()
         drives: [],
       }),
     );
-    await renderV2(async () => ({ v: 2, reachMinutes: 60, disclosures: [], drives: [] }), v1);
-    expect(v1).toHaveBeenCalledTimes(1);
+    const screen = await renderV2(
+      async () => ({
+        v: 2,
+        reachMinutes: 60,
+        disclosures: ['No measured drives near here yet — try a different start point.'],
+        drives: [],
+      }),
+      v1,
+    );
+    expect(v1).not.toHaveBeenCalled();
+    expect(textOf(screen)).toContain('No measured drives near here yet');
   });
 
   it('honesty line changes for same-way-home and best-around-here drives', async () => {

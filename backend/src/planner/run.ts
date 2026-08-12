@@ -30,6 +30,7 @@ import type { Client } from 'pg';
 
 import { getElevationProfile } from '../valhalla/elevation';
 import { travelMatrix } from '../valhalla/matrix';
+import { routeThrough } from '../valhalla/route';
 import { traceRoadClasses } from '../valhalla/trace';
 
 import { assembleAtoBWithRepair, ATOB_ASSEMBLY_RELAX_ON } from './atob';
@@ -72,7 +73,13 @@ import {
 } from './loop';
 import { computeOriginStem, STEM_ON } from './origin_stem';
 import { outAndBack } from './outandback';
-import { corridorDoublingRatio, loopiness } from './overlap';
+import {
+  corridorDoublingRatio,
+  loopiness,
+  microloopPositions,
+  spurPositions,
+  SPUR_WINDOW_WIDE_STEPS,
+} from './overlap';
 import { weightsForPreset } from './presets';
 import { initialParams, nextRelaxation, type SearchParams } from './relax';
 import { AVOID_DISC_RADIUS_M, resolveLocations, type ResolvedLocation } from './resolve_locations';
@@ -120,6 +127,15 @@ export const WALL_CLOCK_BUDGET_MS = 25_000;
  *  passes the same final judge as measured trips, or the result is an honest
  *  no-clean state. Off = pre-R34 serving. */
 export const CLEAN_ALTERNATIVES_ON = (process.env['CLEAN_DURATION_ALTERNATIVES'] ?? 'on') !== 'off';
+
+/** BD-179 (owner-approved 2026-08-12, option (a)): A→B gets the SAME
+ *  structural law loops have had since BD-160/163 — audit v21 measured 9/25
+ *  gold corridors shipping self-crossings / crescents / u-turns with status
+ *  ok, because the final judge only ever guarded loops. Loop-only laws
+ *  (closure, loopiness, doubling) do NOT apply: a point-to-point drive
+ *  legitimately never returns. He accepted the serve-rate cost explicitly.
+ *  Off = pre-BD-179 A→B serving, byte-identical. */
+export const ATOB_STRUCTURAL_LAW_ON = (process.env['ATOB_STRUCTURAL_LAW'] ?? 'on') !== 'off';
 /** R36 (BD-169): an out-of-band clean ALTERNATE no longer preempts the legacy
  *  generator — it is HELD while legacy tries for the exact band, and the
  *  better serve wins at the exits (rq36 measured the preemption: Uxbridge
@@ -551,6 +567,107 @@ export async function runPlanner(
     result.urbanShare = null;
     heldAlternate?.();
   };
+  /**
+   * BD-179 — THE A→B STRUCTURAL JUDGE. Same closure discipline as the loop
+   * judge above (callable from every exit that ships a point-to-point route);
+   * same defect vocabulary minus the loop-only laws. Returns true if the route
+   * was rejected (result becomes an honest no-clean state).
+   */
+  const applyAtoBStructuralJudge = (): boolean => {
+    if (!ATOB_STRUCTURAL_LAW_ON || isLoop || result.route === null) return false;
+    const geo = result.route.geometry;
+    const structural: string[] = [];
+    const spurs = spurPositions(geo, origin, 500, SPUR_WINDOW_WIDE_STEPS).length;
+    const crescents = microloopPositions(geo, origin, 500).length;
+    const ut = uturnCount(result.route);
+    const x = summarizeCrossings(selfIntersections(geo, origin));
+    const crossings = x.knots + x.pierces;
+    if (spurs > 0) structural.push(`street stubs ×${spurs}`);
+    if (crescents > 0) structural.push(`crescents ×${crescents}`);
+    if (ut > 0) structural.push(`u-turn${ut > 1 ? 's' : ''} ×${ut}`);
+    if (crossings > 0) structural.push(`self-crossings ×${crossings}`);
+    if (structural.length === 0) {
+      step(
+        emit,
+        'validate_route',
+        'completed',
+        `A→B final judge PASS (x 0/0, stubs 0, crescents 0, u-turns 0)`,
+      );
+      return false;
+    }
+    step(emit, 'validate_route', 'completed', `A→B FINAL JUDGE reject: ${structural.join(', ')}`);
+    result.route = null;
+    result.status = 'unavailable';
+    result.legs = null;
+    result.disclosures = [
+      `No clean backroads route between these two points right now — the best live attempt had ` +
+        `${structural.join(' and ')}, which we don't ship.`,
+    ];
+    atobLawRejected = true;
+    return true;
+  };
+
+  /**
+   * BD-181 (option (ii), owner-approved): a corridor the LAW refused serves
+   * the plain DIRECT route with honest words — an A→B has a destination, so a
+   * dead end is worse than the truth plus a usable answer. Scope: law rejects
+   * ONLY (pre-law unavailables unchanged). The direct route is judged too —
+   * nothing dirty ships, not even the fallback. No backroads framing.
+   */
+  let atobLawRejected = false;
+  const serveDirectFallback = async (): Promise<void> => {
+    if (!atobLawRejected || result.route !== null || destination === null) return;
+    try {
+      const direct = await routeThrough(deps.valhallaUrl, {
+        waypoints: [
+          [origin.lng, origin.lat],
+          [destination.lng, destination.lat],
+        ],
+        costingOptions: constraints.avoid.highways === true ? { exclude_highways: true } : {},
+      });
+      // the FULL law, as frozen — crossings, u-turns, crescents, stubs
+      const xs = summarizeCrossings(selfIntersections(direct.geometry, origin));
+      const ut = uturnCount(direct);
+      const cres = microloopPositions(direct.geometry, origin, 500).length;
+      const stubs = spurPositions(direct.geometry, origin, 500, SPUR_WINDOW_WIDE_STEPS).length;
+      if (xs.knots + xs.pierces > 0 || ut > 0 || cres > 0 || stubs > 0) {
+        step(
+          emit,
+          'validate_route',
+          'completed',
+          `direct fallback ALSO fails structure (x ${xs.knots + xs.pierces}, uturns ${ut}, crescents ${cres}, stubs ${stubs}) — honest unavailable stands`,
+        );
+        return;
+      }
+      result.status = 'relaxed';
+      result.route = {
+        geometry: direct.geometry,
+        distance_m: direct.distance_m,
+        duration_s: direct.duration_s,
+        legs: direct.legs,
+        maneuvers: direct.maneuvers,
+        has_highway: direct.has_highway,
+        has_toll: direct.has_toll,
+        has_ferry: direct.has_ferry,
+        has_unpaved: direct.has_unpaved,
+      };
+      result.curviness = null; // NOT a backroads product — no measured framing
+      result.waypoints = [];
+      result.legs = null;
+      result.disclosures = [
+        'No clean backroads route between these two points right now — routed you the direct way instead.',
+      ];
+      step(
+        emit,
+        'validate_route',
+        'completed',
+        `A→B law reject → direct fallback served (${Math.round(direct.duration_s / 60)} min, x 0/0, u-turns 0)`,
+      );
+    } catch {
+      /* engine failure — the honest unavailable stands */
+    }
+  };
+
   if (isLoop && DRIVE_FIRST_ON && constraints.duration_target_s !== null) {
     const outcome = await driveFirstTrip(
       deps.db,
@@ -621,7 +738,7 @@ export async function runPlanner(
           emit,
           'drive_first_trip',
           'completed',
-          `served ${trip.tier} ${trip.core.id} (x ${trip.metrics.knots}/${trip.metrics.pierces}, stem ${originStemM ?? '\u2014'}m, fidelity ${trip.fidelity.toFixed(2)}, ` +
+          `served ${trip.tier} ${trip.core.id} (x ${trip.metrics.knots}/${trip.metrics.pierces}, stem ${originStemM ?? '—'}m, fidelity ${trip.fidelity.toFixed(2)}, ` +
             `loopiness ${trip.metrics.loopiness?.toFixed(2) ?? '—'}, ` +
             `commute ${Math.round(trip.metrics.commuteShare * 100)}%` +
             (outcome.rejected.length > 0
@@ -720,6 +837,12 @@ export async function runPlanner(
             : '') +
           ')',
       );
+      // BD-179: this exit bypassed the judge exactly as `presentDirtyBest`
+      // did for loops (BD-163) — measured: 2 chain serves shipped crossings.
+      if (applyAtoBStructuralJudge()) {
+        await serveDirectFallback();
+        emit({ type: 'done', status: result.route !== null ? 'relaxed' : 'unavailable' });
+      }
       return result;
     }
     if (outcome.rejected.length > 0) {
@@ -1046,7 +1169,7 @@ export async function runPlanner(
 
   /** Present the least-dirty fallback with honest disclosure (returns false
    *  when no eligible material exists — the true redirect case). */
-  const presentDirtyBest = (): boolean => {
+  const presentDirtyBest = async (): Promise<boolean> => {
     // BD-169: a HELD clean measured alternate always beats a "least-flawed
     // dirty" presentation — and rescues the true-redirect case too (the
     // request IS served, so return true even when dirtyBest is null).
@@ -1113,10 +1236,11 @@ export async function runPlanner(
     result.urbanShare = URBAN_CONTEXT_ON
       ? urbanShareOf(urbanIndex, row.route.geometry, destination ? [origin, destination] : [origin])
       : null;
-    // BD-163: the dirtiest material meets the judge like everything else.
-    if (applyFinalStructuralJudge()) {
-      emit({ type: 'done', status: 'unavailable' });
-      return true; // the request IS answered — with the honest no-clean state
+    // BD-163/179: the dirtiest material meets the judge like everything else.
+    if (applyFinalStructuralJudge() || applyAtoBStructuralJudge()) {
+      await serveDirectFallback(); // BD-181: law-refused A→B gets the direct way
+      emit({ type: 'done', status: result.route !== null ? 'relaxed' : 'unavailable' });
+      return true; // the request IS answered — honestly, either way
     }
     emit({ type: 'done', status: 'relaxed' });
     return true;
@@ -1582,6 +1706,15 @@ export async function runPlanner(
       // R25-U8c: unmeasured IS dirty — a route nobody traced can never
       // outrank a measured-clean pool-mate (audit issue #13)
       if (TRACE_NULL_STRICT_ON && r.trace === null) dirtyClauses.push('trace_null');
+      // BD-179: self-crossings were never a dirty clause on ANY surface — the
+      // loop path caught them only at the final veto. Making them a SELECTION
+      // signal lets a clean pool-mate win before the judge has to refuse the
+      // whole request (Recovery §11.3 applied to A→B). Loops keep their own
+      // zero-tolerance veto regardless.
+      if (ATOB_STRUCTURAL_LAW_ON && !isLoop) {
+        const xs = summarizeCrossings(selfIntersections(r.route.geometry, origin));
+        if (xs.knots + xs.pierces > 0) dirtyClauses.push('self_crossing');
+      }
       const dirty = dirtyClauses.length > 0;
       // BD-146: the ask means the TRIP the driver sits through — EVERY
       // candidate is judged on its real door-to-door duration. (R29 judged
@@ -1861,7 +1994,7 @@ export async function runPlanner(
     if (outcome.kind === 'redirect') {
       // R18-2 never-empty: before any dead end, present the least-dirty
       // closed/routable candidate with honest disclosure
-      if (presentDirtyBest()) {
+      if (await presentDirtyBest()) {
         step(
           emit,
           'self_correct',
@@ -1885,7 +2018,7 @@ export async function runPlanner(
   if (!best) {
     // R18-2 never-empty: iteration/budget exhaustion also falls back before
     // giving up (redirect survives only for truly unroutable requests)
-    if (presentDirtyBest()) return result;
+    if (await presentDirtyBest()) return result;
     result.status = outOfBudget() ? 'unavailable' : 'redirect';
     result.disclosures = params.disclosures;
     emit({ type: 'done', status: 'unavailable' });
@@ -2021,8 +2154,10 @@ export async function runPlanner(
       }
     }
   }
-  // BD-163: the single judge closure guards this exit too (see its docstring).
+  // BD-163/179: the single judge closures guard this exit too (loops AND A→B).
   applyFinalStructuralJudge();
+  applyAtoBStructuralJudge();
+  await serveDirectFallback(); // BD-181: no-op unless the A→B law rejected
   // BD-169: held measured alternate vs the legacy attempt — legacy wins only
   // with a clean, unrelaxed, exact-band loop; anything else (including a
   // final-judge reject just above) serves the held alternate.

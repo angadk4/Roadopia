@@ -30,6 +30,7 @@ import {
   coreDrivesToFeatureCollection,
   coreDriveToRoute,
   coreTripLabel,
+  DISCOVER_V1_FALLBACK,
   DISCOVER_V2,
   DiscoverUnavailableError,
   discoverDrivesToFeatureCollection,
@@ -148,13 +149,20 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
             : { kind: 'loaded', result },
         );
       });
-    // R29 Unit A: v2 (drive + get-there + get-home) is the product; v1 remains
-    // the fallback wherever the index has no cores yet (e.g. Collingwood /
-    // Cobourg until the next sweep) so no origin loses its menu.
+    // R29 Unit A: v2 (drive + get-there + get-home) is the product. U12c
+    // (BD-180): an empty measured menu no longer silently loads v1
+    // out-and-backs — the server's honest state says what is actually true of
+    // the area, instead of a lower-quality lookalike wearing the same UI
+    // (Recovery §15). Measured cost before flipping: 0 of 27 gold+holdout
+    // origins return an empty v2 menu.
     const load = fetchCores
       ? fetchCores(origin).then((result) => {
           if (!live) return;
-          if (result.drives.length === 0) return loadV1();
+          if (result.drives.length === 0) {
+            if (DISCOVER_V1_FALLBACK) return loadV1();
+            setPhase({ kind: 'empty', disclosures: result.disclosures });
+            return;
+          }
           setPhase({ kind: 'loaded_v2', result });
         })
       : loadV1();
