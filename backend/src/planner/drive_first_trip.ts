@@ -515,6 +515,16 @@ export async function driveFirstTrip(
       const da = nearestRingM(a);
       const dbd = nearestRingM(b);
       if (TRIP_RANK_SOUND_ON) {
+        // BD-183 (twisty v2): for twisty asks, CURVINESS outranks distance
+        // among fit-band mates — the refused BD-171 tiebreak sat BEHIND the
+        // distance rule and was inert; measured at the owner's home, "1 hour
+        // twisty" and "1 hour backroads" served the identical ring. 0.5-wide
+        // curvature bands keep locality as the secondary key.
+        if (twisty) {
+          const ca = Math.floor(a.curviness / 0.5);
+          const cb = Math.floor(b.curviness / 0.5);
+          if (ca !== cb) return cb - ca;
+        }
         const ba = Math.floor(da / 2000);
         const bb = Math.floor(dbd / 2000);
         if (ba !== bb) return ba - bb;

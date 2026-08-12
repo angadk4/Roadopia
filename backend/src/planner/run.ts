@@ -136,6 +136,21 @@ export const CLEAN_ALTERNATIVES_ON = (process.env['CLEAN_DURATION_ALTERNATIVES']
  *  legitimately never returns. He accepted the serve-rate cost explicitly.
  *  Off = pre-BD-179 A→B serving, byte-identical. */
 export const ATOB_STRUCTURAL_LAW_ON = (process.env['ATOB_STRUCTURAL_LAW'] ?? 'on') !== 'off';
+
+/** BD-184: highway infrastructure is 3D — a ramp bridging the mainline
+ *  self-crosses in 2D and a mandatory jug-handle reads as a crescent. In the
+ *  A→B DIRECT FALLBACK only (the law's rejection of dirty backroads attempts
+ *  stands; loops untouched), such defects are exempt when their position maps
+ *  to motorway/trunk/ramp/turn-channel edges — every exemption logged with
+ *  its edge class. Off = byte-identical. */
+export const BRIDGE_AWARE_FALLBACK_ON = (process.env['BRIDGE_AWARE_FALLBACK'] ?? 'off') !== 'off';
+
+/** BD-185: the direct fallback is a UTILITY route — the owner's recorded law
+ *  for commute-class legs (BD-149/162: "what Google Maps would show") applies.
+ *  Serve engine-fastest AS-IS under the honest label; median u-turns and
+ *  destination block-loops are how you legally arrive, not defects. The A→B
+ *  LAW on backroads attempts is untouched. Off = the judged fallback. */
+export const DIRECT_FALLBACK_ASIS_ON = (process.env['DIRECT_FALLBACK_ASIS'] ?? 'on') !== 'off';
 /** R36 (BD-169): an out-of-band clean ALTERNATE no longer preempts the legacy
  *  generator — it is HELD while legacy tries for the exact band, and the
  *  better serve wins at the exits (rq36 measured the preemption: Uxbridge
@@ -625,19 +640,108 @@ export async function runPlanner(
         ],
         costingOptions: constraints.avoid.highways === true ? { exclude_highways: true } : {},
       });
-      // the FULL law, as frozen — crossings, u-turns, crescents, stubs
-      const xs = summarizeCrossings(selfIntersections(direct.geometry, origin));
-      const ut = uturnCount(direct);
-      const cres = microloopPositions(direct.geometry, origin, 500).length;
-      const stubs = spurPositions(direct.geometry, origin, 500, SPUR_WINDOW_WIDE_STEPS).length;
-      if (xs.knots + xs.pierces > 0 || ut > 0 || cres > 0 || stubs > 0) {
-        step(
-          emit,
-          'validate_route',
-          'completed',
-          `direct fallback ALSO fails structure (x ${xs.knots + xs.pierces}, uturns ${ut}, crescents ${cres}, stubs ${stubs}) — honest unavailable stands`,
-        );
-        return;
+      // BD-185: as-is mode skips the aesthetic judge entirely — the label is
+      // the honesty; the engine's fastest path is the product being served.
+      if (!DIRECT_FALLBACK_ASIS_ON) {
+        // the FULL law, as frozen — crossings, u-turns, crescents, stubs.
+        // BD-184: on the direct route, defects that map to highway-class edges
+        // are grade-separation artifacts of 2D geometry, not real defects.
+        let hwClassAt: ((pt: [number, number]) => string | null) | null = null;
+        if (BRIDGE_AWARE_FALLBACK_ON) {
+          try {
+            const tr = await traceRoadClasses(deps.valhallaUrl, direct.geometry);
+            const shape = tr.matchedShape?.coordinates as Array<[number, number]> | undefined;
+            if (shape && tr.edges.every((e) => e.beginShapeIndex !== undefined)) {
+              hwClassAt = (pt: [number, number]): string | null => {
+                let best = Infinity;
+                let bi = 0;
+                for (let i = 0; i < shape.length; i++) {
+                  const d =
+                    (shape[i]![0] - pt[0]) * (shape[i]![0] - pt[0]) +
+                    (shape[i]![1] - pt[1]) * (shape[i]![1] - pt[1]);
+                  if (d < best) {
+                    best = d;
+                    bi = i;
+                  }
+                }
+                for (const e of tr.edges) {
+                  if (e.beginShapeIndex! <= bi && bi <= (e.endShapeIndex ?? e.beginShapeIndex!)) {
+                    const cls = e.roadClass;
+                    const use = e.use ?? 'road';
+                    if (
+                      cls === 'motorway' ||
+                      cls === 'trunk' ||
+                      use === 'ramp' ||
+                      use === 'turn_channel'
+                    ) {
+                      return `${cls}/${use}`;
+                    }
+                    return null;
+                  }
+                }
+                return null;
+              };
+            }
+          } catch {
+            hwClassAt = null; // trace down — no exemptions, full strictness
+          }
+        }
+        const coordsD = direct.geometry.coordinates as Array<[number, number]>;
+        const pointAtM = (m: number): [number, number] => {
+          let acc = 0;
+          for (let i = 1; i < coordsD.length; i++) {
+            const a = coordsD[i - 1]!;
+            const b = coordsD[i]!;
+            const seg = Math.hypot(
+              (b[1] - a[1]) * 111_320,
+              (b[0] - a[0]) * 111_320 * Math.cos((a[1] * Math.PI) / 180),
+            );
+            if (acc + seg >= m && seg > 0) {
+              const t = (m - acc) / seg;
+              return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+            }
+            acc += seg;
+          }
+          return coordsD[coordsD.length - 1]!;
+        };
+        const rawXs = selfIntersections(direct.geometry, origin);
+        const keptXs = rawXs.filter((c) => {
+          if (hwClassAt === null) return true;
+          const c1 = hwClassAt(pointAtM(c.atM[0]));
+          const c2 = hwClassAt(pointAtM(c.atM[1]));
+          if (c1 !== null || c2 !== null) {
+            step(
+              emit,
+              'validate_route',
+              'completed',
+              `exempted 2D crossing on grade-separated infrastructure (${c1 ?? c2})`,
+            );
+            return false;
+          }
+          return true;
+        });
+        const xs = summarizeCrossings(keptXs);
+        const ut = uturnCount(direct);
+        const cresPos = microloopPositions(direct.geometry, origin, 500);
+        const cres = cresPos.filter((ptL) => {
+          if (hwClassAt === null) return true;
+          const cls = hwClassAt(ptL as [number, number]);
+          if (cls !== null && (cls.includes('ramp') || cls.includes('turn_channel'))) {
+            step(emit, 'validate_route', 'completed', `exempted jug-handle crescent on ${cls}`);
+            return false;
+          }
+          return true;
+        }).length;
+        const stubs = spurPositions(direct.geometry, origin, 500, SPUR_WINDOW_WIDE_STEPS).length;
+        if (xs.knots + xs.pierces > 0 || ut > 0 || cres > 0 || stubs > 0) {
+          step(
+            emit,
+            'validate_route',
+            'completed',
+            `direct fallback ALSO fails structure (x ${xs.knots + xs.pierces}, uturns ${ut}, crescents ${cres}, stubs ${stubs}) — honest unavailable stands`,
+          );
+          return;
+        }
       }
       result.status = 'relaxed';
       result.route = {
@@ -661,7 +765,7 @@ export async function runPlanner(
         emit,
         'validate_route',
         'completed',
-        `A→B law reject → direct fallback served (${Math.round(direct.duration_s / 60)} min, x 0/0, u-turns 0)`,
+        `A→B law reject → direct fallback served (${Math.round(direct.duration_s / 60)} min, engine-fastest as-is)`,
       );
     } catch {
       /* engine failure — the honest unavailable stands */

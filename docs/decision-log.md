@@ -4274,3 +4274,82 @@ structural detectors were designed for backroads loop shapes. BD-178's edge capt
 exact tool for the refinement (edge-class-aware crossing/crescent tests on has_highway directs);
 owner-optional small round, frozen rule first as always. Until then those four corridors say the
 honest words rather than shipping anything the law can't verify.
+
+**BD-182 — PREFERENCE-MODEL CALIBRATION: NULL RESULT, REFUSED (2026-08-12; Recovery §13.6
+attempted as approved in the R38 batch).** All three blind reviews reconstructed into 29 non-tie
+pairwise judgments with per-side metrics (r33 loops 19 · r33 A→B 4 · r36 2 from the decision-log
+record · r37 4). **Sign test: NO measured feature predicts his choices** — winner-had-better rates:
+backroad 0.48 · duration-fit 0.58 · turns 0.44 · continuity 0.48 · hood 0.48 (all ~coin flip at
+n≈27–29; detour 0/4 is n=4). The logistic fit's coefficients are therefore noise (it "learns"
+negative backroad); shipping weights from it would encode randomness as taste. **REFUSED.**
+**What the null result MEANS (recorded as project truth):** his judgment tracks route SHAPE as
+seen — silhouette, compactness, organic-vs-grid character — properties none of our scalars
+measure. This (a) retroactively explains why green audits kept missing device verdicts, (b) makes
+the owner's blind review PERMANENTLY load-bearing as an adoption gate (it cannot be automated away
+with current features), and (c) names the future feature family that could change that: visual
+shape descriptors (convexity/compactness, silhouette smoothness, grid-alignment). Artifact:
+eval/preference_fit.py + eval/reports/preference_fit.json.
+
+**BD-183 — TWISTY RANK v2 REFUSED (2026-08-12; rule frozen pre-run).** Curvature-band-before-
+distance for twisty asks: non-twisty byte-identical ✓, mean twisty curviness 1.05→1.11 ✓ — but
+serves dropped 12→11 ✗ and twisty-distinct-from-twin reached only 1/11 ✗. Mechanism: in-band
+supply near origins is curvature-HOMOGENEOUS (same 0.5 band), so the reorder is inert where it
+matters and harmful where it fires (curvier-but-farther builds fail → legacy/nothing). With BD-171
+this is the second refusal of the twisty-ordering family on independent mechanisms — CONCLUSION
+(robust): twisty differentiation requires curvier supply within reach, not selection cleverness.
+Re-measure after the belt top-up; sweep-level twisty-targeted cores are the named future lever.
+Flag stays default-off.
+
+**BD-184 — PRE-REGISTRATION: BRIDGE-AWARE EXEMPTIONS in the A→B direct fallback (frozen
+2026-08-12 before measurement).** The 4 dark corridors die at the FALLBACK judge on 2D artifacts
+of highway infrastructure (grade-separated self-crossings; jug-handle "crescents"). Scope:
+`serveDirectFallback` ONLY — the law judge's rejections of dirty backroads attempts stand; loops
+untouched (zero-tolerance unchanged). Mechanism: map each crossing/crescent position to its
+matched trace edge; exempt crossings where EITHER side is motorway/trunk/ramp/turn_channel;
+exempt crescents ON ramp/turn_channel edges; every exemption logged with its edge class. Flag
+`BRIDGE_AWARE_FALLBACK`, off = byte-identical. **Adoption rule:** the 4 dark corridors serve ·
+other 21 byte-identical · every exemption verifiably on highway-class edges · zero non-exempt
+defects on any serve · wall in contract. Refuse otherwise.
+
+**BD-184 — REFUSED AS-BUILT · BD-185 FROZEN: the direct fallback serves ENGINE-FASTEST AS-IS
+(2026-08-12).** BD-184's bridge/jug-handle exemptions fired correctly where they applied
+(Mississauga→Guelph's ramp crescent, Brampton→Newmarket's grade-separated crossing — both exempted
+with logged edge classes) but its adoption bar failed: the four corridors stay dark on
+ENGINE-MANDATED ARRIVAL MANEUVERS — u-turns at median breaks on divided roads, destination
+block-loops. Tracing all four showed the fallback judge was applying backroads-drive aesthetics to
+a UTILITY route. **The owner already ruled this class (BD-149/162, his words: commute-class legs
+"should essentially match what a maps app like Google Maps would show" — plain engine-fastest, no
+fancy judging).** BD-185 applies that recorded law to the fallback: serve the engine's fastest
+route AS-IS under the honest label; the A→B LAW itself is untouched (dirty backroads attempts
+still refuse); loops untouched. Flag `DIRECT_FALLBACK_ASIS`, off = byte-identical (BD-184's
+bridge code remains flag-off inside the judged path). **Adoption rule (frozen):** all 4 dark
+corridors serve the labeled direct · other 21 byte-identical · every fallback carries the honest
+words, zero backroads framing (curviness null) · wall in contract.
+
+**BD-185 — ADOPTED (2026-08-12): all bars pass — 4/4 dark corridors serve the labeled direct
+(relaxed, det 1.0×, honest words), 21/21 others byte-identical, 24/25 total (the 25th is a
+pre-law redirect, unchanged). The A→B surface end-state: clean backroads where the law verifies
+it; Google-plain direct with honest words everywhere else; nothing dirty ever wears the backroads
+label. Suites 478 green; default on.
+
+**BD-186 — COMMUTE-SHARE TIGHTENING: REFUSED ON RECORDED EVIDENCE (2026-08-12, no measurement
+round needed).** The R38 batch listed tightening TRIP commute share (≤0.5 → lower) as a candidate.
+The owner's own recorded choices argue AGAINST it: BD-175 (r37 blind review) — he twice preferred
+the farther, curvier home ring DESPITE its 45 % commute over the near low-commute ring; BD-182 —
+no measured feature (including commute-adjacent hood/duration) predicts his picks. Tightening the
+bar would remove serves he demonstrably prefers to protect a metric he demonstrably ignores.
+REFUSED; the ≤0.5 gate stands; revisit only with new evidence (e.g. a device complaint naming
+commute length).
+
+**BD-187 — R38 BATCH CLOSED (2026-08-12): the belt top-up is IN PRODUCTION SUPPLY; the twisty
+lever family closed after a third refusal.** The 46-cell adaptive top-up (weak belt + home 3×3)
+merged into r35-rib via the v2 pipeline: 28 curvier rings (median curv 1.47 vs index 1.03) →
+dedup → **414 distinct-standing loops** (was 393), edge-backfilled 413/414. **Regression guard
+PASS:** home ladder 6/6 serving, zero structural; the 60-family swapped to the NEW home-cell ring
+(the exact pair his r37 review judged a visual coin-flip — now with a fraction of the commute).
+**Twisty v2 re-measured with the new supply: REFUSED a third time** (serves 12→11 again; distinct-
+from-twin improved 1→3 and curviness 1.02→1.10 but a lost serve is a lost serve). The family is
+CLOSED on consistent evidence across three mechanisms: twisty differentiation requires
+twisty-TARGETED sweep supply (high-curvature hunts at wider reach) — the named future lever.
+Backend restarted on the batch end-state: r35-rib(+top-up) · ALT_HOLD_LEGACY · TRIP_RANK_SOUND ·
+PAIR_CROSS_SCREEN · ATOB_STRUCTURAL_LAW · DIRECT_FALLBACK_ASIS all on; refused levers all off.

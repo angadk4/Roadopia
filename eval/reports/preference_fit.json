@@ -1,0 +1,50 @@
+{
+  "nPairs": 29,
+  "signTest": {
+    "backroad": {
+      "winnerHadBetter": 14,
+      "ties": 0,
+      "n": 29,
+      "rate": 0.48
+    },
+    "durErr": {
+      "winnerHadBetter": 14,
+      "ties": 1,
+      "n": 25,
+      "rate": 0.58
+    },
+    "turns": {
+      "winnerHadBetter": 11,
+      "ties": 2,
+      "n": 27,
+      "rate": 0.44
+    },
+    "continuityKm": {
+      "winnerHadBetter": 13,
+      "ties": 0,
+      "n": 27,
+      "rate": 0.48
+    },
+    "hood": {
+      "winnerHadBetter": 10,
+      "ties": 6,
+      "n": 27,
+      "rate": 0.48
+    },
+    "detour": {
+      "winnerHadBetter": 0,
+      "ties": 1,
+      "n": 4,
+      "rate": 0.0
+    }
+  },
+  "logisticOriented": {
+    "backroad": -0.43,
+    "durErr": 0.37,
+    "turns": -0.25,
+    "continuityKm": 0.19,
+    "hood": -1.33,
+    "detour": -1.67
+  },
+  "note": "positive coefficient = feature (oriented so more is better) predicts his pick"
+}
