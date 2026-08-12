@@ -16,7 +16,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { ComponentType, ReactElement } from 'react';
 
 import MapHome from '../screens/MapHome';
-import { SavedScreen } from '../screens/placeholders';
+import SavedScreen from '../screens/SavedScreen';
 import { HIT_TARGET, useTheme } from '../theme';
 
 import DiscoverStack from './DiscoverStack';

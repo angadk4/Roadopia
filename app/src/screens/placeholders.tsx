@@ -28,15 +28,6 @@ export function CreateScreen(): ReactElement {
   );
 }
 
-export function SavedScreen(): ReactElement {
-  return (
-    <Placeholder
-      title="Saved"
-      body="Sign-in, saved routes and favourites arrive with accounts (M8). Routes you generate now live in this session."
-    />
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, padding: spacing.xl, gap: spacing.md, justifyContent: 'center' },
   title: { ...font.title },

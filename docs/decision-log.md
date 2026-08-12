@@ -4353,3 +4353,37 @@ CLOSED on consistent evidence across three mechanisms: twisty differentiation re
 twisty-TARGETED sweep supply (high-curvature hunts at wider reach) — the named future lever.
 Backend restarted on the batch end-state: r35-rib(+top-up) · ALT_HOLD_LEGACY · TRIP_RANK_SOUND ·
 PAIR_CROSS_SCREEN · ATOB_STRUCTURAL_LAW · DIRECT_FALLBACK_ASIS all on; refused levers all off.
+
+**BD-188 — M8-T01 SUPABASE AUTH: hand-rolled GoTrue client + email OTP + SecureStore
+(2026-08-12).** BD-48 (M7) deferred the auth client to M8 expecting @supabase/supabase-js;
+measured at M8 the need is FOUR REST endpoints (otp/verify/refresh/logout), so the repo's
+raw-and-transparent pattern (data.ts PostgREST fetch, backend jwt.ts on node:crypto) extends to
+auth instead — zero third-party dependencies added, every path node-tested over the same
+FetchLike. `expo-secure-store` (Expo platform module, keychain/keystore) holds the session — a
+refresh token never touches AsyncStorage (Hard rule H). **Method: email OTP** (6-digit code) — no
+deep-link config in the dev client, no passwords, 30-second sheet (FR-206); the spec mandates
+Supabase Auth but no method, choice recorded. **FR-201 as a machine:** `AuthEngine.gate(action)`
+is the ONLY sign-in trigger in the product — signed-in runs immediately; anonymous parks the
+action, opens the sheet, verify resumes it EXACTLY once, dismissal drops it (all four semantics
+pinned by tests). Sessions refresh lazily with rotation persisted; a rejected refresh silently
+returns to anon (the next gated action re-prompts) — never an error at the user. API client
+attaches the bearer when present; the backend's existing bearer-if-present-must-verify hook
+(M6 jwt.ts) closes the loop. App suite 163→176 (13 new), tsc/lint clean.
+
+**BD-189 — M8 COMPLETE (T01–T11, 2026-08-12): accounts + persistence, verified by a 22-check
+role matrix.** Decisions worth the record:
+· **Unlisted = capability-by-uuid.** The share model: 'unlisted' rows readable by anyone holding
+  the id (the link IS the capability), never listed by browse surfaces (which filter
+  visibility=public explicitly). The 0002-era visibility check predated sharing and was widened.
+  The user-facing link/deep-link surface rides M13's linking config as specced (§20.4) — the data
+  path (policy + fetchRouteById + FR-074's shared component contract) is complete now.
+· **fork_route drops AI provenance** (generation_request_id/satisfied_constraints/explanation) —
+  a fork is the USER'S artifact; the original keeps its provenance. Fork copies are private by
+  default, forked_from survives original-deletion as NULL (constraint set-null, matrix-verified).
+· **delete_account is SECURITY DEFINER by necessity** (deletes the auth.users row) with zero
+  parameters — it can only ever delete auth.uid(); storage-blob cleanup is built in and guarded
+  for photos' M10 arrival (the row cascade never removes blobs — Dependency Verification §157).
+· **Integration = the matrix.** verify_m8_rls.ts runs 22 checks as the PostgREST roles themselves
+  (set local role + request.jwt.claims): §55 visibility, cross-user denials, favourites/prefs
+  isolation, fork independence, unlisted-by-link, visibility flips, deletion with fork survival —
+  ALL PASS. Suites: app 197 · backend 478 · shared 24; migrations 0023–0026 applied locally.

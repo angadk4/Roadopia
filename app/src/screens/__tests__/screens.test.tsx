@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import { EMPTY_DRAFT, PlanDraftContext, type PlanDraft } from '../../lib/plan_draft';
 import MapHome from '../MapHome';
-import { CreateScreen, SavedScreen } from '../placeholders';
+import { CreateScreen } from '../placeholders';
 import PlanScreen from '../PlanScreen';
 
 function textOf(tree: ReactTestRenderer): string {
@@ -103,16 +103,12 @@ describe('screen smoke', () => {
     expect(text).toContain('Remove');
   });
 
-  it('Create/Saved placeholders render honest milestone copy', () => {
+  it('Create placeholder renders honest milestone copy', () => {
     let tree!: ReactTestRenderer;
     act(() => {
       tree = create(<CreateScreen />);
     });
     expect(textOf(tree)).toContain('Create');
-    act(() => {
-      tree = create(<SavedScreen />);
-    });
-    expect(textOf(tree)).toContain('Saved');
   });
 
   it('MapHome shows the loading banner over the map while routes fetch', () => {

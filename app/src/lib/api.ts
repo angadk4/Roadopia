@@ -185,6 +185,10 @@ export function toApiError(
 export interface ApiClientOptions {
   baseUrl: string;
   sessionId?: string;
+  /** M8-T01: attached as `Authorization: Bearer …` when present. The backend
+   *  verifies any presented token (bad ≠ anonymous — jwt.ts registerAuth), so
+   *  callers pass a FRESH token from useAuth().freshAccessToken() or nothing. */
+  accessToken?: string;
   fetchImpl?: FetchLike;
 }
 
@@ -196,6 +200,7 @@ async function request<T>(
   const fetchImpl = opts.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
   const headers: Record<string, string> = { accept: 'application/json' };
   if (opts.sessionId) headers['x-session-id'] = opts.sessionId;
+  if (opts.accessToken) headers['authorization'] = `Bearer ${opts.accessToken}`;
   let body: string | undefined;
   if (init.body !== undefined) {
     headers['content-type'] = 'application/json';

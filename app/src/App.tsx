@@ -9,6 +9,9 @@ import { StatusBar } from 'expo-status-bar';
 import type { ReactElement } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import SignInSheet from './components/SignInSheet';
+import { secureSessionStore } from './lib/session_store_secure';
+import { AuthProvider } from './lib/use_auth';
 import RootTabs from './nav/tabs';
 import { colorsFor, useTheme } from './theme';
 
@@ -33,9 +36,14 @@ export default function App(): ReactElement {
   return (
     <SafeAreaProvider>
       <StatusBar style={name === 'dark' ? 'light' : 'dark'} />
-      <NavigationContainer theme={navTheme(name)}>
-        <RootTabs />
-      </NavigationContainer>
+      {/* M8-T01: auth wraps the shell; the sheet renders once at the root and
+          appears only when a gated action fires while anonymous (FR-201). */}
+      <AuthProvider store={secureSessionStore}>
+        <NavigationContainer theme={navTheme(name)}>
+          <RootTabs />
+        </NavigationContainer>
+        <SignInSheet />
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

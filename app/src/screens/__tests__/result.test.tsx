@@ -6,12 +6,26 @@
  */
 import type { Route } from '@shared/types';
 import { act } from 'react';
+import type { ReactElement } from 'react';
 import { create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it } from 'vitest';
 
 import RouteDetail from '../../components/RouteDetail';
+import { AuthEngine } from '../../lib/auth_state';
+import { memorySessionStore } from '../../lib/session_store';
+import { AuthProvider } from '../../lib/use_auth';
 import { AMBER } from '../../theme';
 import ResultScreen from '../ResultScreen';
+
+/** M8-T04: ResultScreen hosts the gated Save button, so it needs the auth
+ *  context — an anon memory-store engine keeps these tests behavior-identical. */
+function withAuth(el: ReactElement): ReactElement {
+  const engine = new AuthEngine({
+    cfg: { url: 'http://sb.local', anonKey: 'anon' },
+    store: memorySessionStore(null),
+  });
+  return <AuthProvider engine={engine}>{el}</AuthProvider>;
+}
 
 const ROUTE: Route = {
   geometry: {
@@ -248,10 +262,12 @@ describe('ResultScreen', () => {
     let tree!: ReactTestRenderer;
     act(() => {
       tree = create(
-        <ResultScreen
-          navigation={{ goBack: () => {}, navigate: () => {} }}
-          route={{ params: { route: ROUTE, explanation: EXPLANATION, done: 'ok' } }}
-        />,
+        withAuth(
+          <ResultScreen
+            navigation={{ goBack: () => {}, navigate: () => {} }}
+            route={{ params: { route: ROUTE, explanation: EXPLANATION, done: 'ok' } }}
+          />,
+        ),
       );
     });
     const text = textOf(tree);
@@ -263,7 +279,7 @@ describe('ResultScreen', () => {
     let tree!: ReactTestRenderer;
     act(() => {
       tree = create(
-        <ResultScreen navigation={{ goBack: () => {}, navigate: () => {} }} route={{}} />,
+        withAuth(<ResultScreen navigation={{ goBack: () => {}, navigate: () => {} }} route={{}} />),
       );
     });
     expect(textOf(tree)).toContain('No route arrived');
@@ -274,18 +290,20 @@ describe('ResultScreen', () => {
     const constraints = { shape: 'loop' } as never; // opaque to the screen
     act(() => {
       tree = create(
-        <ResultScreen
-          navigation={{ goBack: () => {}, navigate: () => {} }}
-          route={{
-            params: {
-              route: ROUTE,
-              explanation: null,
-              done: 'ok',
-              constraints,
-              previous: { distance_m: 60000, duration_s: 3600, curviness: 1.1, climb_m: 250 },
-            },
-          }}
-        />,
+        withAuth(
+          <ResultScreen
+            navigation={{ goBack: () => {}, navigate: () => {} }}
+            route={{
+              params: {
+                route: ROUTE,
+                explanation: null,
+                done: 'ok',
+                constraints,
+                previous: { distance_m: 60000, duration_s: 3600, curviness: 1.1, climb_m: 250 },
+              },
+            }}
+          />,
+        ),
       );
     });
     const text = textOf(tree);
@@ -301,12 +319,14 @@ describe('ResultScreen', () => {
     const alt = { ...ROUTE, distance_m: 82500, duration_s: 5580, climb_m: null };
     act(() => {
       tree = create(
-        <ResultScreen
-          navigation={{ goBack: () => {}, navigate: () => {} }}
-          route={{
-            params: { route: ROUTE, alternates: [alt], explanation: EXPLANATION, done: 'ok' },
-          }}
-        />,
+        withAuth(
+          <ResultScreen
+            navigation={{ goBack: () => {}, navigate: () => {} }}
+            route={{
+              params: { route: ROUTE, alternates: [alt], explanation: EXPLANATION, done: 'ok' },
+            }}
+          />,
+        ),
       );
     });
     let text = textOf(tree);
@@ -335,10 +355,12 @@ describe('ResultScreen', () => {
     let tree!: ReactTestRenderer;
     act(() => {
       tree = create(
-        <ResultScreen
-          navigation={{ goBack: () => {}, navigate: () => {} }}
-          route={{ params: { route: ROUTE, explanation: null, done: 'ok' } }}
-        />,
+        withAuth(
+          <ResultScreen
+            navigation={{ goBack: () => {}, navigate: () => {} }}
+            route={{ params: { route: ROUTE, explanation: null, done: 'ok' } }}
+          />,
+        ),
       );
     });
     expect(textOf(tree)).not.toContain('Recommended');
@@ -348,22 +370,24 @@ describe('ResultScreen', () => {
     let tree!: ReactTestRenderer;
     act(() => {
       tree = create(
-        <ResultScreen
-          navigation={{ goBack: () => {}, navigate: () => {} }}
-          route={{
-            params: {
-              route: ROUTE,
-              explanation: null,
-              done: 'ok',
-              previous: {
-                distance_m: ROUTE.distance_m,
-                duration_s: ROUTE.duration_s,
-                curviness: ROUTE.curviness,
-                climb_m: ROUTE.climb_m,
+        withAuth(
+          <ResultScreen
+            navigation={{ goBack: () => {}, navigate: () => {} }}
+            route={{
+              params: {
+                route: ROUTE,
+                explanation: null,
+                done: 'ok',
+                previous: {
+                  distance_m: ROUTE.distance_m,
+                  duration_s: ROUTE.duration_s,
+                  curviness: ROUTE.curviness,
+                  climb_m: ROUTE.climb_m,
+                },
               },
-            },
-          }}
-        />,
+            }}
+          />,
+        ),
       );
     });
     const text = textOf(tree);
@@ -371,17 +395,19 @@ describe('ResultScreen', () => {
     // and a MOVED result never shows it
     act(() => {
       tree = create(
-        <ResultScreen
-          navigation={{ goBack: () => {}, navigate: () => {} }}
-          route={{
-            params: {
-              route: ROUTE,
-              explanation: null,
-              done: 'ok',
-              previous: { distance_m: 60000, duration_s: 3600, curviness: 1.1, climb_m: 250 },
-            },
-          }}
-        />,
+        withAuth(
+          <ResultScreen
+            navigation={{ goBack: () => {}, navigate: () => {} }}
+            route={{
+              params: {
+                route: ROUTE,
+                explanation: null,
+                done: 'ok',
+                previous: { distance_m: 60000, duration_s: 3600, curviness: 1.1, climb_m: 250 },
+              },
+            }}
+          />,
+        ),
       );
     });
     expect(textOf(tree)).not.toContain("couldn't improve on the previous drive");
@@ -391,10 +417,12 @@ describe('ResultScreen', () => {
     let tree!: ReactTestRenderer;
     act(() => {
       tree = create(
-        <ResultScreen
-          navigation={{ goBack: () => {}, navigate: () => {} }}
-          route={{ params: { route: ROUTE, explanation: null, done: 'ok' } }}
-        />,
+        withAuth(
+          <ResultScreen
+            navigation={{ goBack: () => {}, navigate: () => {} }}
+            route={{ params: { route: ROUTE, explanation: null, done: 'ok' } }}
+          />,
+        ),
       );
     });
     expect(textOf(tree)).not.toContain('Tweak this drive');

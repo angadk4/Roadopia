@@ -15,6 +15,7 @@ import ReasoningView from '../components/ReasoningView';
 import RefinePanel from '../components/RefinePanel';
 import RouteCompare from '../components/RouteCompare';
 import RouteDetail from '../components/RouteDetail';
+import SaveDriveButton from '../components/SaveDriveButton';
 import { parseChips } from '../lib/parse_summary';
 import type { Explanation, TimelineEntry } from '../lib/plan_run';
 import type { DoneStatus } from '../lib/plan_stream';
@@ -165,6 +166,13 @@ export default function ResultScreen(props: ResultScreenProps): ReactElement {
           />
         )}
       </RouteDetail>
+
+      {/* M8-T04: the product's first gated action (FR-080/201) — saves the
+          currently SHOWN option (runner-ups are saveable too). */}
+      <SaveDriveButton
+        route={shown}
+        agentExplanation={viewingBest ? (params.explanation?.text ?? null) : null}
+      />
 
       <Pressable
         accessibilityRole="button"
