@@ -1,0 +1,28 @@
+<!--
+  M8-T01 — the sign-in email (local dev + hosted).
+
+  Roadopia signs in with a 6-DIGIT CODE typed into the app (app/src/lib/auth.ts
+  verifyOtp), NOT a browser magic link: the app is a native dev client, so a
+  link opens a browser that authenticates a session the app never sees (it
+  bounces to site_url and dies). GoTrue's built-in template renders only
+  {{ .ConfirmationURL }}, which is why the code has to be spelled out here.
+
+  {{ .Token }} is the same OTP the app's verify call expects (otp_length = 6).
+  The link is kept as a secondary affordance for a future web surface — it is
+  deliberately NOT the primary instruction.
+-->
+<h2>Your Roadopia sign-in code</h2>
+
+<p>Enter this code in the app to finish signing in:</p>
+
+<p style="font-size: 32px; font-weight: 700; letter-spacing: 6px; margin: 16px 0">
+  {{ .Token }}
+</p>
+
+<p>The code expires shortly and can only be used once. If you didn’t ask to sign in, ignore this email.</p>
+
+<hr />
+
+<p style="font-size: 12px; color: #666">
+  On a web browser instead? <a href="{{ .ConfirmationURL }}">Use this link</a>.
+</p>

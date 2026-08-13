@@ -243,6 +243,20 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# M8-T01: the app signs in with a 6-DIGIT CODE typed into a native sheet, so the
+# email must PRINT the code. GoTrue's built-in magic-link template renders only
+# a browser link, which authenticates a browser the app never sees (measured:
+# the link bounced to site_url :3000 and the app stayed signed out).
+# Both templates are overridden because GoTrue picks `signup` for a brand-new
+# address and `magic_link` for an existing one.
+[auth.email.template.magic_link]
+subject = "Your Roadopia sign-in code"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.confirmation]
+subject = "Your Roadopia sign-in code"
+content_path = "./supabase/templates/magic_link.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"

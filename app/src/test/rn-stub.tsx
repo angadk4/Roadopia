@@ -39,6 +39,14 @@ export const Text = host('rn-text');
 export const ScrollView = host('rn-scrollview');
 export const TextInput = host('rn-textinput');
 export const ActivityIndicator = host('rn-activityindicator');
+/** M8-T01: the sign-in sheet is a Modal that rides above the keyboard. Modal
+ *  renders its children inline here (node has no native overlay), which is
+ *  what the sheet tests want to inspect. */
+export const Modal = host('rn-modal');
+export const KeyboardAvoidingView = host('rn-keyboardavoidingview');
+/** Keyboard.dismiss() is a no-op in node — the tests assert the AFFORDANCE
+ *  exists (a labelled dismiss target), not the native side effect. */
+export const Keyboard = { dismiss: (): void => undefined };
 
 /** Pressable supports the style-as-function form used by our buttons. */
 export function Pressable(

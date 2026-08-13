@@ -5,12 +5,22 @@
  * on success (AuthEngine.verifyCode). Honest error states (§18): friendly
  * words, never a raw server dump; dismissing is always allowed and simply
  * drops the parked action.
+ *
+ * KEYBOARD (owner device pass, 2026-08-12): iOS's number pad has NO return key,
+ * so a bottom sheet + numeric input is a trap — the keyboard covers the submit
+ * button with no way to dismiss it. Three fixes, in order of what a user hits
+ * first: the 6th digit AUTO-SUBMITS (a fixed-length code never needs a button),
+ * the sheet rides above the keyboard (KeyboardAvoidingView), and tapping the
+ * backdrop dismisses the keyboard without cancelling the sheet.
  */
 
 import { useState, type ReactElement } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -69,12 +79,15 @@ export default function SignInSheet(): ReactElement | null {
       });
   };
 
-  const submitCode = (): void => {
-    const trimmed = code.trim();
+  const submitCode = (value?: string): void => {
+    // the auto-submit path passes the digits explicitly: setCode() has not
+    // re-rendered yet when the 6th keystroke fires
+    const trimmed = (value ?? code).trim();
     if (!/^\d{6}$/.test(trimmed)) {
       setProblem('The code is the 6 digits from the email.');
       return;
     }
+    Keyboard.dismiss();
     setBusy(true);
     setProblem(null);
     verifyCode(email.trim().toLowerCase(), trimmed)
@@ -85,9 +98,27 @@ export default function SignInSheet(): ReactElement | null {
       });
   };
 
+  /** Digits only; the 6th one submits — no button press, no keyboard fight. */
+  const onCodeChange = (text: string): void => {
+    const digits = text.replace(/\D/g, '').slice(0, 6);
+    setCode(digits);
+    if (digits.length === 6 && !busy) submitCode(digits);
+  };
+
   return (
     <Modal transparent animationType="fade" visible onRequestClose={close}>
-      <View style={styles.backdrop}>
+      <KeyboardAvoidingView
+        style={styles.backdrop}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* tapping above the sheet lowers the keyboard; it never cancels the
+            sheet (that is "Not now" — an accidental tap must not drop the
+            parked action) */}
+        <Pressable
+          style={styles.dismissArea}
+          onPress={() => Keyboard.dismiss()}
+          accessibilityLabel="Dismiss keyboard"
+        />
         <View
           style={[
             styles.sheet,
@@ -100,7 +131,7 @@ export default function SignInSheet(): ReactElement | null {
           <Text style={[styles.hint, { color: colors.textMuted }]}>
             {step === 'email'
               ? 'Saving drives needs an account. We’ll email you a 6-digit code — no password.'
-              : `We sent a code to ${email.trim()}. It can take a minute to arrive.`}
+              : `We sent a code to ${email.trim()}. Type it in — it signs you in automatically.`}
           </Text>
 
           {step === 'email' ? (
@@ -111,6 +142,8 @@ export default function SignInSheet(): ReactElement | null {
               autoCapitalize="none"
               autoComplete="email"
               keyboardType="email-address"
+              returnKeyType="send"
+              onSubmitEditing={submitEmail}
               value={email}
               onChangeText={setEmail}
               editable={!busy}
@@ -127,8 +160,11 @@ export default function SignInSheet(): ReactElement | null {
               placeholderTextColor={colors.textMuted}
               keyboardType="number-pad"
               maxLength={6}
+              autoComplete="one-time-code"
+              textContentType="oneTimeCode"
+              autoFocus
               value={code}
-              onChangeText={setCode}
+              onChangeText={onCodeChange}
               editable={!busy}
               accessibilityLabel="6-digit code"
             />
@@ -148,7 +184,7 @@ export default function SignInSheet(): ReactElement | null {
               <Text style={[styles.secondaryText, { color: colors.textMuted }]}>Not now</Text>
             </Pressable>
             <Pressable
-              onPress={step === 'email' ? submitEmail : submitCode}
+              onPress={() => (step === 'email' ? submitEmail() : submitCode())}
               disabled={busy}
               style={[styles.primary, { backgroundColor: colors.accent, opacity: busy ? 0.6 : 1 }]}
               accessibilityRole="button"
@@ -178,7 +214,7 @@ export default function SignInSheet(): ReactElement | null {
             </Pressable>
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -189,6 +225,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
   },
+  dismissArea: { flex: 1 },
   sheet: {
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,

@@ -4387,3 +4387,38 @@ role matrix.** Decisions worth the record:
   (set local role + request.jwt.claims): §55 visibility, cross-user denials, favourites/prefs
   isolation, fork independence, unlisted-by-link, visibility flips, deletion with fork survival —
   ALL PASS. Suites: app 197 · backend 478 · shared 24; migrations 0023–0026 applied locally.
+
+**BD-190 — M8-T01 FOLLOW-UP: the sign-in email had no code (found on the owner's device pass,
+2026-08-12).** Two defects, both now fixed:
+· **A stale Metro instance** from earlier in the session held port 8081, so the phone kept loading
+  a pre-M8 bundle no matter how many dev clients were rebuilt — the rebuild was never the problem.
+  Killed; fresh Metro with `--clear`; his device re-bundled (1,262 modules) and is current.
+· **The email shipped a magic LINK, not the 6-digit code.** `otp_length = 6` was configured but
+  GoTrue's BUILT-IN magic-link template renders only `{{ .ConfirmationURL }}` — clicking it
+  authenticates a BROWSER (which then bounces to site_url :3000 and dies) while the app, which
+  verifies a typed code, never sees the session. I chose OTP at T01 specifically to avoid
+  deep-link config and then didn't verify the email content — the flow was untested end to end
+  past the API call. Fixed with a committed template (`db/supabase/templates/magic_link.html`)
+  printing `{{ .Token }}` as the primary instruction, link demoted to a footnote; overridden for
+  BOTH `magic_link` and `confirmation` (GoTrue picks by whether the address already exists).
+  **Verified end to end:** fresh request → email subject "Your Roadopia sign-in code" containing
+  911314 → `POST /auth/v1/verify {type:'email', token}` (the app's exact call) → access_token.
+· **Data safety:** the template change required re-creating the auth container, so a 75 MB
+  `pg_dump` was taken before `supabase stop`; post-restart verification confirms everything
+  survived (curvy_segments 133,865 · drive_cores 8,161 across r33/34/35/36 · landuse 52,357 ·
+  routes 8 · profiles 2). Backend restarted (it fell with the stack) and re-verified serving.
+
+**BD-191 — the iOS number-pad trap (owner device pass, 2026-08-12).** Entering the 6-digit code
+was UNCOMPLETABLE on iOS: the number pad has no return key, and a bottom sheet puts the Verify
+button underneath the keyboard with no dismiss affordance — the user was stuck. This is a design
+error I could not have caught with unit tests as written (they call handlers directly, never a
+keyboard). Fixed in the order a user meets them: (1) the **6th digit auto-submits** — a
+fixed-length code never needs a button, so the keyboard is irrelevant to completing the flow;
+(2) the sheet rides above the keyboard (`KeyboardAvoidingView`, iOS padding behavior); (3) a
+labelled backdrop target dismisses the keyboard WITHOUT cancelling the sheet (an accidental tap
+must never drop the parked action — FR-201). Also: digits-only input with a 6-char cap so pasting
+"9 1 1 3 1 4" works, `oneTimeCode` autofill hints, autofocus, and the email field submits from its
+return key. New contract pinned by tests (auto-submit fires on the 6th keystroke and NOT the
+fifth; paste is sanitised; the dismiss target exists) — app suite 197→200. RN test stub gained
+Modal/KeyboardAvoidingView/Keyboard. **Lesson recorded: a native-input flow is not verified until
+it has been driven on a device; the T01 "verified" claim covered the API path only.**
