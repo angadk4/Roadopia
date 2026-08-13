@@ -41,6 +41,8 @@ interface Selected {
   title: string;
   line: string;
   tags: string[];
+  /** Spot id — present on spot selections (M10: opens the detail screen). */
+  spotId?: string;
 }
 
 /** Marker colours per spot type (†type distinction pre-iconography). */
@@ -65,6 +67,11 @@ export interface MapHomeProps {
   /** Injectable loaders for tests; default to the live Supabase reads. */
   loadRoutes?: (cfg: SupabaseConfig) => Promise<MapRouteRow[]>;
   loadSpots?: (cfg: SupabaseConfig) => Promise<SpotRow[]>;
+  /** Present when mounted in MapStack (M10) — absent in bare test renders. */
+  navigation?: {
+    navigate: (screen: string, params?: Record<string, unknown>) => void;
+    addFocusListener?: (cb: () => void) => () => void;
+  };
 }
 
 export default function MapHome(props: MapHomeProps): ReactElement {
@@ -93,6 +100,17 @@ export default function MapHome(props: MapHomeProps): ReactElement {
     load();
   }, [load]);
 
+  // M10: returning from AddSpot re-pulls pins so the new one is visible (§18)
+  useEffect(() => {
+    const sub = props.navigation?.addFocusListener?.(() => {
+      loadSpots(getSupabaseConfig())
+        .then(setSpots)
+        .catch(() => {});
+    });
+    return sub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const routeShape = useMemo(
     () => (routes.phase === 'loaded' ? routesToFeatureCollection(routes.rows) : null),
     [routes],
@@ -118,7 +136,7 @@ export default function MapHome(props: MapHomeProps): ReactElement {
 
   const onSpotPress = useCallback((e: { features: Array<{ properties?: unknown }> }) => {
     const p = e.features[0]?.properties as
-      | { name?: string; type?: string; point_count?: number }
+      | { id?: string; name?: string; type?: string; point_count?: number }
       | undefined;
     if (!p || p.point_count !== undefined) return; // cluster taps: zoom gesture instead
     setSelected({
@@ -126,6 +144,7 @@ export default function MapHome(props: MapHomeProps): ReactElement {
       title: p.name || 'Unnamed spot',
       line: (p.type ?? '').replace('_', ' '),
       tags: [],
+      ...(typeof p.id === 'string' ? { spotId: p.id } : {}),
     });
   }, []);
 
@@ -238,7 +257,36 @@ export default function MapHome(props: MapHomeProps): ReactElement {
           ))}
         </View>
       )}
+      {selected.kind === 'spot' && selected.spotId !== undefined && props.navigation && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Spot details"
+          onPress={() =>
+            props.navigation!.navigate('Spot', { id: selected.spotId, name: selected.title })
+          }
+          style={({ pressed }) => [
+            styles.sheetAction,
+            { borderColor: colors.accent, opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <Text style={[styles.sheetActionLabel, { color: colors.accent }]}>Details</Text>
+        </Pressable>
+      )}
     </View>
+  );
+
+  const addButton = props.navigation && (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Add a spot"
+      onPress={() => props.navigation!.navigate('AddSpot', { knownSpots: spots })}
+      style={({ pressed }) => [
+        styles.addBtn,
+        { backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1 },
+      ]}
+    >
+      <Text style={[styles.addBtnLabel, { color: colors.onAccent }]}>＋ Add spot</Text>
+    </Pressable>
   );
 
   return (
@@ -248,7 +296,12 @@ export default function MapHome(props: MapHomeProps): ReactElement {
       sourceId="seed-routes"
       onSelectLine={onRoutePress}
       banner={banner}
-      sheet={sheet}
+      sheet={
+        <>
+          {addButton}
+          {sheet}
+        </>
+      }
     >
       {spotLayers}
     </DriveLinesMap>
@@ -296,6 +349,25 @@ const styles = StyleSheet.create({
   },
   sheetCloseLabel: { fontSize: 18, fontWeight: '600' },
   sheetLine: { ...font.body },
+  sheetAction: {
+    minHeight: HIT_TARGET,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetActionLabel: { ...font.button },
+  addBtn: {
+    position: 'absolute',
+    right: spacing.md,
+    bottom: 104, // above the detail-sheet zone + attribution
+    minHeight: HIT_TARGET,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBtnLabel: { ...font.button },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tag: {
     borderWidth: 1,

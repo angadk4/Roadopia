@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,14 +21,18 @@ import {
   View,
 } from 'react-native';
 
+import { contactMailtoUrl } from '../lib/contact';
 import { DataError } from '../lib/data';
+import { deleteAccount } from '../lib/library';
 import { DISPLAY_NAME_MAX, fetchProfile, updateDisplayName, type Profile } from '../lib/profile';
-import { getSupabaseConfig } from '../lib/runtime';
+import { getApiBaseUrl, getSupabaseConfig } from '../lib/runtime';
 import { listMyRoutes, type SavedRow } from '../lib/saves';
 import { useAuth } from '../lib/use_auth';
 import { font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
 export interface SavedScreenProps {
+  /** Present inside SavedStack; absent in isolated tests. */
+  navigation?: { navigate: (screen: string, params?: Record<string, unknown>) => void };
   /** Injectable for tests; defaults to the runtime Supabase config. */
   cfg?: { url: string; anonKey: string };
   fetchProfileFn?: typeof fetchProfile;
@@ -38,6 +43,28 @@ export interface SavedScreenProps {
 export default function SavedScreen(props: SavedScreenProps): ReactElement {
   const { colors } = useTheme();
   const { status, user, gate, signOut, freshAccessToken } = useAuth();
+  const [dangerArmed, setDangerArmed] = useState(false);
+  const [dangerProblem, setDangerProblem] = useState<string | null>(null);
+
+  const destroyAccount = (): void => {
+    if (!dangerArmed) {
+      setDangerArmed(true); // first tap arms; second tap deletes (FR-207)
+      return;
+    }
+    void (async () => {
+      try {
+        const token = await freshAccessToken();
+        if (!token) throw new DataError('Sign in again first.', null);
+        await deleteAccount(getApiBaseUrl(), token);
+        await signOut(); // local session is now meaningless
+      } catch (err) {
+        setDangerProblem(
+          err instanceof DataError ? err.message : 'Could not delete the account right now.',
+        );
+        setDangerArmed(false);
+      }
+    })();
+  };
   const cfg = props.cfg ?? getSupabaseConfig();
   const loadProfile = props.fetchProfileFn ?? fetchProfile;
   const saveName = props.updateNameFn ?? updateDisplayName;
@@ -171,13 +198,28 @@ export default function SavedScreen(props: SavedScreenProps): ReactElement {
           </Text>
         ) : (
           drives.map((d) => (
-            <View key={d.id} style={[styles.driveRow, { borderColor: colors.border }]}>
+            <Pressable
+              key={d.id}
+              onPress={() =>
+                props.navigation?.navigate('SavedRoute', {
+                  id: d.id,
+                  name: d.name,
+                  visibility: d.visibility,
+                })
+              }
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${d.name}`}
+              style={({ pressed }) => [
+                styles.driveRow,
+                { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
               <Text style={[styles.driveName, { color: colors.text }]}>{d.name}</Text>
               <Text style={[styles.body, { color: colors.textMuted }]}>
                 {Math.round(d.duration_s / 60)} min · {(d.distance_m / 1000).toFixed(0)} km ·{' '}
                 {d.visibility}
               </Text>
-            </View>
+            </Pressable>
           ))
         )}
       </View>
@@ -189,6 +231,31 @@ export default function SavedScreen(props: SavedScreenProps): ReactElement {
         accessibilityLabel="Sign out"
       >
         <Text style={[styles.link, { color: colors.textMuted }]}>Sign out</Text>
+      </Pressable>
+      {/* M8-T09 data path + M10 UI (FR-207): real deletion, blobs included */}
+      <Pressable
+        onPress={destroyAccount}
+        style={styles.signOut}
+        accessibilityRole="button"
+        accessibilityLabel="Delete account"
+      >
+        <Text style={[styles.link, { color: colors.danger }]}>
+          {dangerArmed
+            ? 'Tap again to permanently delete your account and all saved data'
+            : 'Delete account…'}
+        </Text>
+      </Pressable>
+      {dangerProblem !== null && (
+        <Text style={[styles.body, { color: colors.danger }]}>{dangerProblem}</Text>
+      )}
+      {/* M10-T08 (FR-304): contact / abuse path */}
+      <Pressable
+        onPress={() => void Linking.openURL(contactMailtoUrl('Roadopia — contact/abuse'))}
+        style={styles.signOut}
+        accessibilityRole="button"
+        accessibilityLabel="Contact or report abuse"
+      >
+        <Text style={[styles.link, { color: colors.textMuted }]}>Contact & abuse reports</Text>
       </Pressable>
     </ScrollView>
   );

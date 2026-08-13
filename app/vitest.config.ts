@@ -18,6 +18,9 @@ export default {
       ),
       '@rnmapbox/maps': fileURLToPath(new URL('./src/test/rnmapbox-stub.tsx', import.meta.url)),
       'expo-location': fileURLToPath(new URL('./src/test/expo-location-stub.ts', import.meta.url)),
+      'expo-keep-awake': fileURLToPath(
+        new URL('./src/test/expo-keep-awake-stub.ts', import.meta.url),
+      ),
     },
   },
   test: {

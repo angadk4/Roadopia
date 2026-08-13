@@ -11,6 +11,7 @@ import { useMemo, useState, type ReactElement } from 'react';
 
 import { DEFAULT_DRAFT, PlanDraftContext, type PlanDraft } from '../lib/plan_draft';
 import DiscoverHome from '../screens/DiscoverHome';
+import FollowScreen from '../screens/FollowScreen';
 import PickPointScreen from '../screens/PickPointScreen';
 import ProgressScreen from '../screens/ProgressScreen';
 import ResultScreen from '../screens/ResultScreen';
@@ -21,9 +22,11 @@ export type DiscoverStackParamList = {
   PickPoint: { target: 'origin' | 'destination' };
   Progress: { request: unknown };
   Result: { route: unknown; explanation: unknown; done: unknown; timeline: unknown };
+  Follow: { route: unknown };
 };
 
 type ResultScreenParams = import('../screens/ResultScreen').ResultScreenParams;
+type FollowScreenParams = import('../screens/FollowScreen').FollowScreenParams;
 type ProgressParams = import('../screens/ProgressScreen').ProgressScreenProps['route']['params'];
 
 const Stack = createNativeStackNavigator<DiscoverStackParamList>();
@@ -86,6 +89,14 @@ export default function DiscoverStack(): ReactElement {
                   p.navigation.navigate(screen as never, params as never),
               }}
               route={{ params: p.route.params as ResultScreenParams }}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="Follow" options={{ headerShown: false }}>
+          {(p) => (
+            <FollowScreen
+              navigation={{ goBack: () => p.navigation.goBack() }}
+              route={{ params: p.route.params as FollowScreenParams }}
             />
           )}
         </Stack.Screen>

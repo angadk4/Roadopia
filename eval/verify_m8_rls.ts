@@ -190,6 +190,62 @@ async function main(): Promise<void> {
     );
   });
 
+  // M10/M11-T03: photos — the pipeline is the only writer; owner-only reads
+  const spotA = (
+    await db.query(
+      `insert into spots (owner_id, type, name, location, source)
+       values ($1, 'viewpoint', 'RLS Photo Spot', st_setsrid(st_makepoint(-79.9, 43.3), 4326), 'user')
+       returning id`,
+      [A],
+    )
+  ).rows[0] as { id: string };
+  await db.query(
+    `insert into photos (owner_id, spot_id, storage_path, thumb_path)
+     values ($1, $2, 'a/p.jpg', 'a/p_thumb.jpg')`,
+    [A, spotA.id],
+  );
+  await as(db, { role: 'authenticated', sub: A }, async () => {
+    const mine = await db.query('select id from photos where spot_id=$1', [spotA.id]);
+    check('photos: owner reads own', mine.rows.length === 1);
+  });
+  await as(db, { role: 'authenticated', sub: B }, async () => {
+    const theirs = await db.query('select id from photos where spot_id=$1', [spotA.id]);
+    check("photos: stranger sees NONE of A's photos", theirs.rows.length === 0);
+    check(
+      'photos: app roles cannot INSERT (pipeline-only writes)',
+      await denied(
+        db,
+        `insert into photos (owner_id, spot_id, storage_path, thumb_path)
+                        values ('${B}', '${spotA.id}', 'x.jpg', 'x_t.jpg')`,
+      ),
+    );
+  });
+  await as(db, { role: 'anon' }, async () => {
+    // 0028 grants photos to authenticated only — anon fails at the GRANT, a
+    // stronger posture than an RLS empty-set
+    check('photos: anon has no read grant at all', await denied(db, 'select id from photos'));
+  });
+  // spots RPC boundary (0027): OSM immutable even via RPC; anon cannot create
+  await as(db, { role: 'authenticated', sub: B }, async () => {
+    const osmSafe = await db.query(
+      `select coalesce((select update_spot(id, '{"name":"vandalised"}'::jsonb)
+                        from spots where source='osm' limit 1), false) as changed`,
+    );
+    check(
+      'spots: OSM rows immutable via update_spot',
+      (osmSafe.rows[0] as { changed: boolean }).changed === false,
+    );
+  });
+  await as(db, { role: 'anon' }, async () => {
+    check(
+      'spots: anon cannot execute create_spot',
+      await denied(
+        db,
+        `select create_spot('{"lat":43.3,"lng":-79.9,"type":"coffee","name":"x"}'::jsonb)`,
+      ),
+    );
+  });
+
   // T09: A deletes their account — A's rows go, B's fork survives, auth row gone
   await db.query('begin');
   await db.query('set local role authenticated');

@@ -20,6 +20,7 @@ import type { RegionBoundary } from './lib/region';
 import { registerDiscoverEndpoint, type DiscoverEndpointDeps } from './routes/discover';
 import { registerMatchEndpoint, type MatchEndpointDeps } from './routes/match';
 import { registerParseEndpoint, type ParseEndpointDeps } from './routes/parse';
+import { registerPhotosEndpoints, type PhotosEndpointDeps } from './routes/photos';
 import { registerPlanEndpoint, type PlanEndpointDeps } from './routes/plan';
 import { registerRouteEndpoint, type RouteEndpointDeps } from './routes/route';
 
@@ -42,6 +43,9 @@ export interface BuildServerOptions {
   /** /parse wiring (R25-U16c, browse-class rules parse) — registers only when
    *  present; absent ⇒ 404. */
   parse?: ParseEndpointDeps;
+  /** Spot-photo pipeline (M10-T05) — registers only when present; absent ⇒
+   *  404, and NOTHING can serve an unprocessed image (fail closed). */
+  photos?: PhotosEndpointDeps;
 }
 
 export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
@@ -102,6 +106,10 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
 
   if (opts.parse) {
     registerParseEndpoint(app, opts.parse);
+  }
+
+  if (opts.photos) {
+    registerPhotosEndpoints(app, opts.photos);
   }
 
   return app;

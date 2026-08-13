@@ -11,10 +11,12 @@ import type { ParsedConstraints, Route } from '@shared/types';
 import { useState, type ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import HandoffSection from '../components/HandoffSection';
 import ReasoningView from '../components/ReasoningView';
 import RefinePanel from '../components/RefinePanel';
 import RouteCompare from '../components/RouteCompare';
 import RouteDetail from '../components/RouteDetail';
+import SafetyNote from '../components/SafetyNote';
 import SaveDriveButton from '../components/SaveDriveButton';
 import { parseChips } from '../lib/parse_summary';
 import type { Explanation, TimelineEntry } from '../lib/plan_run';
@@ -167,12 +169,31 @@ export default function ResultScreen(props: ResultScreenProps): ReactElement {
         )}
       </RouteDetail>
 
+      {/* M9-T06 (FR-112): follow-mode is the PRIMARY in-app driving experience */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Follow this drive"
+        onPress={() => props.navigation.navigate('Follow', { route: shown })}
+        style={({ pressed }) => [
+          styles.follow,
+          { backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1 },
+        ]}
+      >
+        <Text style={[styles.followLabel, { color: colors.onAccent }]}>Follow this drive</Text>
+      </Pressable>
+
       {/* M8-T04: the product's first gated action (FR-080/201) — saves the
           currently SHOWN option (runner-ups are saveable too). */}
       <SaveDriveButton
         route={shown}
         agentExplanation={viewingBest ? (params.explanation?.text ?? null) : null}
       />
+
+      {/* M9-T07 (FR-115..117): best-effort, honestly framed */}
+      <HandoffSection route={shown} />
+
+      {/* M9-T08 (FR-400): persistent on every generated-route surface */}
+      <SafetyNote context="route" />
 
       <Pressable
         accessibilityRole="button"
@@ -191,6 +212,13 @@ export default function ResultScreen(props: ResultScreenProps): ReactElement {
 const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
   optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  follow: {
+    minHeight: HIT_TARGET + 8,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  followLabel: { ...font.button },
   optionChip: {
     minHeight: HIT_TARGET,
     borderWidth: 1,

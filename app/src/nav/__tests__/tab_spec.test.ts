@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { TAB_SPEC } from '../tab_spec';
 
 describe('bottom-tab spec (Master Spec §16; R24 Discover-primary)', () => {
-  it('has exactly the four tabs, in order: Discover · Plan · Map · Saved', () => {
-    expect(TAB_SPEC.map((t) => t.name)).toEqual(['Discover', 'Plan', 'Map', 'Saved']);
+  it('has exactly the five tabs, in order (M9 adds Create — Master Spec §16)', () => {
+    expect(TAB_SPEC.map((t) => t.name)).toEqual(['Discover', 'Plan', 'Create', 'Map', 'Saved']);
   });
 
   it('every tab has focused + idle icon glyphs', () => {

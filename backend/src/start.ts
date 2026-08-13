@@ -46,11 +46,17 @@ async function main(): Promise<void> {
     transport: anthropicTransport(config.ANTHROPIC_API_KEY),
   });
 
+  // Hosted Supabase signs ES256 and the verifier uses JWKS (no env needed).
+  // The LOCAL CLI stack signs HS256 with the documented demo secret — public
+  // knowledge (same class as the demo anon key), applied ONLY to loopback
+  // URLs so a deployed backend can never fall back to it (Hard rule H).
+  const LOCAL_DEMO_JWT_SECRET = 'super-secret-jwt-token-with-at-least-32-characters-long';
+  const isLocalSupabase = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(config.SUPABASE_URL);
+  const hs256Secret =
+    process.env['SUPABASE_JWT_SECRET'] ?? (isLocalSupabase ? LOCAL_DEMO_JWT_SECRET : undefined);
   const verifier = new JwtVerifier({
     issuer: `${config.SUPABASE_URL.replace(/\/$/, '')}/auth/v1`,
-    ...(process.env['SUPABASE_JWT_SECRET']
-      ? { hs256Secret: process.env['SUPABASE_JWT_SECRET'] }
-      : {}),
+    ...(hs256Secret ? { hs256Secret } : {}),
   });
 
   const app = buildServer({
@@ -73,6 +79,16 @@ async function main(): Promise<void> {
       valhallaUrl: config.VALHALLA_URL,
       region,
       rateLimiter: new RateLimiter(),
+    },
+    // M10-T05: spot photos (EXIF strip + re-encode; private bucket, service
+    // role stays in this process — Hard rule H)
+    photos: {
+      db,
+      storage: {
+        url: config.SUPABASE_URL.replace(/\/$/, ''),
+        serviceRoleKey: config.SUPABASE_SERVICE_ROLE_KEY,
+        bucket: 'photos',
+      },
     },
     // R25-U16c: /parse (browse-class rules parse — no LLM, no engine; fired
     // per debounced keystroke, so its limiter is deliberately looser than the

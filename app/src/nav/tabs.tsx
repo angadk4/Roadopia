@@ -15,21 +15,23 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { ComponentType, ReactElement } from 'react';
 
-import MapHome from '../screens/MapHome';
-import SavedScreen from '../screens/SavedScreen';
 import { HIT_TARGET, useTheme } from '../theme';
 
+import CreateStack from './CreateStack';
 import DiscoverStack from './DiscoverStack';
+import MapStack from './MapStack';
 import PlanStack from './PlanStack';
+import SavedStack from './SavedStack';
 import { TAB_SPEC, type TabSpec } from './tab_spec';
 
 export type RootTabParamList = Record<TabSpec['name'], undefined>;
 
 const SCREENS: Record<TabSpec['name'], ComponentType> = {
-  Map: MapHome,
+  Map: MapStack,
   Discover: DiscoverStack,
   Plan: PlanStack,
-  Saved: SavedScreen,
+  Create: CreateStack,
+  Saved: SavedStack,
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();

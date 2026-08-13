@@ -183,18 +183,29 @@ export async function updateVisibility(
 }
 
 /** Irreversible account + data deletion (T09; server deletes only auth.uid()). */
+/**
+ * Account deletion goes through the BACKEND (M10 revision): the 0029 RPC
+ * deletes rows only, and the backend sweeps the user's photo blobs via the
+ * Storage API first — SQL cannot touch storage.objects (protect_delete).
+ */
 export async function deleteAccount(
-  cfg: SupabaseConfig,
+  apiBaseUrl: string,
   accessToken: string,
   fetchImpl?: FetchLike,
 ): Promise<void> {
-  const { status } = await rest(
-    cfg,
-    '/rpc/delete_account',
-    { method: 'POST', body: {}, accessToken },
-    fetchImpl,
-  );
-  guard(status, 'Could not delete the account right now — try again.');
+  const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  let res;
+  try {
+    res = await f(`${apiBaseUrl}/account`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+  } catch (err) {
+    throw new DataError('Could not reach the server — check your connection.', null, {
+      cause: err,
+    });
+  }
+  guard(res.status, 'Could not delete the account right now — try again.');
 }
 
 // ---------- T10: user_preferences (stored settings; no learning, §35) ----------

@@ -77,6 +77,16 @@ export function useColorScheme(): 'dark' | 'light' {
   return 'dark';
 }
 
+export function Image(props: Record<string, unknown>): ReturnType<typeof createElement> {
+  return createElement('rn-image', props);
+}
+
+export const Linking = {
+  openURL(): Promise<void> {
+    return Promise.resolve();
+  },
+};
+
 export const AppState = {
   currentState: 'active' as const,
   addEventListener(): { remove(): void } {

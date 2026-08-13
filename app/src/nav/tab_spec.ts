@@ -6,7 +6,7 @@
 
 export interface TabSpec {
   /** Route name + label. */
-  name: 'Map' | 'Discover' | 'Plan' | 'Saved';
+  name: 'Map' | 'Discover' | 'Plan' | 'Create' | 'Saved';
   /** Ionicons glyph when the tab is focused. */
   icon: string;
   /** Ionicons glyph when idle (outline variant). */
@@ -18,9 +18,12 @@ export interface TabSpec {
 // speed/racing framing (Hard rule D).
 // R24-U10: Discover becomes the PRIMARY/home tab (the map-first showpiece) — it
 // leads the bar; Plan (and its loops) stays; Map + Saved follow.
+// M9: the Create/Record tab (Master Spec §16) joins — Discover keeps the lead
+// slot it earned at R24-U10; Create sits mid-bar between planning and library.
 export const TAB_SPEC: readonly TabSpec[] = [
   { name: 'Discover', icon: 'trail-sign', iconIdle: 'trail-sign-outline' },
   { name: 'Plan', icon: 'compass', iconIdle: 'compass-outline' },
+  { name: 'Create', icon: 'create', iconIdle: 'create-outline' },
   { name: 'Map', icon: 'map', iconIdle: 'map-outline' },
   { name: 'Saved', icon: 'bookmark', iconIdle: 'bookmark-outline' },
 ] as const;

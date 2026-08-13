@@ -1,0 +1,82 @@
+/**
+ * Image processing pipeline (M10-T05; FR-036/310-312; spec §56; SPK-18).
+ *
+ * THE privacy-critical path: no uploaded image may become retrievable before
+ * EXIF/GPS strip + re-encode (Hard rule E). This module is the only place
+ * bytes are accepted, and it is fail-closed: anything that isn't a valid,
+ * size-bounded JPEG/PNG/WebP by MAGIC BYTES (never the client's claim —
+ * Hard rule K) is rejected with a plain reason.
+ *
+ * sharp drops ALL metadata (EXIF, GPS, ICC, XMP) unless .withMetadata() is
+ * called — it never is here. .rotate() applies the EXIF orientation to the
+ * PIXELS first, so stripping the tag can't turn photos sideways.
+ */
+
+import { fileTypeFromBuffer } from 'file-type';
+import sharp from 'sharp';
+
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+/** iPhones shoot HEIC, but expo-image-picker transcodes to JPEG on pick;
+ *  prebuilt sharp has no HEIF codecs, so HEIC here means a bypassed picker. */
+export const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+export const FULL_MAX_PX = 2048;
+export const THUMB_MAX_PX = 400;
+
+export class ImageRejectedError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode: 400 | 413 = 400,
+  ) {
+    super(message);
+    this.name = 'ImageRejectedError';
+  }
+}
+
+export interface ProcessedImage {
+  /** Re-encoded JPEG, metadata-free, ≤ FULL_MAX_PX on the long edge. */
+  full: Buffer;
+  /** Re-encoded JPEG thumbnail, ≤ THUMB_MAX_PX. */
+  thumb: Buffer;
+  width: number;
+  height: number;
+}
+
+export async function processImage(input: Buffer): Promise<ProcessedImage> {
+  if (input.length === 0) throw new ImageRejectedError('The upload was empty.');
+  if (input.length > MAX_IMAGE_BYTES) {
+    throw new ImageRejectedError('That image is too large — 10 MB is the limit.', 413);
+  }
+  const kind = await fileTypeFromBuffer(input);
+  if (!kind || !(ALLOWED_MIME as readonly string[]).includes(kind.mime)) {
+    throw new ImageRejectedError('Only JPEG, PNG or WebP images are accepted.');
+  }
+
+  let full: Buffer;
+  let thumb: Buffer;
+  let meta: { width?: number; height?: number };
+  try {
+    const oriented = sharp(input, { failOn: 'error' }).rotate();
+    full = await oriented
+      .clone()
+      .resize(FULL_MAX_PX, FULL_MAX_PX, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 82 })
+      .toBuffer();
+    thumb = await oriented
+      .clone()
+      .resize(THUMB_MAX_PX, THUMB_MAX_PX, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 72 })
+      .toBuffer();
+    meta = await sharp(full).metadata();
+  } catch {
+    // Valid magic bytes but broken image data — still a reject, never a serve.
+    throw new ImageRejectedError('That image could not be read — it may be corrupted.');
+  }
+  return { full, thumb, width: meta.width ?? 0, height: meta.height ?? 0 };
+}
+
+/** Test hook: does this buffer carry ANY EXIF payload? */
+export async function hasExif(buf: Buffer): Promise<boolean> {
+  const meta = await sharp(buf).metadata();
+  return meta.exif !== undefined && meta.exif.length > 0;
+}

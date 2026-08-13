@@ -4422,3 +4422,108 @@ return key. New contract pinned by tests (auto-submit fires on the 6th keystroke
 fifth; paste is sanitised; the dismiss target exists) — app suite 197→200. RN test stub gained
 Modal/KeyboardAvoidingView/Keyboard. **Lesson recorded: a native-input flow is not verified until
 it has been driven on a device; the T01 "verified" claim covered the API path only.**
+
+**BD-192 — SAVED DRIVES ARE REOPENABLE (owner device pass, 2026-08-12): a gap I shipped as
+"complete", not a scoping decision.** He signed in and saved successfully, then found the Saved
+list's rows inert. FR-074 requires the SAME route-detail component to render Result, saved routes
+and shared-link routes; I had built the data path (fetchRouteById) and the component, and simply
+never wired them — leaving a listed row that goes nowhere, which also violates §18's never-a-dead-
+end rule. Built: `SavedStack` (SavedHome → SavedRoute) so the tab is a stack like Discover/Plan;
+`SavedRouteScreen` fetching by id through RLS and rendering the SHARED RouteDetail (no second
+renderer); honest states for gone/unauthorised (RLS null → "isn't available any more") instead of
+a blank screen. **This also gave T08 its missing UI**: the visibility control (private/unlisted/
+public) with plain-words blurbs, optimistic selection that REVERTS on server rejection so the
+control never claims a change that didn't happen. Tests: 5 new (renders through the shared
+component · honest gone-state · change calls through and updates copy · rejected change reverts ·
+copy is truthful) — app suite 200→205. **Pattern to carry: "the milestone's tasks are done" is not
+"the user can complete the journey"; T04's exit was written as save-works and the round-trip was
+never in anyone's acceptance criteria.**
+
+**BD-193 — follow-mode guidance is DERIVED, and only trusted when the derivation agrees with the
+line (M9-T06, 2026-08-12).** Saved routes carry no maneuvers (RouteSchema stores geometry + stats;
+turn data was never persisted), so follow-mode re-derives guidance by map-matching the followed
+line itself through POST /match (decimated ≤1,500 points, under the endpoint's 5,000 cap) and
+accepts the returned maneuvers ONLY when the matched distance agrees with the followed line's
+length within 10 %. Disagreement means the matcher reconstructed a materially different route —
+serving its instructions would navigate the user off the line we're drawing — so the screen says
+"turn guidance unavailable" and keeps honest position + remaining distance. Two more honesty
+choices pinned: off-route (>75 m from the line) HOLDS the last known progress (remaining distance
+must not swing in a parking lot beside the route) and never re-routes — the words say "rejoin the
+line"; and the projection carries a monotonic bias (±150 m backtrack tolerance, 25 m ambiguity
+slack) so the unavoidable-origin stem a loop legitimately retraces resolves to the outbound leg
+early and the homebound leg late instead of teleporting progress across the overlap. Alternative
+considered and rejected: persisting maneuvers into the routes table — a schema change duplicating
+engine output that goes stale the moment tiles change; deriving-on-open is always tileset-current.
+
+**BD-194 — hand-off never pretends (M9-T07, 2026-08-12).** The builders are constructed so a
+faithful-loop claim is UNREPRESENTABLE: for `is_loop` routes the A→B offer is null on BOTH
+platforms (Apple takes no waypoints — verification §17 fact; and an origin→origin Google link
+without shape context would read as a real loop), the only loop offer is the Google `dir/?api=1`
+decimation explicitly labelled "rough… re-routes with its own engine", and FR-117's verify-before-
+offer is the constructor: 9-waypoint cap, then the decimator steps DOWN a waypoint at a time until
+the URL fits 2,048 chars, returning null rather than an out-of-limits link. Apple emits ONLY the
+current unified post-iOS-18.4 schema (`maps.apple.com/directions?destination=…&source=…&mode=
+driving`) — the regressed `daddr` form appears nowhere, asserted by test. Leg-by-leg to each stop
+(both platforms) covers the "navigate me to the café" case honestly. Follow-mode remains primary
+(FR-112); the section's copy points back to it for the real shape.
+
+**BD-195 — the image pipeline is the ONLY door (M10-T05, 2026-08-13).** Architecture: the 'photos'
+bucket is private with ZERO app-role storage policies and the photos table has NO app-role insert —
+clients cannot write a blob or a row by any path. Raw bytes go to POST /spots/:id/photos (backend),
+which validates by MAGIC BYTES (file-type; the client's content-type is never trusted), rejects
+>10 MB / non-JPEG-PNG-WebP / corrupt bodies, applies EXIF orientation to the PIXELS (.rotate()),
+re-encodes full (≤2048px q82) + thumb (≤400px q72) with sharp — which drops ALL metadata unless
+.withMetadata() is called, and it never is — and only then uploads + records. Display is
+time-limited signed URLs (7 days) minted by the backend. The AC is pinned three ways: a unit test
+whose fixture is BUILT with real GPS EXIF (and asserted poisoned before the strip), an integration
+test proving what lands in storage carries zero EXIF, and a LIVE smoke that signed in via the real
+email-OTP path, uploaded a GPS-tagged JPEG, and read the signed URL back EXIF-free. HEIC is
+rejected by design (prebuilt sharp has no HEIF codecs): expo-image-picker transcodes to JPEG on
+pick, so a HEIC arriving means a bypassed picker, not a user with a broken phone.
+
+**BD-196 — storage.objects cannot be deleted from SQL; delete_account had a latent M8 bug
+(measured 2026-08-13).** The live smoke's deletion leg failed with "Direct deletion from storage
+tables is not allowed. Use the Storage API instead" — current Supabase Storage ships a
+protect_delete() trigger on storage.objects. This invalidated (a) the photos-cleanup trigger this
+session first shipped, and (b) the storage-cleanup block 0026's delete_account has carried since
+M8 — dormant only because it was guarded on the photos table existing, ARMED the moment 0028
+created it: every account deletion would have raised. Fix (0029): SQL owns rows only —
+delete_account is rows-only; the BACKEND owns blobs via the Storage REST API. Three orchestrating
+endpoints: DELETE /photos/:id (row → both blobs), DELETE /spots/:id (collect attached paths →
+cascade rows → sweep), DELETE /account (collect the user's paths → forward the rows-only RPC AS
+THE CALLER — their bearer token, never a service credential, so the endpoint can only delete the
+account presenting it → sweep). App deleteSpot/deleteAccount rerouted through the backend; the
+moderation console sweeps the same way. Ordering favours privacy: rows first, so a crash can
+orphan an UNREACHABLE blob in a private bucket, never leave a reachable one. Verified live:
+photo-delete → signed URL dead; spot-delete → cascaded blob dead; account-delete → auth user gone;
+verify_m8_rls (22 checks incl. the T09 deletion drills) ALL PASS against the new function.
+
+**BD-197 — the dev backend joins the LOCAL Supabase stack (2026-08-13).** The photos API is the
+first backend surface that must VERIFY user tokens, which exposed a config split: .env's
+SUPABASE_URL points at the hosted roadopia-dev project (set at S0, kept for M12 deploy), while the
+app + all M8 data live on the local stack. Dev backend now starts with loopback overrides
+(SUPABASE_URL=127.0.0.1:54321 + the CLI's public demo anon/service constants — same
+public-knowledge class as the demo anon key the app already embeds; .env untouched). Verifier
+posture: hosted Supabase signs ES256 and verifies via JWKS with zero env; HS256 falls back to the
+documented local demo secret ONLY for loopback URLs (start.ts guards on the URL), so a deployed
+backend can never accept demo-signed tokens. Confirmed empirically: local GoTrue stamps iss
+http://127.0.0.1:54321/auth/v1 regardless of which host the phone dials (config-derived, not
+request-derived), so device tokens verify against the loopback-configured backend.
+
+**BD-198 — the M11 hardening sweep, and what CI now refuses to pass (2026-08-13).** The safety
+floor became executable: (a) **§59 lexicon scan as a CI test** — walks the real app + backend
+source for speed/racing/timing/leaderboard framing; exact-phrase carve-outs only for the rule
+text itself and the disclaimer; it immediately earned its keep by flagging `stopWatch` as an
+identifier (renamed `stopFixes` — Hard rule D covers code identifiers, and the scan can't tell a
+watcher-stopper from a stopwatch, which is the point). (b) **§58 URL privacy as a CI test** — no
+app data-layer URL may interpolate lat/lng; handoff.ts is the one sanctioned coordinate surface
+(external nav, user-initiated). (c) **RLS matrix grown to 28 checks** — photos: owner-only read,
+stranger-blind, app-role INSERT denied (pipeline-only writes), anon lacks even the grant; spots:
+OSM immutable via RPC, anon cannot create. (d) **storage-down fails closed as 502 with plain
+words**, tested. (e) **hostile spot names pinned as data**: obeying an injected name produces
+ungrounded entities the M5 validator rejects; merely NAMING the stop stays valid. (f) **Two live
+drills recorded**: KILL_SWITCH=true → /plan 503 `planner_disabled` with the honest still-works
+copy (SPK-20's app-side behavior); dump→restore into a scratch DB → full row parity (133,865
+curvy · 8,161 cores · 21,370 spots · 9 routes · 5 profiles), expected auth-schema noise only.
+Deploy-shaped remainder recorded, not faked: R2 credentials + cron for backup.sh, Sentry/alerts,
+and the production smoke all ride M12.

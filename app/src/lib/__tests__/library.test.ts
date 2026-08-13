@@ -68,10 +68,10 @@ describe('route ops (T05/07/08/09)', () => {
     const { f } = fetchOf(200, []);
     await expect(updateVisibility(CFG, 'tok', RID, 'public', f)).rejects.toThrow(/isn’t yours/);
   });
-  it('deleteAccount posts the RPC with the user token', async () => {
+  it('deleteAccount calls the BACKEND (blob sweep lives there), user token only', async () => {
     const { f, holder } = fetchOf(204, null);
-    await deleteAccount(CFG, 'tok', f);
-    expect(holder.last.url).toContain('/rpc/delete_account');
+    await deleteAccount('http://api.local', 'tok', f);
+    expect(holder.last.url).toBe('http://api.local/account');
     expect(holder.last.headers['authorization']).toBe('Bearer tok');
   });
 });
