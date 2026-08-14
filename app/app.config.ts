@@ -63,6 +63,16 @@ const config: ExpoConfig = {
         isAndroidBackgroundLocationEnabled: false,
       },
     ],
+    [
+      'expo-image-picker',
+      {
+        // M10-T05: without this the iOS build has no NSPhotoLibraryUsageDescription
+        // and the OS kills the app the instant the picker opens. Library only —
+        // no camera permission is requested (the MVP picks existing photos).
+        photosPermission:
+          'Roadopia uses your photos so you can add pictures to a car spot. Location data is stripped from every upload before anyone can see it.',
+      },
+    ],
     'expo-dev-client',
   ],
   extra: {

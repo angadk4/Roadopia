@@ -28,6 +28,10 @@ export default tseslint.config(
       // Local-only throwaway probes (gitignored — CI never sees them, so
       // linting them locally only produced noise that could mask a real error).
       'scratchpad/**',
+      // Supabase CLI scratch space, written by `supabase start` (gitignored
+      // via db/supabase/.gitignore). Same reasoning as scratchpad above: it is
+      // generated vendor code, and 189 errors from it hid the real ones.
+      '**/.temp/**',
     ],
   },
   js.configs.recommended,

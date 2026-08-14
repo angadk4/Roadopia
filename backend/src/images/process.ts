@@ -16,6 +16,13 @@ import { fileTypeFromBuffer } from 'file-type';
 import sharp from 'sharp';
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+/**
+ * Decode ceiling. A tiny file can carry an enormous canvas — a 197 KB solid
+ * 8000×8000 PNG decodes to ~192 MB of pixels — so a byte cap alone lets a
+ * handful of uploads pin the VPS. 40 MP still clears any phone camera
+ * (a 48 MP sensor writes ~12 MP by default; 40 MP ≈ 8000×5000).
+ */
+export const MAX_IMAGE_PIXELS = 40_000_000;
 /** iPhones shoot HEIC, but expo-image-picker transcodes to JPEG on pick;
  *  prebuilt sharp has no HEIF codecs, so HEIC here means a bypassed picker. */
 export const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'] as const;
@@ -56,7 +63,10 @@ export async function processImage(input: Buffer): Promise<ProcessedImage> {
   let thumb: Buffer;
   let meta: { width?: number; height?: number };
   try {
-    const oriented = sharp(input, { failOn: 'error' }).rotate();
+    const oriented = sharp(input, {
+      failOn: 'error',
+      limitInputPixels: MAX_IMAGE_PIXELS,
+    }).rotate();
     full = await oriented
       .clone()
       .resize(FULL_MAX_PX, FULL_MAX_PX, { fit: 'inside', withoutEnlargement: true })
@@ -68,8 +78,12 @@ export async function processImage(input: Buffer): Promise<ProcessedImage> {
       .jpeg({ quality: 72 })
       .toBuffer();
     meta = await sharp(full).metadata();
-  } catch {
-    // Valid magic bytes but broken image data — still a reject, never a serve.
+  } catch (err) {
+    // Valid magic bytes but broken image data, or a decode bomb over the pixel
+    // ceiling — either way a reject, never a serve.
+    if (err instanceof Error && /pixel|dimensions|limitInputPixels/i.test(err.message)) {
+      throw new ImageRejectedError('That image is too large to process — try a smaller one.', 413);
+    }
     throw new ImageRejectedError('That image could not be read — it may be corrupted.');
   }
   return { full, thumb, width: meta.width ?? 0, height: meta.height ?? 0 };

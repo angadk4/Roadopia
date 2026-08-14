@@ -21,7 +21,7 @@ import {
   View,
 } from 'react-native';
 
-import { contactMailtoUrl } from '../lib/contact';
+import { CONTACT_EMAIL, contactMailtoUrl } from '../lib/contact';
 import { DataError } from '../lib/data';
 import { deleteAccount } from '../lib/library';
 import { DISPLAY_NAME_MAX, fetchProfile, updateDisplayName, type Profile } from '../lib/profile';
@@ -46,6 +46,14 @@ export default function SavedScreen(props: SavedScreenProps): ReactElement {
   const [dangerArmed, setDangerArmed] = useState(false);
   const [dangerProblem, setDangerProblem] = useState<string | null>(null);
 
+  // Disarm whenever the signed-in identity changes. Without this the armed
+  // state outlives the account it was armed for, and the NEXT person to sign in
+  // on this device is one tap from deleting theirs.
+  useEffect(() => {
+    setDangerArmed(false);
+    setDangerProblem(null);
+  }, [user?.id, status]);
+
   const destroyAccount = (): void => {
     if (!dangerArmed) {
       setDangerArmed(true); // first tap arms; second tap deletes (FR-207)
@@ -56,6 +64,7 @@ export default function SavedScreen(props: SavedScreenProps): ReactElement {
         const token = await freshAccessToken();
         if (!token) throw new DataError('Sign in again first.', null);
         await deleteAccount(getApiBaseUrl(), token);
+        setDangerArmed(false); // never leave the next signed-in user one tap away
         await signOut(); // local session is now meaningless
       } catch (err) {
         setDangerProblem(
@@ -250,7 +259,13 @@ export default function SavedScreen(props: SavedScreenProps): ReactElement {
       )}
       {/* M10-T08 (FR-304): contact / abuse path */}
       <Pressable
-        onPress={() => void Linking.openURL(contactMailtoUrl('Roadopia — contact/abuse'))}
+        onPress={() => {
+          // No mail client (common on Android emulators / de-Googled phones)
+          // rejects — unhandled, the button would do nothing at all.
+          Linking.openURL(contactMailtoUrl('Roadopia — contact/abuse')).catch(() =>
+            setDangerProblem(`No mail app to open. Reach us at ${CONTACT_EMAIL}.`),
+          );
+        }}
         style={styles.signOut}
         accessibilityRole="button"
         accessibilityLabel="Contact or report abuse"

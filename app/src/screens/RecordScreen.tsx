@@ -23,13 +23,14 @@ import { ApiError, postMatch } from '../lib/api';
 import { watchLocation, type StopWatching } from '../lib/location';
 import {
   addFix,
-  canMatch,
   elapsedS,
   IDLE_RECORDER,
   rawDistanceM,
   startRecording,
   stopRecording,
   toRecordedRoute,
+  traceForMatch,
+  whyCannotMatch,
   type RecorderState,
 } from '../lib/recorder';
 import { getApiBaseUrl } from '../lib/runtime';
@@ -51,7 +52,7 @@ type Phase =
   | { kind: 'recording' }
   | { kind: 'matching' }
   | { kind: 'review'; matched: RouteThroughOutput }
-  | { kind: 'too_short' }
+  | { kind: 'too_short'; why: 'too_few_points' | 'too_short' }
   | { kind: 'match_failed'; message: string };
 
 const KEEP_AWAKE_TAG = 'roadopia-record';
@@ -67,11 +68,19 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
   const [, forceTick] = useState(0);
   const stopFixes = useRef<StopWatching | null>(null);
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** False once the screen is gone. Starting is async (a permission dialog can
+   *  sit open for a minute), so without this the watcher, the wake-lock and the
+   *  1 Hz timer all install AFTER cleanup has run and then leak for the life of
+   *  the app — GPS included, which would break the foreground-only promise. */
+  const live = useRef(true);
+  /** A second tap while the dialog is up would start a second watcher. */
+  const starting = useRef(false);
 
-  // never leave the watcher, wake-lock or timer running on unmount
   useEffect(
     () => () => {
+      live.current = false;
       stopFixes.current?.();
+      stopFixes.current = null;
       if (tick.current) clearInterval(tick.current);
       deactivateKeepAwake(KEEP_AWAKE_TAG);
     },
@@ -79,17 +88,31 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
   );
 
   const start = (): void => {
+    if (starting.current || stopFixes.current !== null) return;
+    starting.current = true;
     void (async () => {
-      const res = await watch((fix) => setRec((s) => addFix(s, fix)));
-      if (res.status !== 'ok') {
-        setPhase({ kind: res.status });
-        return;
+      try {
+        const res = await watch((fix) => setRec((s) => addFix(s, fix)));
+        if (res.status !== 'ok') {
+          if (live.current) setPhase({ kind: res.status });
+          return;
+        }
+        if (!live.current) {
+          res.stop(); // the screen left while the dialog was open
+          return;
+        }
+        stopFixes.current = res.stop;
+        await activateKeepAwakeAsync(KEEP_AWAKE_TAG);
+        if (!live.current) {
+          deactivateKeepAwake(KEEP_AWAKE_TAG);
+          return;
+        }
+        setRec(startRecording(now()));
+        setPhase({ kind: 'recording' });
+        tick.current = setInterval(() => forceTick((n) => n + 1), 1000); // HUD clock
+      } finally {
+        starting.current = false;
       }
-      stopFixes.current = res.stop;
-      await activateKeepAwakeAsync(KEEP_AWAKE_TAG);
-      setRec(startRecording(now()));
-      setPhase({ kind: 'recording' });
-      tick.current = setInterval(() => forceTick((n) => n + 1), 1000); // HUD clock
     })();
   };
 
@@ -100,12 +123,15 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
     deactivateKeepAwake(KEEP_AWAKE_TAG);
     const stopped = stopRecording(rec, now());
     setRec(stopped);
-    if (!canMatch(stopped)) {
-      setPhase({ kind: 'too_short' });
+    const why = whyCannotMatch(stopped);
+    if (why !== null) {
+      setPhase({ kind: 'too_short', why });
       return;
     }
     setPhase({ kind: 'matching' });
-    match({ baseUrl: getApiBaseUrl(), sessionId }, { trace: stopped.points })
+    // decimated: a long drive exceeds /match's 5,000-point cap, and a 400 with
+    // a raw schema string would strand a capture the user cannot get back
+    match({ baseUrl: getApiBaseUrl(), sessionId }, { trace: traceForMatch(stopped) })
       .then((matched) => setPhase({ kind: 'review', matched }))
       .catch((err: unknown) => {
         setPhase({
@@ -172,7 +198,9 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
           )}
           {phase.kind === 'too_short' && (
             <Text style={[styles.hudLine, { color: colors.warn }]}>
-              That capture is too short to be a drive (under 500 m) — nothing was saved.
+              {phase.why === 'too_short'
+                ? 'That capture is too short to be a drive (under 500 m) — nothing was saved.'
+                : 'Too few GPS fixes landed to snap that to roads (signal may have been poor) — nothing was saved.'}
             </Text>
           )}
           {phase.kind === 'match_failed' && (

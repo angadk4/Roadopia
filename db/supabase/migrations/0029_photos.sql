@@ -11,12 +11,15 @@
 --   - SQL owns ROWS only. delete_account deletes auth.users; photo rows
 --     cascade (photos.owner_id → profiles → auth.users).
 --   - The BACKEND owns blobs, via the Storage REST API (service role):
---     DELETE /photos/:id, DELETE /spots/:id and DELETE /account each collect
---     the affected storage paths FIRST, delete rows, then remove the blobs.
---     Blob removal is idempotent (404 = already gone).
---   - Failure ordering favours privacy: a crash can orphan an UNREACHABLE
---     blob in the private bucket (no signable row remains), never a
---     reachable one; each delete path re-sweeps by prefix on retry.
+--     DELETE /photos/:id, DELETE /spots/:id and DELETE /account. Blob removal
+--     is idempotent (404 = already gone).
+--   - Blob cleanup is a PREFIX SWEEP (storage list + delete under
+--     `<owner>/<spot>/`), not a list of paths read from rows, so it needs no
+--     surviving rows, catches anything uploaded mid-request, and is safe to
+--     repeat. Ordering differs per path on purpose: photo/spot deletes drop
+--     rows first (an orphaned blob is UNREACHABLE — no row can sign it),
+--     while ACCOUNT deletion sweeps blobs FIRST, because deleting the auth
+--     user is unretryable and a later failure would strand photos forever.
 
 -- retire the invalid trigger approach (shipped earlier this same session,
 -- never committed anywhere)

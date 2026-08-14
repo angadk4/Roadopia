@@ -99,6 +99,26 @@ describe('AddSpotScreen', () => {
     expect(JSON.stringify(tree.toJSON())).toContain('Spot added');
   });
 
+  it('changing the type after a nudge RE-CHECKS instead of saving blind', async () => {
+    const createFn = vi.fn(async () => 'new-id');
+    // a coffee spot AND a viewpoint both sit on this pin
+    const both: SpotRow[] = [
+      ...NEARBY,
+      { id: 's2', name: 'Ridge Lookout', type: 'viewpoint', lat: 43.6, lng: -79.8, source: 'user' },
+    ];
+    const tree = await render(createFn, both);
+    await press(tree, 'Type Coffee');
+    await type(tree, 'Spot name', 'Corner Beans');
+    await press(tree, 'Save spot'); // nudged about the coffee spot
+    expect(JSON.stringify(tree.toJSON())).toContain('already a coffee spot');
+
+    await press(tree, 'Type Viewpoint'); // ← the acknowledgement no longer applies
+    await press(tree, 'Save anyway');
+    // it must warn about the VIEWPOINT rather than saving unchecked
+    expect(createFn).not.toHaveBeenCalled();
+    expect(JSON.stringify(tree.toJSON())).toContain('already a viewpoint spot');
+  });
+
   it('a DIFFERENT-type pin nearby saves straight through — no false nudge', async () => {
     const createFn = vi.fn(async () => 'new-id');
     const tree = await render(createFn, NEARBY);

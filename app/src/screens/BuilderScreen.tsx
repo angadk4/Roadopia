@@ -57,6 +57,7 @@ export default function BuilderScreen(props: BuilderScreenProps): ReactElement {
     if (!canRoute(state)) {
       setSnapped(null);
       setProblem(null);
+      setBusy(false); // Clear/Undo below two points must not leave "Routing…" up
       return;
     }
     let live = true;
@@ -202,7 +203,10 @@ export default function BuilderScreen(props: BuilderScreenProps): ReactElement {
             <Text style={[styles.secondaryLabel, { color: colors.textMuted }]}>Clear</Text>
           </Pressable>
         </View>
-        {snapped && (
+        {/* Only offer the save while the shown snap MATCHES the waypoints.
+            Mid-debounce they disagree, and saving then persists the previous
+            geometry against the new points — including a wrong is_loop. */}
+        {snapped && !busy && (
           <SaveDriveButton
             route={toManualRoute(snapped, state.waypoints)}
             agentExplanation={null}

@@ -14,7 +14,7 @@
  */
 
 import { CircleLayer, ShapeSource, SymbolLayer } from '@rnmapbox/maps';
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import DriveLinesMap from '../components/DriveLinesMap';
@@ -29,7 +29,17 @@ import {
   type SupabaseConfig,
 } from '../lib/data';
 import { getSupabaseConfig } from '../lib/runtime';
+import { useAuth } from '../lib/use_auth';
 import { AMBER, font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
+
+/** Spots worth handing to the Add-spot nudge: a generous box around the view,
+ *  not the whole region. ~2 km is far wider than NUDGE_RADIUS_M, so panning a
+ *  little after opening still nudges correctly. */
+function nearbySpots(all: SpotRow[], center: [number, number] | null): SpotRow[] {
+  if (center === null) return all.slice(0, 500);
+  const [lng, lat] = center;
+  return all.filter((s) => Math.abs(s.lat - lat) < 0.02 && Math.abs(s.lng - lng) < 0.03);
+}
 
 type RoutesPhase =
   | { phase: 'loading' }
@@ -66,7 +76,11 @@ const SPOT_COLORS: [string, string, ...string[]] = [
 export interface MapHomeProps {
   /** Injectable loaders for tests; default to the live Supabase reads. */
   loadRoutes?: (cfg: SupabaseConfig) => Promise<MapRouteRow[]>;
-  loadSpots?: (cfg: SupabaseConfig) => Promise<SpotRow[]>;
+  loadSpots?: (
+    cfg: SupabaseConfig,
+    fetchImpl?: undefined,
+    accessToken?: string | null,
+  ) => Promise<SpotRow[]>;
   /** Present when mounted in MapStack (M10) — absent in bare test renders. */
   navigation?: {
     navigate: (screen: string, params?: Record<string, unknown>) => void;
@@ -76,25 +90,42 @@ export interface MapHomeProps {
 
 export default function MapHome(props: MapHomeProps): ReactElement {
   const { name: themeName, colors } = useTheme();
+  const { status, freshAccessToken } = useAuth();
   const [routes, setRoutes] = useState<RoutesPhase>({ phase: 'loading' });
+  /** Where the user is looking right now — handed to Add-spot so it opens on
+   *  this view instead of a hard-coded city at region zoom. */
+  const center = useRef<[number, number] | null>(null);
   const [spots, setSpots] = useState<SpotRow[]>([]);
   const [selected, setSelected] = useState<Selected | null>(null);
 
   const loadRoutes = props.loadRoutes ?? fetchMapRoutes;
   const loadSpots = props.loadSpots ?? fetchMapSpots;
 
+  const pullSpots = useCallback(() => {
+    void (async () => {
+      try {
+        // The SIGNED-IN token when we have one: map_spots is SECURITY INVOKER,
+        // so the credential is what decides whether the user's OWN pins come
+        // back. With the anon key they never do — you add a spot and the map
+        // you added it to stays empty.
+        const token = await freshAccessToken().catch(() => null);
+        setSpots(await loadSpots(getSupabaseConfig(), undefined, token));
+      } catch {
+        // enrichment-only: a spot failure never blocks the map (§18)
+      }
+    })();
+    // freshAccessToken is re-created on every auth change, which would re-run
+    // this on every render; `status` is the meaningful trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadSpots, status]);
+
   const load = useCallback(() => {
-    const cfg = getSupabaseConfig();
     setRoutes({ phase: 'loading' });
-    loadRoutes(cfg)
+    loadRoutes(getSupabaseConfig())
       .then((rows) => setRoutes({ phase: 'loaded', rows }))
       .catch(() => setRoutes({ phase: 'error' }));
-    // Spot pins load in parallel (region-wide via map_spots — FB-1); their
-    // failure is enrichment-only and never blocks the map (§18).
-    loadSpots(cfg)
-      .then(setSpots)
-      .catch(() => {});
-  }, [loadRoutes, loadSpots]);
+    pullSpots();
+  }, [loadRoutes, pullSpots]);
 
   useEffect(() => {
     load();
@@ -102,14 +133,10 @@ export default function MapHome(props: MapHomeProps): ReactElement {
 
   // M10: returning from AddSpot re-pulls pins so the new one is visible (§18)
   useEffect(() => {
-    const sub = props.navigation?.addFocusListener?.(() => {
-      loadSpots(getSupabaseConfig())
-        .then(setSpots)
-        .catch(() => {});
-    });
-    return sub;
+    const off = props.navigation?.addFocusListener?.(pullSpots);
+    return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pullSpots]);
 
   const routeShape = useMemo(
     () => (routes.phase === 'loaded' ? routesToFeatureCollection(routes.rows) : null),
@@ -279,7 +306,15 @@ export default function MapHome(props: MapHomeProps): ReactElement {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Add a spot"
-      onPress={() => props.navigation!.navigate('AddSpot', { knownSpots: spots })}
+      onPress={() =>
+        props.navigation!.navigate('AddSpot', {
+          // Only what the FR-033 nudge can use. All ~21k rows through
+          // navigation state stalls the push and keeps them alive for the
+          // life of the stack.
+          knownSpots: nearbySpots(spots, center.current),
+          ...(center.current ? { startAt: center.current } : {}),
+        })
+      }
       style={({ pressed }) => [
         styles.addBtn,
         { backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1 },
@@ -295,6 +330,9 @@ export default function MapHome(props: MapHomeProps): ReactElement {
       bounds={bounds}
       sourceId="seed-routes"
       onSelectLine={onRoutePress}
+      onCenterChanged={(c) => {
+        center.current = c;
+      }}
       banner={banner}
       sheet={
         <>

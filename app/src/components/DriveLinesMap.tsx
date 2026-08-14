@@ -51,6 +51,9 @@ export interface DriveLinesMapProps {
   banner?: ReactNode;
   /** The tap detail sheet (screen-specific content). */
   sheet?: ReactNode;
+  /** Current map centre [lng, lat] as the user pans — lets a screen hand the
+   *  view it is looking at to the next one instead of a hard-coded default. */
+  onCenterChanged?: (center: [number, number]) => void;
 }
 
 /**
@@ -79,6 +82,14 @@ export default function DriveLinesMap(props: DriveLinesMapProps): ReactElement {
         scaleBarEnabled={false}
         logoPosition={{ bottom: 6, left: 8 }}
         attributionPosition={{ bottom: 6, left: 100 }}
+        {...(props.onCenterChanged
+          ? {
+              onCameraChanged: (state: unknown) => {
+                const c = (state as { properties?: { center?: number[] } }).properties?.center;
+                if (c && c.length >= 2) props.onCenterChanged!([c[0]!, c[1]!]);
+              },
+            }
+          : {})}
       >
         {bounds && (
           <Camera

@@ -88,9 +88,47 @@ describe('loops', () => {
   it('decimates within the documented waypoint cap and URL limit (FR-117)', () => {
     const url = buildGoogleLoopUrl(loop)!;
     const waypoints = /waypoints=([^&]*)/.exec(url)![1]!;
-    const count = decodeURIComponent(waypoints).split('|').length;
-    expect(count).toBeLessThanOrEqual(GOOGLE_WAYPOINT_CAP);
+    const parts = decodeURIComponent(waypoints).split('|');
+    expect(parts.length).toBeLessThanOrEqual(GOOGLE_WAYPOINT_CAP);
     expect(url.length).toBeLessThanOrEqual(URL_MAX_CHARS);
+    // the length assertion above cannot fail on its own (9 coordinate pairs is
+    // ~330 chars against a 2,048 limit), so pin what the guard is really FOR:
+    // every waypoint distinct, and none of them the route's own origin
+    expect(new Set(parts).size).toBe(parts.length);
+    expect(parts).not.toContain('43.20000,-79.90000');
+  });
+
+  it('a loop too short to sample offers NOTHING rather than a point-to-itself link', () => {
+    // 2 coordinates: no interior to sample. The old code still returned a URL
+    // with origin === destination and no waypoints, labelled "Rough loop".
+    const stub = routeOf({
+      is_loop: true,
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [-79.9, 43.2],
+          [-79.89, 43.21],
+        ],
+      },
+    });
+    expect(buildGoogleLoopUrl(stub)).toBeNull();
+    expect(buildHandoffOptions(stub).googleLoop).toBeNull();
+  });
+
+  it('short geometries yield distinct interior samples, never the endpoints', () => {
+    const short = {
+      type: 'LineString',
+      coordinates: [
+        [-79.9, 43.2],
+        [-79.89, 43.21],
+        [-79.88, 43.22],
+        [-79.87, 43.23],
+      ],
+    } as Route['geometry'];
+    const pts = sampleInterior(short, 9);
+    expect(new Set(pts.map((p) => `${p.lat},${p.lng}`)).size).toBe(pts.length);
+    expect(pts.some((p) => p.lng === -79.9)).toBe(false); // not the origin
+    expect(pts.some((p) => p.lng === -79.87)).toBe(false); // not the end
   });
 
   it('interior samples span the shape and exclude the endpoints', () => {

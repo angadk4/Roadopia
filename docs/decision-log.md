@@ -4527,3 +4527,54 @@ copy (SPK-20's app-side behavior); dump→restore into a scratch DB → full row
 curvy · 8,161 cores · 21,370 spots · 9 routes · 5 profiles), expected auth-schema noise only.
 Deploy-shaped remainder recorded, not faked: R2 credentials + cron for backup.sh, Sentry/alerts,
 and the production smoke all ride M12.
+
+**BD-199 — dev-only host rewrite for signed photo URLs (2026-08-13).** The backend signs Storage
+URLs against its configured SUPABASE_URL, which in dev is loopback — correct for the server, wrong
+for every phone that asks (127.0.0.1 there is the phone). Rather than a second config knob that
+drifts with the LAN, `reachableFrom()` rewrites ONLY a loopback host to the host the client used
+to reach us; anything non-loopback (i.e. every hosted deploy) is returned byte-identical. This
+mirrors the app's own `resolveSupabaseUrl`, which already derives the local stack's address from
+the Metro host — so the two halves now agree by the same rule instead of by coincidence. Also
+recorded: expo-image-picker needed its config plugin for `NSPhotoLibraryUsageDescription` (a
+missing usage string is an OS-level kill, not a denied-permission path), and the dev backend's
+local-stack overrides moved from a shell-prefixed command into a gitignored `.env.local` +
+`pnpm dev:api`.
+
+**BD-200 — the post-M11 adversarial review: five blockers in green code, and two false numbers
+in my own records (2026-08-13).** Four independent hostile reviews (M9 code · M10 backend +
+migrations · M10 app · the written records) over work that had 247 passing tests and three
+milestones marked complete. Every blocker required either a deliberate hostile read or a probe;
+none was reachable by re-running the suite.
+
+The five: (1) **follow-mode announced a loop finished at its own start** — first vertex ==
+last vertex means the origin projects equally onto metre 0 and metre `totalM`, and with no prior
+progress the code chose by proximity, i.e. by GPS noise; measured 11/24 bearings reporting
+`done` while stationary, now 0/24 by treating "no progress yet" as progress 0. (2) **the
+recorder's 10,000-point cap exceeded /match's 5,000**, so a long drive 400'd with a raw schema
+string and the capture was unrecoverable — now decimated to fit. (3) **the record/follow start
+path installed a GPS watcher, wake-lock and timer AFTER unmount cleanup had run**, leaking
+foreground location for the app's lifetime — the §20.3 promise broken by a race rather than by
+design. (4) **`map_spots` is SECURITY INVOKER but was always called with the anon key**, whose
+only spots policy is `source='osm'`, while `create_spot` forces `source='user'` — so every spot
+a user created was invisible, and because the detail screen is reachable only via a map pin, the
+entire M10 feature set behind it was unreachable. (5) **the photo endpoints had no rate limiter**
+on a service with no hard cost cap, plus an uncapped decode path.
+
+The methodological lesson, which is the reason to record this at all: **every one of these
+lived in code the suite called green, and three of them (1, 3, 4) were invisible to unit tests
+by construction** — they are properties of geometry at a specific starting condition, of async
+lifecycle ordering, and of which CREDENTIAL a query runs under. Tests written alongside the
+implementation share the implementation's blind spots; the loop test used an open line, the
+recorder had no screen test at all, and the spot tests mocked the fetch layer that carried the
+bug. Adversarial review by someone reconstructing the failure from the outside is not a
+redundant check on top of tests — for whole categories of defect it is the ONLY check.
+
+Records corrected in the same pass: the RLS matrix is 26 checks grown from 20 (I wrote 22→28 in
+six places); "recorder 8/8" was 6/6; the lexicon scan's carve-outs include product copy, not
+only rule text; **M9-T02 is materially unbuilt** (no metadata inputs, and SaveDriveButton's
+comment promises a rename path that exists nowhere) yet was marked complete; **FR-063**
+(backgrounding mid-recording) is unbuilt and undisclosed. Corrections were appended, not edited
+into the old entries (BUILD_LOG is append-only by protocol), except PROGRESS.md, which is a live
+pointer and must simply be true — its "▶ Now" header was five milestones stale and its gate
+tracker still read SPK-18/SPK-20 "Not started" while the milestone tracker above called them
+passed.

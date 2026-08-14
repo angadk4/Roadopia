@@ -9,7 +9,7 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { ApiError } from '../lib/api';
+import { ApiError, NetworkError } from '../lib/api';
 import { deletePhoto, listSpotPhotos, uploadSpotPhoto, type PhotoRef } from '../lib/photos';
 import { getApiBaseUrl } from '../lib/runtime';
 import { useAuth } from '../lib/use_auth';
@@ -28,8 +28,10 @@ export interface PhotoUploadProps {
 /** Default picker — imported lazily so node tests never load the native module. */
 async function pickImage(): Promise<string | null> {
   const ImagePicker = await import('expo-image-picker');
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) return null;
+  // No permission request: the modern iOS/Android photo pickers hand back one
+  // chosen image without library access, and gating on a permission the picker
+  // doesn't need turned "Add a photo" into a silent no-op for anyone who had
+  // ever tapped Deny.
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: 'images',
     quality: 0.85, // re-encodes on pick (HEIC → JPEG)
@@ -40,6 +42,13 @@ async function pickImage(): Promise<string | null> {
 }
 
 type Phase = { kind: 'idle' } | { kind: 'uploading' } | { kind: 'problem'; message: string };
+
+/** NetworkError is NOT an ApiError, so an `instanceof ApiError` check threw away
+ *  exactly the messages that tell an offline user what to do. */
+function problemText(err: unknown, fallback: string): string {
+  if (err instanceof ApiError || err instanceof NetworkError) return err.message;
+  return fallback;
+}
 
 export default function PhotoUpload(props: PhotoUploadProps): ReactElement {
   const { colors } = useTheme();
@@ -67,10 +76,20 @@ export default function PhotoUpload(props: PhotoUploadProps): ReactElement {
   }, [props.spotId]);
 
   const add = (): void => {
+    if (phase.kind === 'uploading') return; // two quick taps opened two pickers
     void (async () => {
+      let uri: string | null;
       try {
-        const uri = await pick();
-        if (uri === null) return; // permission refused or cancelled — no error
+        uri = await pick();
+      } catch {
+        setPhase({
+          kind: 'problem',
+          message: 'Could not open your photos — check photo access in Settings.',
+        });
+        return;
+      }
+      if (uri === null) return; // cancelled — not an error
+      try {
         setPhase({ kind: 'uploading' });
         const token = await freshAccessToken();
         if (!token)
@@ -83,10 +102,7 @@ export default function PhotoUpload(props: PhotoUploadProps): ReactElement {
         setPhotos((p) => [...p, ref]);
         setPhase({ kind: 'idle' });
       } catch (err) {
-        setPhase({
-          kind: 'problem',
-          message: err instanceof ApiError ? err.message : 'Could not upload the photo.',
-        });
+        setPhase({ kind: 'problem', message: problemText(err, 'Could not upload the photo.') });
       }
     })();
   };
@@ -100,10 +116,7 @@ export default function PhotoUpload(props: PhotoUploadProps): ReactElement {
         await remove({ baseUrl, accessToken: token }, id);
         setPhotos((p) => p.filter((x) => x.id !== id));
       } catch (err) {
-        setPhase({
-          kind: 'problem',
-          message: err instanceof ApiError ? err.message : 'Could not delete the photo.',
-        });
+        setPhase({ kind: 'problem', message: problemText(err, 'Could not delete the photo.') });
       }
     })();
   };

@@ -3,14 +3,34 @@
  * over the rn-stub alias. Catches wiring failures (broken imports, hook misuse,
  * render crashes); native behaviour is verified on device (M7-T09).
  */
-import { act } from 'react';
+import { act, type ReactElement } from 'react';
 import { create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it } from 'vitest';
 
+import { AuthEngine } from '../../lib/auth_state';
 import { EMPTY_DRAFT, PlanDraftContext, type PlanDraft } from '../../lib/plan_draft';
+import { memorySessionStore } from '../../lib/session_store';
+import { AuthProvider } from '../../lib/use_auth';
 import MapHome from '../MapHome';
 import { CreateScreen } from '../placeholders';
 import PlanScreen from '../PlanScreen';
+
+/** MapHome reads auth so it can show the signed-in user's OWN spots (their
+ *  pins are invisible under the anon key). Anonymous context is enough here. */
+function withAuth(node: ReactElement): ReactElement {
+  return (
+    <AuthProvider
+      engine={
+        new AuthEngine({
+          cfg: { url: 'http://sb.local', anonKey: 'anon' },
+          store: memorySessionStore(null),
+        })
+      }
+    >
+      {node}
+    </AuthProvider>
+  ) as ReactElement;
+}
 
 function textOf(tree: ReactTestRenderer): string {
   return JSON.stringify(tree.toJSON());
@@ -115,7 +135,7 @@ describe('screen smoke', () => {
     let tree!: ReactTestRenderer;
     const pendingRoutes = () => new Promise<never>(() => {});
     act(() => {
-      tree = create(<MapHome loadRoutes={pendingRoutes} />);
+      tree = create(withAuth(<MapHome loadRoutes={pendingRoutes} />));
     });
     const text = textOf(tree);
     expect(text).toContain('mapbox-mapview'); // the map itself always renders
@@ -151,10 +171,12 @@ describe('screen smoke', () => {
     const spot = { id: 's1', name: 'Cafe', type: 'coffee', lat: 43.24, lng: -79.94, source: 'osm' };
     await act(async () => {
       tree = create(
-        <MapHome
-          loadRoutes={() => Promise.resolve([row])}
-          loadSpots={() => Promise.resolve([spot])}
-        />,
+        withAuth(
+          <MapHome
+            loadRoutes={() => Promise.resolve([row])}
+            loadSpots={() => Promise.resolve([spot])}
+          />,
+        ),
       );
     });
     const text = textOf(tree);
@@ -167,7 +189,7 @@ describe('screen smoke', () => {
   it('MapHome data failure → friendly banner + retry, map still present (§18)', async () => {
     let tree!: ReactTestRenderer;
     await act(async () => {
-      tree = create(<MapHome loadRoutes={() => Promise.reject(new Error('down'))} />);
+      tree = create(withAuth(<MapHome loadRoutes={() => Promise.reject(new Error('down'))} />));
     });
     const text = textOf(tree);
     expect(text).toContain('mapbox-mapview');

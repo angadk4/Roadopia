@@ -20,6 +20,7 @@ import {
   createSpot,
   nearestSameType,
   parseTags,
+  SPOT_DESC_MAX,
   SPOT_NAME_MAX,
   SPOT_TYPES,
   validateSpotDraft,
@@ -30,6 +31,9 @@ import { AMBER, font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 export interface AddSpotScreenParams {
   /** Loaded map spots, for the FR-033 client-side proximity nudge. */
   knownSpots?: SpotRow[];
+  /** The view the user came from [lng, lat] — opening on a hard-coded city
+   *  instead would throw away the road they were looking at. */
+  startAt?: [number, number];
 }
 
 export interface AddSpotScreenProps {
@@ -40,15 +44,32 @@ export interface AddSpotScreenProps {
   createFn?: typeof createSpot;
 }
 
-const INITIAL_CENTER: [number, number] = [-79.8, 43.6];
-const INITIAL_ZOOM = 9;
+const FALLBACK_CENTER: [number, number] = [-79.8, 43.6];
+/** Close enough that the 150 m nudge radius is a visible distance, not a
+ *  sub-pixel one (at zoom 9 the whole nudge radius is under a pixel). */
+const INITIAL_ZOOM = 13;
 
 type SaveState =
   | { kind: 'idle' }
-  | { kind: 'nudge'; message: string }
+  /** `about` records exactly WHAT was acknowledged. Re-checking against it is
+   *  what stops a warning about a coffee spot from silently licensing a
+   *  viewpoint saved 40 km away. */
+  | { kind: 'nudge'; message: string; about: { type: string; lat: number; lng: number } }
   | { kind: 'saving' }
   | { kind: 'saved' }
   | { kind: 'problem'; message: string };
+
+/** Did the user move or re-type since acknowledging the nudge? */
+function nudgeStillApplies(
+  about: { type: string; lat: number; lng: number },
+  draft: { type: string; lat: number; lng: number },
+): boolean {
+  return (
+    about.type === draft.type &&
+    Math.abs(about.lat - draft.lat) < 0.0005 && // ~55 m
+    Math.abs(about.lng - draft.lng) < 0.0007
+  );
+}
 
 export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
   const { name: themeName, colors } = useTheme();
@@ -57,7 +78,8 @@ export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
   const create = props.createFn ?? createSpot;
   const knownSpots = props.route.params?.knownSpots ?? [];
 
-  const center = useRef<[number, number]>(INITIAL_CENTER);
+  const initialCenter = props.route.params?.startAt ?? FALLBACK_CENTER;
+  const center = useRef<[number, number]>(initialCenter);
   const [type, setType] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -80,19 +102,25 @@ export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
     tags: parseTags(tagsText),
   });
 
+  const acknowledgedRef = useRef<{ type: string; lat: number; lng: number } | null>(null);
+
   const doSave = (): void => {
+    const draft = draftOf();
     setState({ kind: 'saving' });
     void (async () => {
       try {
         const token = await freshAccessToken();
         if (!token) throw new DataError('Your session expired — sign in again.', null);
-        await create(cfg, token, draftOf());
+        await create(cfg, token, draft);
         setState({ kind: 'saved' });
       } catch (err) {
         setState({
           kind: 'problem',
           message: err instanceof DataError ? err.message : 'Could not save the spot.',
         });
+        // the duplicate was already acknowledged — a network blip must not make
+        // the user argue with the same warning again
+        acknowledgedRef.current = { type: draft.type, lat: draft.lat, lng: draft.lng };
       }
     })();
   };
@@ -104,12 +132,17 @@ export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
       setState({ kind: 'problem', message: invalid });
       return;
     }
-    // FR-033: warn once about a very close same-type spot; second press saves.
-    if (state.kind !== 'nudge') {
+    // FR-033: warn once about a very close same-type spot; a second press on
+    // the SAME pin and type saves anyway. Changing either re-arms the check.
+    const acknowledged =
+      (state.kind === 'nudge' && nudgeStillApplies(state.about, draft)) ||
+      (acknowledgedRef.current !== null && nudgeStillApplies(acknowledgedRef.current, draft));
+    if (!acknowledged) {
       const near = nearestSameType(knownSpots, draft, draft.type);
       if (near !== null) {
         setState({
           kind: 'nudge',
+          about: { type: draft.type, lat: draft.lat, lng: draft.lng },
           message: `There's already a ${draft.type.replace('_', ' ')} spot ${Math.round(near.distanceM)} m away — “${near.name}”. Save yours anyway?`,
         });
         return;
@@ -151,7 +184,7 @@ export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
         }}
       >
         <Camera
-          defaultSettings={{ centerCoordinate: INITIAL_CENTER, zoomLevel: INITIAL_ZOOM }}
+          defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: INITIAL_ZOOM }}
           animationDuration={0}
         />
       </MapView>
@@ -213,7 +246,8 @@ export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
           placeholder="What makes it worth stopping? (optional)"
           placeholderTextColor={colors.textMuted}
           value={description}
-          onChangeText={setDescription}
+          onChangeText={(t) => setDescription(t.slice(0, SPOT_DESC_MAX))}
+          maxLength={SPOT_DESC_MAX}
           multiline
           style={[
             styles.input,

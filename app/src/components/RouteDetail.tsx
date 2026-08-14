@@ -298,7 +298,14 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
         <Stat label="distance" value={`${km} km`} colors={colors} />
         <Stat label="drive time" value={`≈${min} min`} colors={colors} />
         <Stat label="shape" value={route.is_loop ? 'loop' : 'A → B'} colors={colors} />
-        <Stat label="twistiness" value={route.curviness.toFixed(1)} colors={colors} />
+        {/* A hand-built or recorded route has no measured curvature — showing a
+            flat 0.0 next to real measured stats claims a measurement nobody
+            made (Hard rule: never a claimed number). */}
+        {route.origin_type === 'ai' ? (
+          <Stat label="twistiness" value={route.curviness.toFixed(1)} colors={colors} />
+        ) : (
+          <Stat label="twistiness" value="not measured" colors={colors} />
+        )}
         {route.climb_m !== null && (
           <Stat label="climb" value={`↑ ${Math.round(route.climb_m)} m`} colors={colors} />
         )}

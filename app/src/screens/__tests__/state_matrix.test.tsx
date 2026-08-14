@@ -6,18 +6,38 @@
  * the brief; the server gazetteer resolves or asks to clarify).
  */
 import type { GenerationEvent } from '@shared/types';
-import { act } from 'react';
+import { act, type ReactElement } from 'react';
 import { create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it } from 'vitest';
 
 import RouteDetail from '../../components/RouteDetail';
 import { ApiError } from '../../lib/api';
+import { AuthEngine } from '../../lib/auth_state';
 import type { PlanStreamResult } from '../../lib/plan_stream';
+import { memorySessionStore } from '../../lib/session_store';
+import { AuthProvider } from '../../lib/use_auth';
 import MapHome from '../MapHome';
 import ProgressScreen from '../ProgressScreen';
 
 const REQUEST = { brief: 'loop', origin: { lat: 43.26, lng: -79.87 } };
 const NAV = { replace: () => {}, goBack: () => {} };
+
+/** MapHome reads auth so it can show the signed-in user's OWN spots (their
+ *  pins are invisible under the anon key). Anonymous context is enough here. */
+function withAuth(node: ReactElement): ReactElement {
+  return (
+    <AuthProvider
+      engine={
+        new AuthEngine({
+          cfg: { url: 'http://sb.local', anonKey: 'anon' },
+          store: memorySessionStore(null),
+        })
+      }
+    >
+      {node}
+    </AuthProvider>
+  ) as ReactElement;
+}
 
 function textOf(tree: ReactTestRenderer): string {
   return JSON.stringify(tree.toJSON());
@@ -43,7 +63,7 @@ describe('§18 state matrix', () => {
   it('1 loading — map banner + streamed generation steps', () => {
     let tree!: ReactTestRenderer;
     act(() => {
-      tree = create(<MapHome loadRoutes={() => new Promise(() => {})} />);
+      tree = create(withAuth(<MapHome loadRoutes={() => new Promise(() => {})} />));
     });
     expect(textOf(tree)).toContain('Loading routes');
   });
@@ -67,7 +87,9 @@ describe('§18 state matrix', () => {
   it('3c map data unreachable — map still works + retry (never blank)', async () => {
     let tree!: ReactTestRenderer;
     await act(async () => {
-      tree = create(<MapHome loadRoutes={() => Promise.reject(new Error('ECONNREFUSED'))} />);
+      tree = create(
+        withAuth(<MapHome loadRoutes={() => Promise.reject(new Error('ECONNREFUSED'))} />),
+      );
     });
     const text = textOf(tree);
     expect(text).toContain('mapbox-mapview');

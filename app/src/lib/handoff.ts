@@ -59,9 +59,16 @@ export function sampleInterior(geometry: Route['geometry'], k: number): LatLng[]
   const coords = geometry.coordinates;
   if (coords.length < 3 || k <= 0) return [];
   const out: LatLng[] = [];
+  const seen = new Set<number>();
   for (let i = 1; i <= k; i++) {
-    const idx = Math.round((i / (k + 1)) * (coords.length - 1));
-    const c = coords[Math.min(idx, coords.length - 2)]!;
+    // clamp BOTH ends: index 0 is the route's own origin, not an interior
+    // point, and duplicates would burn Google's tiny waypoint budget on the
+    // same coordinate twice (a short loop produced 9 waypoints, 2 unique).
+    const raw = Math.round((i / (k + 1)) * (coords.length - 1));
+    const idx = Math.min(Math.max(raw, 1), coords.length - 2);
+    if (seen.has(idx)) continue;
+    seen.add(idx);
+    const c = coords[idx]!;
     out.push({ lat: c[1]!, lng: c[0]! });
   }
   return out;
@@ -87,15 +94,16 @@ export interface HandoffOptions {
  * URL fits URL_MAX_CHARS; null when even one waypoint cannot fit.
  */
 export function buildGoogleLoopUrl(route: Route): string | null {
-  const start = {
-    lat: route.geometry.coordinates[0]![1]!,
-    lng: route.geometry.coordinates[0]![0]!,
-  };
+  const first = route.geometry.coordinates[0];
+  if (!first) return null;
+  const start = { lat: first[1]!, lng: first[0]! };
   for (let k = GOOGLE_WAYPOINT_CAP; k >= 1; k--) {
-    const url = googleDirectionsUrl(start, {
-      origin: start,
-      waypoints: sampleInterior(route.geometry, k),
-    });
+    const waypoints = sampleInterior(route.geometry, k);
+    // No interior samples means the "loop" would be a link from a point to
+    // itself — Google navigates nowhere and the offer would be a lie. Better
+    // to offer nothing (HandoffSection then hides the row).
+    if (waypoints.length === 0) return null;
+    const url = googleDirectionsUrl(start, { origin: start, waypoints });
     if (url.length <= URL_MAX_CHARS) return url;
   }
   return null;
@@ -103,11 +111,14 @@ export function buildGoogleLoopUrl(route: Route): string | null {
 
 export function buildHandoffOptions(route: Route): HandoffOptions {
   const coords = route.geometry.coordinates;
-  const start = { lat: coords[0]![1]!, lng: coords[0]![0]! };
-  const end = {
-    lat: coords[coords.length - 1]![1]!,
-    lng: coords[coords.length - 1]![0]!,
-  };
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  // A geometry with no coordinates can only come from corrupt data, but the
+  // hand-off panel must degrade to "nothing on offer", never crash the screen
+  // that is showing the drive.
+  if (!first || !last) return { atob: null, legs: [], googleLoop: null };
+  const start = { lat: first[1]!, lng: first[0]! };
+  const end = { lat: last[1]!, lng: last[0]! };
 
   const legs: HandoffLeg[] = route.stops.map((s) => ({
     name: s.name,

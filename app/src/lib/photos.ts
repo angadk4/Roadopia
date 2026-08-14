@@ -54,6 +54,7 @@ export async function uploadSpotPhoto(
   let blob: unknown;
   try {
     const local = await f(localUri, {});
+    if (!local.ok) throw new Error(`local read ${local.status}`);
     blob = await (local as unknown as { blob(): Promise<unknown> }).blob();
   } catch {
     throw new NetworkError('Could not read that photo from the device.');

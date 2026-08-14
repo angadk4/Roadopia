@@ -125,13 +125,15 @@ export function locateOnTrack(
     });
   }
   const near = candidates.filter((c) => c.offTrackM <= bestDist + AMBIGUITY_SLACK_M);
-  if (lastAlongM !== null) {
-    const forward = near.filter((c) => c.alongM >= lastAlongM - BACKTRACK_TOLERANCE_M);
-    if (forward.length > 0) {
-      return forward.reduce((m, c) => (c.alongM < m.alongM ? c : m));
-    }
-  }
-  return near.reduce((m, c) => (c.offTrackM < m.offTrackM ? c : m), near[0]!);
+  if (near.length === 0) return { alongM: 0, offTrackM: Infinity }; // <2 points: no track to be on
+  const forward = near.filter((c) => c.alongM >= (lastAlongM ?? 0) - BACKTRACK_TOLERANCE_M);
+  // A LOOP's first and last vertex are the same point, so a driver sitting at
+  // the origin projects equally well onto metre 0 and metre 34,890 — and GPS
+  // noise decides which. Treating "no progress yet" as progress 0 (rather than
+  // as no constraint at all) makes the earliest candidate win, so a loop starts
+  // at its start instead of announcing itself finished before departure.
+  if (forward.length > 0) return forward.reduce((m, c) => (c.alongM < m.alongM ? c : m));
+  return near.reduce((m, c) => (c.offTrackM < m.offTrackM ? c : m));
 }
 
 export interface FollowStatus {

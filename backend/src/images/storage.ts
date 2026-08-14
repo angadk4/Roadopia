@@ -18,8 +18,9 @@ export class StorageError extends Error {
   constructor(
     message: string,
     public readonly statusCode: number | null,
+    options?: { cause?: unknown },
   ) {
-    super(message);
+    super(message, options);
     this.name = 'StorageError';
   }
 }
@@ -33,6 +34,31 @@ function authHeaders(cfg: StorageConfig): Record<string, string> {
   return { apikey: cfg.serviceRoleKey, authorization: `Bearer ${cfg.serviceRoleKey}` };
 }
 
+/** Object keys are ours (uuid segments), but encoding them keeps a future
+ *  writer's `?`/`#`/`..` from becoming URL injection carrying the service key. */
+function encodePath(path: string): string {
+  return path.split('/').map(encodeURIComponent).join('/');
+}
+
+/**
+ * A connection-level failure (DNS, ECONNREFUSED, TLS) is the MOST likely
+ * outage shape and must present as StorageError like an HTTP failure does —
+ * otherwise it escapes as a raw 500 and the fail-closed promise only holds
+ * for the tidier half of outages.
+ */
+async function call(
+  fetchImpl: FetchLike,
+  url: string,
+  init: Record<string, unknown>,
+  what: string,
+): Promise<{ ok: boolean; status: number; text(): Promise<string> }> {
+  try {
+    return await fetchImpl(url, init);
+  } catch (err) {
+    throw new StorageError(`storage ${what} unreachable`, null, { cause: err });
+  }
+}
+
 export async function uploadObject(
   cfg: StorageConfig,
   path: string,
@@ -40,11 +66,16 @@ export async function uploadObject(
   contentType: string,
   fetchImpl: FetchLike = fetch as unknown as FetchLike,
 ): Promise<void> {
-  const res = await fetchImpl(`${cfg.url}/storage/v1/object/${cfg.bucket}/${path}`, {
-    method: 'POST',
-    headers: { ...authHeaders(cfg), 'content-type': contentType, 'x-upsert': 'false' },
-    body,
-  });
+  const res = await call(
+    fetchImpl,
+    `${cfg.url}/storage/v1/object/${cfg.bucket}/${encodePath(path)}`,
+    {
+      method: 'POST',
+      headers: { ...authHeaders(cfg), 'content-type': contentType, 'x-upsert': 'false' },
+      body,
+    },
+    'upload',
+  );
   if (!res.ok) throw new StorageError('storage upload failed', res.status);
 }
 
@@ -55,11 +86,16 @@ export async function signObjectUrl(
   expiresInS: number,
   fetchImpl: FetchLike = fetch as unknown as FetchLike,
 ): Promise<string> {
-  const res = await fetchImpl(`${cfg.url}/storage/v1/object/sign/${cfg.bucket}/${path}`, {
-    method: 'POST',
-    headers: { ...authHeaders(cfg), 'content-type': 'application/json' },
-    body: JSON.stringify({ expiresIn: expiresInS }),
-  });
+  const res = await call(
+    fetchImpl,
+    `${cfg.url}/storage/v1/object/sign/${cfg.bucket}/${encodePath(path)}`,
+    {
+      method: 'POST',
+      headers: { ...authHeaders(cfg), 'content-type': 'application/json' },
+      body: JSON.stringify({ expiresIn: expiresInS }),
+    },
+    'sign',
+  );
   if (!res.ok) throw new StorageError('storage sign failed', res.status);
   const parsed = JSON.parse(await res.text()) as { signedURL?: string };
   if (typeof parsed.signedURL !== 'string')
@@ -72,10 +108,48 @@ export async function removeObject(
   path: string,
   fetchImpl: FetchLike = fetch as unknown as FetchLike,
 ): Promise<void> {
-  const res = await fetchImpl(`${cfg.url}/storage/v1/object/${cfg.bucket}/${path}`, {
-    method: 'DELETE',
-    headers: authHeaders(cfg),
-  });
+  const res = await call(
+    fetchImpl,
+    `${cfg.url}/storage/v1/object/${cfg.bucket}/${encodePath(path)}`,
+    { method: 'DELETE', headers: authHeaders(cfg) },
+    'remove',
+  );
   // 404 = already gone — removal is idempotent, not an error
   if (!res.ok && res.status !== 404) throw new StorageError('storage remove failed', res.status);
+}
+
+/**
+ * Delete EVERY object under a key prefix. Rows and blobs live in different
+ * systems, so a crash between them can orphan blobs; because our keys are
+ * `<owner>/<spot>/<photo>.jpg`, a prefix sweep is a complete, retryable
+ * cleanup rather than a best-effort one (Hard rule E: deletion is real).
+ */
+export async function removeByPrefix(
+  cfg: StorageConfig,
+  prefix: string,
+  fetchImpl: FetchLike = fetch as unknown as FetchLike,
+): Promise<number> {
+  const res = await call(
+    fetchImpl,
+    `${cfg.url}/storage/v1/object/list/${cfg.bucket}`,
+    {
+      method: 'POST',
+      headers: { ...authHeaders(cfg), 'content-type': 'application/json' },
+      body: JSON.stringify({ prefix, limit: 1000, sortBy: { column: 'name', order: 'asc' } }),
+    },
+    'list',
+  );
+  if (!res.ok) throw new StorageError('storage list failed', res.status);
+  let names: string[];
+  try {
+    names = (JSON.parse(await res.text()) as Array<{ name?: string }>)
+      .map((o) => o.name)
+      .filter((n): n is string => typeof n === 'string' && n.length > 0);
+  } catch {
+    throw new StorageError('unreadable list response', null);
+  }
+  for (const name of names) {
+    await removeObject(cfg, `${prefix}${name}`, fetchImpl);
+  }
+  return names.length;
 }

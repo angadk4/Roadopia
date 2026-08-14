@@ -33,6 +33,13 @@ async function main(): Promise<void> {
       process.env['DATABASE_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
   });
   await db.connect();
+  // node-postgres emits 'error' when the server closes the connection (restart,
+  // idle timeout, network blip). Unhandled, that event takes the whole process
+  // down — one dropped connection would take /plan, /discover and the photo
+  // routes with it. Log and let the next query surface the failure honestly.
+  db.on('error', (err: Error) => {
+    console.error(`database connection error: ${err.message}`); // no secrets, no coordinates
+  });
 
   const ledger = new DbMonthLedger(db);
   await ledger.prime();
@@ -89,6 +96,16 @@ async function main(): Promise<void> {
         serviceRoleKey: config.SUPABASE_SERVICE_ROLE_KEY,
         bucket: 'photos',
       },
+      // Storage + egress have no hard cap (Hard rule F), and image processing
+      // is the most expensive thing a signed-in user can trigger. Tighter than
+      // the browse limiters, looser than the planner's.
+      rateLimiter: new RateLimiter({
+        perIp: [
+          { limit: 20, windowMs: 60_000 },
+          { limit: 200, windowMs: 3_600_000 },
+        ],
+        perSession: [{ limit: 12, windowMs: 60_000 }],
+      }),
     },
     // R25-U16c: /parse (browse-class rules parse — no LLM, no engine; fired
     // per debounced keystroke, so its limiter is deliberately looser than the

@@ -15,6 +15,10 @@ import type { LatLng, Route, RouteThroughOutput } from '@shared/types';
 export const ACCURACY_MAX_M = 50;
 export const MIN_SPACING_M = 10;
 export const MAX_POINTS = 10_000;
+/** POST /match's schema cap (backend/src/routes/match.ts MAX_TRACE_POINTS).
+ *  Capture may exceed it on a long drive — the trace is decimated to fit
+ *  rather than rejected, so a two-hour drive still snaps. */
+export const MATCH_TRACE_MAX = 5_000;
 
 export interface RecorderState {
   status: 'idle' | 'recording' | 'stopped';
@@ -56,7 +60,9 @@ export function addFix(
   if (last && metresBetween(last, fix) < MIN_SPACING_M) {
     return { ...s, droppedFixes: s.droppedFixes + 1 };
   }
-  if (s.points.length >= MAX_POINTS) return s; // full — keep recording time, stop growing
+  // full — keep recording time, stop growing, but COUNT the drop (the review
+  // screen's counter is called honest; silently truncating would make it lie)
+  if (s.points.length >= MAX_POINTS) return { ...s, droppedFixes: s.droppedFixes + 1 };
   return { ...s, points: [...s.points, { lat: fix.lat, lng: fix.lng }] };
 }
 
@@ -79,7 +85,30 @@ export function elapsedS(s: RecorderState, nowMs: number): number {
 
 /** Enough material to be worth map-matching (a parking-lot shuffle is not). */
 export function canMatch(s: RecorderState): boolean {
-  return s.points.length >= 8 && rawDistanceM(s) >= 500;
+  return whyCannotMatch(s) === null;
+}
+
+/** WHICH gate failed — so the screen can say the true reason, not a guess.
+ *  (A 3 km drive under heavy tree cover can pass the distance gate and fail
+ *  the point-count one; telling that driver "under 500 m" is a lie.) */
+export function whyCannotMatch(s: RecorderState): 'too_few_points' | 'too_short' | null {
+  if (s.points.length < 8) return 'too_few_points';
+  if (rawDistanceM(s) < 500) return 'too_short';
+  return null;
+}
+
+/**
+ * The captured trace, decimated to what POST /match accepts. Uniform sampling
+ * keeps the drive's whole shape (endpoints included) instead of truncating it
+ * to the first 5,000 points, which would silently amputate the drive home.
+ */
+export function traceForMatch(s: RecorderState, max = MATCH_TRACE_MAX): LatLng[] {
+  const pts = s.points;
+  if (pts.length <= max || max < 2) return [...pts];
+  const out: LatLng[] = [];
+  const step = (pts.length - 1) / (max - 1);
+  for (let i = 0; i < max; i++) out.push(pts[Math.round(i * step)]!);
+  return out;
 }
 
 const LOOP_CLOSE_M = 300;

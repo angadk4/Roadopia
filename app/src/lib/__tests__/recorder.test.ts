@@ -7,12 +7,15 @@ import {
   canMatch,
   elapsedS,
   IDLE_RECORDER,
+  MATCH_TRACE_MAX,
   MAX_POINTS,
   MIN_SPACING_M,
   rawDistanceM,
   startRecording,
   stopRecording,
   toRecordedRoute,
+  traceForMatch,
+  whyCannotMatch,
 } from '../recorder';
 
 /** M9-T03..T05 — the pure recorder machine (FR-060..062). */
@@ -62,8 +65,11 @@ describe('recorder gates', () => {
     let s = drive(3);
     (s as { points: unknown[] }).points = new Array(MAX_POINTS).fill({ lat: 43.2, lng: -79.9 });
     const before = s.points.length;
+    const droppedBefore = s.droppedFixes;
     s = addFix(s, { lat: 44, lng: -79, accuracyM: 5 });
     expect(s.points.length).toBe(before);
+    // a silently truncated capture would make the "honest" counter dishonest
+    expect(s.droppedFixes).toBe(droppedBefore + 1);
   });
 
   it('elapsed uses real wall time and freezes at stop', () => {
@@ -79,6 +85,39 @@ describe('canMatch', () => {
     expect(canMatch(drive(5))).toBe(false); // few points, short
     expect(canMatch(drive(60))).toBe(true); // 60 × ~11 m ≈ 660 m
     expect(rawDistanceM(drive(60))).toBeGreaterThan(500);
+  });
+});
+
+describe('the trace that actually gets posted', () => {
+  it('a long drive is decimated to what /match accepts, endpoints kept', () => {
+    // ~85 minutes of moving time already exceeds the server's 5,000-point cap;
+    // posting the raw capture 400s and the drive is unrecoverable.
+    const long = drive(7_000);
+    expect(long.points.length).toBeGreaterThan(MATCH_TRACE_MAX);
+    const trace = traceForMatch(long);
+    expect(trace).toHaveLength(MATCH_TRACE_MAX);
+    expect(trace[0]).toEqual(long.points[0]);
+    expect(trace[trace.length - 1]).toEqual(long.points[long.points.length - 1]);
+  });
+
+  it('a short drive is posted whole', () => {
+    const s = drive(60);
+    expect(traceForMatch(s)).toEqual(s.points);
+  });
+});
+
+describe('whyCannotMatch says which gate failed', () => {
+  it('distinguishes a short shuffle from a sparse-signal drive', () => {
+    expect(whyCannotMatch(drive(60))).toBeNull();
+    // 5 points × ~11 m: too few points AND too short — points reported first
+    expect(whyCannotMatch(drive(5))).toBe('too_few_points');
+    // plenty of points, but they barely move: the DISTANCE gate is the failure
+    let dense = startRecording(0);
+    for (let i = 0; i < 20; i++) {
+      dense = addFix(dense, { lat: 43.2 + i * 0.00012, lng: -79.9, accuracyM: 5 });
+    }
+    expect(rawDistanceM(dense)).toBeLessThan(500);
+    expect(whyCannotMatch(dense)).toBe('too_short');
   });
 });
 

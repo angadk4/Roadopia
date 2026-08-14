@@ -16,24 +16,28 @@
  * /spots/:id and DELETE /account. Current Storage forbids SQL deletes of
  * storage.objects (protect_delete trigger — measured, see 0029), so ANY
  * path that removes photo rows must sweep the matching blobs via the
- * Storage API. Rows go first, blobs second: a crash can orphan an
- * UNREACHABLE blob in the private bucket, never leave a reachable one.
+ * Storage API. Ordering is chosen per path so a crash never strands data the
+ * user could not clean up: photo/spot deletes drop rows first (an orphan blob
+ * is unreachable — no row can sign it), while ACCOUNT delete sweeps blobs
+ * first, because losing the auth user is unretryable.
  */
 
 import { randomUUID } from 'node:crypto';
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { requireAuth } from '../auth/jwt';
 import { ImageRejectedError, MAX_IMAGE_BYTES, processImage } from '../images/process';
 import {
+  removeByPrefix,
   removeObject,
   signObjectUrl,
   StorageError,
   uploadObject,
   type StorageConfig,
 } from '../images/storage';
-import { AppError } from '../lib/errors';
+import { AppError, errorBody } from '../lib/errors';
+import type { RateLimiter } from '../lib/rate_limit';
 
 export const PHOTO_URL_TTL_S = 7 * 24 * 3600;
 export const MAX_PHOTOS_PER_SPOT = 6;
@@ -49,19 +53,67 @@ interface DbLike {
 export interface PhotosEndpointDeps {
   db: DbLike;
   storage: StorageConfig;
+  /** SPK-14 posture: Storage/egress have no hard cap (Hard rule F), so the
+   *  write path needs a limiter like every other public surface. */
+  rateLimiter?: RateLimiter;
   /** DI for tests. */
   processFn?: typeof processImage;
   uploadFn?: typeof uploadObject;
   signFn?: typeof signObjectUrl;
   removeFn?: typeof removeObject;
+  sweepFn?: typeof removeByPrefix;
   deleteAccountFn?: (supabaseUrl: string, userToken: string) => Promise<void>;
 }
 
+/**
+ * DEV-ONLY host fix: a loopback Supabase URL is correct for THIS process but
+ * meaningless on a phone (127.0.0.1 is the phone itself), so signed photo
+ * URLs would render broken on a LAN device. Rewrite the host to whatever host
+ * the client used to reach us — the same trick the app's own Supabase URL
+ * resolution uses. A hosted deploy never matches the loopback branch, so its
+ * URLs are returned untouched.
+ */
+export function reachableFrom(url: string, hostHeader: string | undefined): string {
+  if (!/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(url)) return url;
+  const host = hostHeader?.split(':')[0];
+  if (!host || host === '127.0.0.1' || host === 'localhost') return url;
+  return url.replace(/^(https?:\/\/)(127\.0\.0\.1|localhost)/, `$1${host}`);
+}
+
 export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpointDeps): void {
+  /**
+   * `onRequest`, not `preHandler`: Fastify parses the body between them, so a
+   * preHandler check happily buffers an anonymous 10 MB upload before saying
+   * 401. Auth (from registerAuth's earlier onRequest hook) and the rate limit
+   * both belong before a single byte is read.
+   */
+  const guard = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    await requireAuth(request);
+    if (!deps.rateLimiter) return;
+    const session = request.headers['x-session-id'];
+    const decision = deps.rateLimiter.check(
+      request.ip,
+      typeof session === 'string' ? session : (request.user?.sub ?? null),
+    );
+    if (!decision.allowed) {
+      await reply
+        .status(429)
+        .header('retry-after', String(decision.retryAfterS))
+        .send(
+          errorBody(
+            'rate_limited',
+            `Too many requests at once — try again in ${decision.retryAfterS}s.`,
+            request.id,
+          ),
+        );
+    }
+  };
+
   const process = deps.processFn ?? processImage;
   const upload = deps.uploadFn ?? uploadObject;
   const sign = deps.signFn ?? signObjectUrl;
   const remove = deps.removeFn ?? removeObject;
+  const sweep = deps.sweepFn ?? removeByPrefix;
 
   // Raw image bodies for these routes only; JSON routes are untouched.
   app.addContentTypeParser(
@@ -74,7 +126,7 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
     '/spots/:id/photos',
     {
       bodyLimit: PHOTO_BODY_LIMIT,
-      preHandler: requireAuth,
+      onRequest: guard,
       schema: {
         params: {
           type: 'object',
@@ -98,14 +150,6 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
       if (!row || row['owner_id'] !== sub || row['source'] !== 'user') {
         throw new AppError(404, 'not_found', 'That spot isn’t yours (or doesn’t exist).');
       }
-      const count = await deps.db.query(
-        'select count(*)::int as n from photos where spot_id = $1',
-        [spotId],
-      );
-      if (((count.rows[0]?.['n'] as number) ?? 0) >= MAX_PHOTOS_PER_SPOT) {
-        throw new AppError(400, 'photo_limit', `A spot holds up to ${MAX_PHOTOS_PER_SPOT} photos.`);
-      }
-
       let processed;
       try {
         processed = await process(request.body);
@@ -120,12 +164,44 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
       const base = `${sub}/${spotId}/${photoId}`;
       const fullPath = `${base}.jpg`;
       const thumbPath = `${base}_thumb.jpg`;
+      let uploaded = false;
       try {
         await upload(deps.storage, fullPath, processed.full, 'image/jpeg');
         await upload(deps.storage, thumbPath, processed.thumb, 'image/jpeg');
+        uploaded = true;
+
+        // The cap is enforced IN the insert: a count-then-insert lets N
+        // concurrent uploads all read 0 and all write.
+        const inserted = await deps.db.query(
+          `insert into photos (id, owner_id, spot_id, storage_path, thumb_path)
+           select $1, $2, $3, $4, $5
+            where (select count(*) from photos where spot_id = $3) < $6
+           returning id`,
+          [photoId, sub, spotId, fullPath, thumbPath, MAX_PHOTOS_PER_SPOT],
+        );
+        if (inserted.rows.length === 0) {
+          throw new AppError(
+            400,
+            'photo_limit',
+            `A spot holds up to ${MAX_PHOTOS_PER_SPOT} photos.`,
+          );
+        }
+
+        const host = request.headers.host;
+        return reply.code(201).send({
+          id: photoId,
+          url: reachableFrom(await sign(deps.storage, fullPath, PHOTO_URL_TTL_S), host),
+          thumb_url: reachableFrom(await sign(deps.storage, thumbPath, PHOTO_URL_TTL_S), host),
+        });
       } catch (err) {
+        // Nothing half-done survives: a blob with no row is unreachable dead
+        // weight, so drop it before answering.
+        if (uploaded || err instanceof StorageError) {
+          await remove(deps.storage, fullPath).catch(() => undefined);
+          await remove(deps.storage, thumbPath).catch(() => undefined);
+        }
         if (err instanceof StorageError) {
-          // M11-T07: storage down = fail CLOSED with plain words, never a raw 500
+          // M11-T07: storage down/unreachable = fail CLOSED with plain words
           throw new AppError(
             502,
             'storage_down',
@@ -134,23 +210,13 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
         }
         throw err;
       }
-      await deps.db.query(
-        'insert into photos (id, owner_id, spot_id, storage_path, thumb_path) values ($1, $2, $3, $4, $5)',
-        [photoId, sub, spotId, fullPath, thumbPath],
-      );
-
-      return reply.code(201).send({
-        id: photoId,
-        url: await sign(deps.storage, fullPath, PHOTO_URL_TTL_S),
-        thumb_url: await sign(deps.storage, thumbPath, PHOTO_URL_TTL_S),
-      });
     },
   );
 
   app.get<{ Params: { id: string } }>(
     '/spots/:id/photos',
     {
-      preHandler: requireAuth,
+      onRequest: guard,
       schema: {
         params: {
           type: 'object',
@@ -165,14 +231,29 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
         'select id, storage_path, thumb_path from photos where spot_id = $1 and owner_id = $2 order by created_at',
         [request.params.id, sub],
       );
+      const host = request.headers.host;
+      // allSettled: one unsignable row (a blob removed out from under us) must
+      // not blank the whole strip — §18 degrades, never breaks.
+      const settled = await Promise.allSettled(
+        rows.rows.map(async (r) => ({
+          id: r['id'] as string,
+          url: reachableFrom(
+            await sign(deps.storage, r['storage_path'] as string, PHOTO_URL_TTL_S),
+            host,
+          ),
+          thumb_url: reachableFrom(
+            await sign(deps.storage, r['thumb_path'] as string, PHOTO_URL_TTL_S),
+            host,
+          ),
+        })),
+      );
       return {
-        photos: await Promise.all(
-          rows.rows.map(async (r) => ({
-            id: r['id'] as string,
-            url: await sign(deps.storage, r['storage_path'] as string, PHOTO_URL_TTL_S),
-            thumb_url: await sign(deps.storage, r['thumb_path'] as string, PHOTO_URL_TTL_S),
-          })),
-        ),
+        photos: settled
+          .filter(
+            (r): r is PromiseFulfilledResult<{ id: string; url: string; thumb_url: string }> =>
+              r.status === 'fulfilled',
+          )
+          .map((r) => r.value),
       };
     },
   );
@@ -180,7 +261,7 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
   app.delete<{ Params: { id: string } }>(
     '/photos/:id',
     {
-      preHandler: requireAuth,
+      onRequest: guard,
       schema: {
         params: {
           type: 'object',
@@ -208,7 +289,7 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
   app.delete<{ Params: { id: string } }>(
     '/spots/:id',
     {
-      preHandler: requireAuth,
+      onRequest: guard,
       schema: {
         params: {
           type: 'object',
@@ -219,12 +300,6 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
     },
     async (request, reply) => {
       const sub = request.user!.sub;
-      const paths = await deps.db.query(
-        `select p.storage_path, p.thumb_path from photos p
-          join spots s on s.id = p.spot_id
-         where s.id = $1 and s.owner_id = $2`,
-        [request.params.id, sub],
-      );
       const gone = await deps.db.query(
         "delete from spots where id = $1 and owner_id = $2 and source = 'user' returning id",
         [request.params.id, sub],
@@ -232,10 +307,10 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
       if (gone.rows.length === 0) {
         throw new AppError(404, 'not_found', 'That spot isn’t yours (or is gone).');
       }
-      for (const r of paths.rows) {
-        await remove(deps.storage, r['storage_path'] as string);
-        await remove(deps.storage, r['thumb_path'] as string);
-      }
+      // A prefix sweep instead of a path list read before the delete: it needs
+      // no surviving rows, catches anything uploaded mid-request, and is safe
+      // to repeat.
+      await sweep(deps.storage, `${sub}/${request.params.id}/`);
       return reply.code(204).send();
     },
   );
@@ -243,18 +318,15 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
   // M10-T07/FR-207: account deletion — blob sweep + the 0029 rows-only RPC.
   // The RPC runs AS THE CALLER (their bearer token through PostgREST), so
   // this endpoint can only ever delete the account presenting it.
-  app.delete('/account', { preHandler: requireAuth }, async (request, reply) => {
+  app.delete('/account', { onRequest: guard }, async (request, reply) => {
     const sub = request.user!.sub;
-    const paths = await deps.db.query(
-      'select storage_path, thumb_path from photos where owner_id = $1',
-      [sub],
-    );
+    // Blobs FIRST. Deleting the auth user is irreversible AND unretryable —
+    // once it is gone the caller can never authenticate again, so a blob
+    // failure afterwards strands those photos forever. Sweeping first means a
+    // failure here leaves the account intact and the operation safe to retry.
+    await sweep(deps.storage, `${sub}/`);
     const rpc = deps.deleteAccountFn ?? defaultDeleteAccount;
     await rpc(deps.storage.url, request.headers.authorization!.slice('Bearer '.length));
-    for (const r of paths.rows) {
-      await remove(deps.storage, r['storage_path'] as string);
-      await remove(deps.storage, r['thumb_path'] as string);
-    }
     return reply.code(204).send();
   });
 }

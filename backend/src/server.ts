@@ -83,6 +83,23 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
         .send(errorBody('bad_request', fe.message ?? 'invalid request', request.id));
       return;
     }
+    // Fastify's own client-caused errors (413 payload too large, 415 unsupported
+    // media type, 400 malformed JSON) arrive with a real statusCode. Passing
+    // them through as 500 "internal" both lies to the caller and buries genuine
+    // incidents under noise the client caused — M11-T07 wants neither.
+    const status = (err as { statusCode?: number }).statusCode;
+    if (typeof status === 'number' && status >= 400 && status < 500) {
+      const code = (err as { code?: string }).code ?? 'bad_request';
+      const friendly =
+        status === 413
+          ? 'That upload is too large.'
+          : status === 415
+            ? 'That content type isn’t accepted here.'
+            : (fe.message ?? 'invalid request');
+      request.log.warn({ err: { code, status } }, 'client error');
+      void reply.status(status).send(errorBody(code.toLowerCase(), friendly, request.id));
+      return;
+    }
     // unexpected: full detail to the log, generic line to the client
     request.log.error({ err }, 'unhandled error');
     void reply.status(500).send(errorBody('internal', INTERNAL_ERROR_MESSAGE, request.id));

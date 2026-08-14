@@ -26,8 +26,12 @@ create index if not exists photos_owner_idx on photos (owner_id);
 
 alter table photos enable row level security;
 
+-- guarded so re-running the file (the normal deploy-repair reflex) reaches the
+-- bucket insert below instead of aborting on a duplicate policy
+drop policy if exists photos_owner_read on photos;
 create policy photos_owner_read on photos
   for select using ((select auth.uid()) = owner_id);
+drop policy if exists photos_owner_delete on photos;
 create policy photos_owner_delete on photos
   for delete using ((select auth.uid()) = owner_id);
 

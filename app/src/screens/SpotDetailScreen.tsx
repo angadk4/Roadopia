@@ -25,6 +25,7 @@ import {
   deleteSpot,
   fetchSpotById,
   parseTags,
+  SPOT_DESC_MAX,
   SPOT_NAME_MAX,
   updateSpot,
   type SpotDetail,
@@ -66,6 +67,8 @@ export default function SpotDetailScreen(props: SpotDetailScreenProps): ReactEle
   const [description, setDescription] = useState('');
   const [tagsText, setTagsText] = useState('');
   const [busy, setBusy] = useState(false);
+  /** Deleting a spot takes its photos with it — one stray tap shouldn't. */
+  const [armed, setArmed] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
@@ -151,6 +154,7 @@ export default function SpotDetailScreen(props: SpotDetailScreenProps): ReactEle
       } catch (err) {
         setProblem(err instanceof DataError ? err.message : 'Could not delete the spot.');
         setBusy(false);
+        setArmed(false);
       }
     })();
   };
@@ -176,7 +180,8 @@ export default function SpotDetailScreen(props: SpotDetailScreenProps): ReactEle
           <TextInput
             accessibilityLabel="Spot description"
             value={description}
-            onChangeText={setDescription}
+            onChangeText={(t) => setDescription(t.slice(0, SPOT_DESC_MAX))}
+            maxLength={SPOT_DESC_MAX}
             multiline
             placeholder="What makes it worth stopping?"
             placeholderTextColor={colors.textMuted}
@@ -216,7 +221,15 @@ export default function SpotDetailScreen(props: SpotDetailScreenProps): ReactEle
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Cancel editing"
-              onPress={() => setEditing(false)}
+              onPress={() => {
+                // reseed from the saved row — leaving the drafts in place made
+                // "Cancel" a lie: the next Edit → Save wrote the abandoned text
+                setName(spot.name);
+                setDescription(spot.description);
+                setTagsText(spot.tags.join(', '));
+                setProblem(null);
+                setEditing(false);
+              }}
               style={[styles.secondaryBtn, { borderColor: colors.border }]}
             >
               <Text style={[styles.secondaryLabel, { color: colors.text }]}>Cancel</Text>
@@ -250,13 +263,13 @@ export default function SpotDetailScreen(props: SpotDetailScreenProps): ReactEle
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Delete spot"
+                accessibilityLabel={armed ? 'Confirm delete spot' : 'Delete spot'}
                 disabled={busy}
-                onPress={doDelete}
+                onPress={() => (armed ? doDelete() : setArmed(true))}
                 style={[styles.secondaryBtn, { borderColor: colors.danger }]}
               >
                 <Text style={[styles.secondaryLabel, { color: colors.danger }]}>
-                  {busy ? 'Deleting…' : 'Delete'}
+                  {busy ? 'Deleting…' : armed ? 'Tap again to delete' : 'Delete'}
                 </Text>
               </Pressable>
             </View>

@@ -70,6 +70,7 @@ async function rpc(
   fn: string,
   args: Record<string, unknown>,
   fetchImpl?: FetchLike,
+  accessToken?: string | null,
 ): Promise<unknown> {
   const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
   let res;
@@ -78,7 +79,11 @@ async function rpc(
       method: 'POST',
       headers: {
         apikey: cfg.anonKey,
-        authorization: `Bearer ${cfg.anonKey}`,
+        // The SIGNED-IN caller's token when we have one. map_spots is SECURITY
+        // INVOKER, so the credential decides what RLS returns: with the anon
+        // key it is OSM rows only, and a user's own pins are invisible on the
+        // map they just added them to.
+        authorization: `Bearer ${accessToken ?? cfg.anonKey}`,
         'content-type': 'application/json',
       },
       body: JSON.stringify(args),
@@ -156,8 +161,9 @@ export const SPOTS_LIMIT = 25000;
 export async function fetchMapSpots(
   cfg: SupabaseConfig,
   fetchImpl?: FetchLike,
+  accessToken?: string | null,
 ): Promise<SpotRow[]> {
-  const raw = await rpc(cfg, 'map_spots', { p_limit: SPOTS_LIMIT }, fetchImpl);
+  const raw = await rpc(cfg, 'map_spots', { p_limit: SPOTS_LIMIT }, fetchImpl, accessToken);
   const parsed = z.array(SpotRowSchema).safeParse(raw);
   if (!parsed.success) throw new DataError('Spot data did not match the expected shape.');
   return parsed.data;

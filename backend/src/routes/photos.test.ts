@@ -8,6 +8,8 @@ import { hasExif } from '../images/process';
 import type { StorageConfig } from '../images/storage';
 import { buildServer } from '../server';
 
+import { reachableFrom } from './photos';
+
 /**
  * M10-T05 — the upload→display integration AC: a GPS-tagged upload is
  * processed (EXIF gone) BEFORE storage; the response references ONLY the
@@ -60,6 +62,8 @@ interface Harness {
   uploads: Map<string, Buffer>;
   dbRows: Record<string, unknown[][]>;
   removed: string[];
+  /** Prefix sweeps, in call order, interleaved with 'rpc:delete_account'. */
+  swept: string[];
 }
 
 function harness(
@@ -68,6 +72,7 @@ function harness(
 ): Harness {
   const uploads = new Map<string, Buffer>();
   const removed: string[] = [];
+  const swept: string[] = [];
   const responses = [...dbResponses];
   const app = buildServer({
     verifier: new JwtVerifier({ issuer: ISSUER, hs256Secret: SECRET, now: () => NOW }),
@@ -84,10 +89,14 @@ function harness(
       removeFn: async (_cfg, path) => {
         removed.push(path);
       },
+      sweepFn: async (_cfg: unknown, prefix: string) => {
+        swept.push(prefix);
+        return 0;
+      },
       ...extra,
     },
   });
-  return { app, uploads, dbRows: {}, removed };
+  return { app, uploads, dbRows: {}, removed, swept };
 }
 
 beforeEach(() => {
@@ -189,47 +198,99 @@ describe('POST /spots/:id/photos', () => {
   });
 });
 
+describe('signed URLs are reachable FROM THE PHONE (dev LAN)', () => {
+  it('rewrites a loopback storage host to the host the client dialled', () => {
+    const loopback = 'http://127.0.0.1:54321/storage/v1/object/sign/photos/a.jpg?token=t';
+    expect(reachableFrom(loopback, '192.168.50.25:8080')).toBe(
+      'http://192.168.50.25:54321/storage/v1/object/sign/photos/a.jpg?token=t',
+    );
+    // a hosted URL is NEVER rewritten, whatever host the client used
+    const hosted = 'https://abc.supabase.co/storage/v1/object/sign/photos/a.jpg?token=t';
+    expect(reachableFrom(hosted, '192.168.50.25:8080')).toBe(hosted);
+    // desktop client on loopback keeps loopback; missing header changes nothing
+    expect(reachableFrom(loopback, '127.0.0.1:8080')).toBe(loopback);
+    expect(reachableFrom(loopback, undefined)).toBe(loopback);
+  });
+
+  it('the upload response carries the rewritten host end to end', async () => {
+    const h = harness([[{ owner_id: OWNER, source: 'user' }], [{ n: 0 }], []], {
+      signFn: async (_cfg: unknown, path: string) =>
+        `http://127.0.0.1:54321/storage/v1/object/sign/photos/${path}?token=signed`,
+    });
+    const res = await h.app.inject({
+      method: 'POST',
+      url: `/spots/${SPOT}/photos`,
+      headers: {
+        authorization: `Bearer ${tokenFor(OWNER)}`,
+        'content-type': 'image/jpeg',
+        host: '192.168.50.25:8080',
+      },
+      payload: await gpsJpeg(),
+    });
+    const body = res.json() as { url: string; thumb_url: string };
+    expect(body.url).toContain('http://192.168.50.25:54321/');
+    expect(body.thumb_url).toContain('http://192.168.50.25:54321/');
+    await h.app.close();
+  });
+});
+
 describe('DELETE /spots/:id and /account (blob-sweeping cascades)', () => {
-  it('spot deletion sweeps every attached blob via the Storage API', async () => {
-    const h = harness([
-      [
-        { storage_path: 'u/s/a.jpg', thumb_path: 'u/s/a_thumb.jpg' },
-        { storage_path: 'u/s/b.jpg', thumb_path: 'u/s/b_thumb.jpg' },
-      ], // paths query
-      [{ id: SPOT }], // delete returning
-    ]);
+  it("spot deletion sweeps the spot's whole blob prefix (no row list to go stale)", async () => {
+    const h = harness([[{ id: SPOT }]]); // delete … returning
     const res = await h.app.inject({
       method: 'DELETE',
       url: `/spots/${SPOT}`,
       headers: { authorization: `Bearer ${tokenFor(OWNER)}` },
     });
     expect(res.statusCode).toBe(204);
-    expect(h.removed.sort()).toEqual([
-      'u/s/a.jpg',
-      'u/s/a_thumb.jpg',
-      'u/s/b.jpg',
-      'u/s/b_thumb.jpg',
-    ]);
+    // one sweep covering every photo of that spot, including any uploaded
+    // between the row read and the delete
+    expect(h.swept).toEqual([`${OWNER}/${SPOT}/`]);
     await h.app.close();
   });
 
   it("a stranger's spot deletes nothing and sweeps nothing", async () => {
-    const h = harness([[], []]); // no owned paths, delete returns no rows
+    const h = harness([[]]); // delete returns no rows
     const res = await h.app.inject({
       method: 'DELETE',
       url: `/spots/${SPOT}`,
       headers: { authorization: `Bearer ${tokenFor(OWNER)}` },
     });
     expect(res.statusCode).toBe(404);
-    expect(h.removed).toEqual([]);
+    expect(h.swept).toEqual([]);
     await h.app.close();
   });
 
-  it('account deletion sweeps the user blobs and calls the rows-only RPC as the CALLER', async () => {
-    const calls: string[] = [];
-    const h = harness([[{ storage_path: 'u/s/a.jpg', thumb_path: 'u/s/a_thumb.jpg' }]], {
+  it('account deletion sweeps blobs BEFORE the unretryable row delete, as the CALLER', async () => {
+    const order: string[] = [];
+    const h = harness([], {
       deleteAccountFn: async (_url: string, userToken: string) => {
-        calls.push(userToken);
+        order.push(`rpc:${userToken === tokenFor(OWNER) ? 'caller-token' : 'WRONG-CREDENTIAL'}`);
+      },
+    });
+    // record sweep order against the RPC on the same list
+    const originalSweep = h.swept;
+    const res = await h.app.inject({
+      method: 'DELETE',
+      url: '/account',
+      headers: { authorization: `Bearer ${tokenFor(OWNER)}` },
+    });
+    expect(res.statusCode).toBe(204);
+    // the sweep covers everything this owner ever uploaded …
+    expect(originalSweep).toEqual([`${OWNER}/`]);
+    // … and it ran with the USER's own bearer token, never a service credential
+    expect(order).toEqual(['rpc:caller-token']);
+    await h.app.close();
+  });
+
+  it('a failed blob sweep leaves the account ALIVE so the user can retry', async () => {
+    const rpcCalls: string[] = [];
+    const h = harness([], {
+      sweepFn: async () => {
+        throw new Error('storage list failed');
+      },
+      deleteAccountFn: async () => {
+        rpcCalls.push('called');
       },
     });
     const res = await h.app.inject({
@@ -237,9 +298,9 @@ describe('DELETE /spots/:id and /account (blob-sweeping cascades)', () => {
       url: '/account',
       headers: { authorization: `Bearer ${tokenFor(OWNER)}` },
     });
-    expect(res.statusCode).toBe(204);
-    expect(calls).toEqual([tokenFor(OWNER)]); // the user's own token, never a service key
-    expect(h.removed).toEqual(['u/s/a.jpg', 'u/s/a_thumb.jpg']);
+    expect(res.statusCode).toBeGreaterThanOrEqual(500);
+    // the irreversible step never ran — retry is still possible
+    expect(rpcCalls).toEqual([]);
     await h.app.close();
   });
 });

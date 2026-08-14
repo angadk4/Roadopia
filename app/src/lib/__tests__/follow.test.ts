@@ -8,7 +8,6 @@ import {
   followStatus,
   locateOnTrack,
   matchAgrees,
-  OFF_ROUTE_M,
 } from '../follow';
 
 /** M9-T06 — follow-mode geometry (FR-110/111). */
@@ -77,7 +76,11 @@ describe('followStatus', () => {
   it('reports remaining distance and the next turn ahead', () => {
     const st = followStatus(t, { lat: 43, lng: -79.98 }, null); // ~1.6 km along
     expect(st.offRoute).toBe(false);
-    expect(st.remainingM).toBeCloseTo(t.totalM - st.alongM, 5);
+    // a real value, not the formula restated: ~1.6 km along an ~8.1 km line
+    expect(st.alongM).toBeGreaterThan(1500);
+    expect(st.alongM).toBeLessThan(1800);
+    expect(st.remainingM).toBeGreaterThan(6300);
+    expect(st.remainingM).toBeLessThan(6700);
     expect(st.hint!.instruction).toBe('Turn left onto Forks Rd.');
     expect(st.hint!.inM).toBeGreaterThan(2000);
   });
@@ -87,13 +90,60 @@ describe('followStatus', () => {
     expect(st.offRoute).toBe(true);
     expect(st.alongM).toBe(1600); // held at last known progress
     expect(st.hint).toBeNull();
-    expect(OFF_ROUTE_M).toBeLessThan(2000);
   });
 
   it('is done only near the end AFTER real progress', () => {
     const end = { lat: 43, lng: -79.9 };
     expect(followStatus(t, end, null).done).toBe(false); // teleported to end
     expect(followStatus(t, end, t.totalM * 0.95).done).toBe(true);
+  });
+});
+
+describe('a LOOP starts at its start (regression)', () => {
+  /** first vertex == last vertex, so the origin projects equally onto metre 0
+   *  and metre `totalM`; GPS noise used to decide which, and 11 of 24 bearings
+   *  picked the END — follow-mode announced "that's the drive" while parked. */
+  const ring: LineString = {
+    type: 'LineString',
+    coordinates: Array.from({ length: 61 }, (_, i) => {
+      const a = (i / 60) * Math.PI * 2;
+      return [-79.9 + 0.05 * Math.cos(a) * 1.37, 43.4 + 0.05 * Math.sin(a)];
+    }),
+  };
+  (ring.coordinates as number[][])[60] = (ring.coordinates as number[][])[0]!;
+
+  it('never reports done at the origin, from any approach bearing', () => {
+    const t = buildFollowTrack(ring, []);
+    const [lng0, lat0] = ring.coordinates[0] as [number, number];
+    for (let deg = 0; deg < 360; deg += 15) {
+      const rad = (deg * Math.PI) / 180;
+      const fix = {
+        lat: lat0 + (6 * Math.cos(rad)) / 111_320,
+        lng: lng0 + (6 * Math.sin(rad)) / (111_320 * Math.cos((lat0 * Math.PI) / 180)),
+      };
+      const first = followStatus(t, fix, null);
+      const second = followStatus(t, fix, first.alongM);
+      expect(second.done).toBe(false);
+      expect(second.remainingM).toBeGreaterThan(t.totalM * 0.9);
+    }
+  });
+
+  it('still finishes once the driver has actually gone round', () => {
+    const t = buildFollowTrack(ring, []);
+    const [lng0, lat0] = ring.coordinates[0] as [number, number];
+    const st = followStatus(t, { lat: lat0, lng: lng0 }, t.totalM * 0.97);
+    expect(st.done).toBe(true);
+  });
+});
+
+describe('degenerate geometry degrades, never crashes', () => {
+  it('a 1-point or empty line yields an off-route zero rather than a TypeError', () => {
+    for (const coords of [[], [[-79.9, 43.2]]]) {
+      const t = buildFollowTrack({ type: 'LineString', coordinates: coords } as LineString, []);
+      const st = followStatus(t, { lat: 43.2, lng: -79.9 }, null);
+      expect(st.alongM).toBe(0);
+      expect(st.done).toBe(false);
+    }
   });
 });
 

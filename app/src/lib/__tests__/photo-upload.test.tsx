@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 
 import PhotoUpload from '../../components/PhotoUpload';
+import { ApiError, NetworkError } from '../api';
 import { AuthEngine } from '../auth_state';
 import { deletePhoto, listSpotPhotos, uploadSpotPhoto, type PhotoRef } from '../photos';
 import { memorySessionStore } from '../session_store';
@@ -106,9 +107,14 @@ describe('PhotoUpload (component)', () => {
   });
 
   it('a cancelled picker is a quiet no-op; a rejected upload says why', async () => {
+    // a REAL ApiError — the old fixture was a plain Error with a renamed
+    // `name`, so the component took the generic branch and the test passed
+    // BECAUSE the specific reason was dropped
     const uploadFn = vi.fn(async () => {
-      throw Object.assign(new Error('Only JPEG, PNG or WebP images are accepted.'), {
-        name: 'ApiError',
+      throw new ApiError({
+        status: 400,
+        code: 'image_rejected',
+        message: 'Only JPEG, PNG or WebP images are accepted.',
       });
     });
     const cancelled = await render({ pickFn: async () => null, uploadFn: uploadFn as never });
@@ -126,6 +132,22 @@ describe('PhotoUpload (component)', () => {
     await act(async () => {
       (add2.props['onPress'] as () => void)();
     });
-    expect(JSON.stringify(failing.toJSON())).toContain('Could not upload the photo');
+    expect(JSON.stringify(failing.toJSON())).toContain('Only JPEG, PNG or WebP');
+  });
+
+  it('an offline upload keeps the actionable network message', async () => {
+    const tree = await render({
+      pickFn: async () => 'file://x.jpg',
+      uploadFn: vi.fn(async () => {
+        throw new NetworkError('Could not reach the server — check your connection.');
+      }) as never,
+    });
+    const add = tree.root.findAll((n) => n.props['accessibilityLabel'] === 'Add a photo')[0]!;
+    await act(async () => {
+      (add.props['onPress'] as () => void)();
+    });
+    // NetworkError is not an ApiError; an instanceof-ApiError check swallowed
+    // exactly the message that tells the user what to do
+    expect(JSON.stringify(tree.toJSON())).toContain('check your connection');
   });
 });
