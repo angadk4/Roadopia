@@ -8,6 +8,9 @@ BUILD_LOG.md
 # Local Claude Code config (permission allowlist etc.) — local-only, do not commit
 .claude/
 
+# --- Internal working notes: kept local, not part of the published repo ---
+docs/
+
 # --- Secrets: never commit real values (only .env.example is tracked) ---
 .env
 .env.*
