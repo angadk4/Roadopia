@@ -73,10 +73,16 @@ export interface PhotosEndpointDeps {
  * resolution uses. A hosted deploy never matches the loopback branch, so its
  * URLs are returned untouched.
  */
+/** A LAN address — the only kind of Host worth swapping a loopback for. An
+ *  Expo tunnel host (…exp.direct) or a public name is NOT: the rewritten URL
+ *  would point at a port the tunnel never forwards, so it stays untouched. */
+const PRIVATE_HOST =
+  /^(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})$/;
+
 export function reachableFrom(url: string, hostHeader: string | undefined): string {
   if (!/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(url)) return url;
   const host = hostHeader?.split(':')[0];
-  if (!host || host === '127.0.0.1' || host === 'localhost') return url;
+  if (!host || !PRIVATE_HOST.test(host)) return url;
   return url.replace(/^(https?:\/\/)(127\.0\.0\.1|localhost)/, `$1${host}`);
 }
 
@@ -87,9 +93,12 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
    * 401. Auth (from registerAuth's earlier onRequest hook) and the rate limit
    * both belong before a single byte is read.
    */
-  const guard = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+  const guard = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<FastifyReply | undefined> => {
     await requireAuth(request);
-    if (!deps.rateLimiter) return;
+    if (!deps.rateLimiter) return undefined;
     const session = request.headers['x-session-id'];
     const decision = deps.rateLimiter.check(
       request.ip,
@@ -106,7 +115,12 @@ export function registerPhotosEndpoints(app: FastifyInstance, deps: PhotosEndpoi
             request.id,
           ),
         );
+      // An async hook that has replied MUST return the reply, or Fastify
+      // carries on into the handler (device-pass audit: the limiter added in
+      // the last round sent its 429 and then let the upload run anyway).
+      return reply;
     }
+    return undefined;
   };
 
   const process = deps.processFn ?? processImage;

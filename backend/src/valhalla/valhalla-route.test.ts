@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { decodePolyline } from './polyline';
 import {
   mapRouteResponse,
+  mapRouteResponseDetailed,
   routeThrough,
   scanConstraintViolations,
   ValhallaRouteError,
@@ -228,5 +229,96 @@ describe('R16-2 — legs, break_through, unpaved', () => {
         { has_highway: false, has_toll: false, has_ferry: false, has_unpaved: true },
       ),
     ).toEqual([]);
+  });
+});
+
+describe('snapped waypoint locations (device pass, 2026-09-04)', () => {
+  it('leg boundaries are the first vertex of each leg plus the last vertex', () => {
+    const { output, boundaries } = mapRouteResponseDetailed(DEFAULT);
+    expect(boundaries).toEqual([0, output.geometry.coordinates.length - 1]); // one leg
+    expect(mapRouteResponse(DEFAULT)).toEqual(output); // the plain mapper is unchanged
+  });
+
+  it('routeThrough reports where each BREAK waypoint landed, in request order', async () => {
+    const realFetch = globalThis.fetch;
+    // two legs: A→B and B→C; the middle waypoint was asked at (0.0052, 0.0001)
+    // and the engine put it at (0.005, 0) — the vertex both legs share
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        trip: {
+          legs: [
+            {
+              shape: encodeTest([
+                [0, 0],
+                [0.0025, 0],
+                [0.005, 0],
+              ]),
+              summary: { time: 1, length: 1 },
+            },
+            {
+              shape: encodeTest([
+                [0.005, 0],
+                [0.0075, 0],
+                [0.01, 0],
+              ]),
+              summary: { time: 1, length: 1 },
+            },
+          ],
+          summary: { time: 2, length: 2 },
+        },
+      }),
+    })) as never;
+    try {
+      const out = await routeThrough('http://x', {
+        waypoints: [
+          [0, 0],
+          [0.0052, 0.0001],
+          [0.01, 0],
+        ],
+        middleType: 'break',
+      });
+      expect(out.geometry.coordinates).toHaveLength(5); // shared vertex once
+      expect(out.locations).toHaveLength(3);
+      expect(out.locations![1]!.lng).toBeCloseTo(0.005, 6);
+      expect(out.locations![1]!.lat).toBeCloseTo(0, 6);
+      expect(out.locations![2]!.lng).toBeCloseTo(0.01, 6);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('is omitted when middles are through-type (legs do not line up with waypoints)', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        trip: {
+          legs: [
+            {
+              shape: encodeTest([
+                [0, 0],
+                [0.01, 0],
+              ]),
+              summary: { time: 1, length: 1 },
+            },
+          ],
+          summary: { time: 1, length: 1 },
+        },
+      }),
+    })) as never;
+    try {
+      const out = await routeThrough('http://x', {
+        waypoints: [
+          [0, 0],
+          [0.005, 0],
+          [0.01, 0],
+        ],
+        middleType: 'through',
+      });
+      expect(out.locations).toBeUndefined();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

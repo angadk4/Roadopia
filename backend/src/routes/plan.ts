@@ -250,6 +250,10 @@ function routePayload(
     generation_request_id: generationRequestId,
     satisfied_constraints: result.validation?.results ?? null,
     stops: result.stops, // grounded spots + MEASURED arrivals (R16-3)
+    // Device pass 2026-09-04: the engine's maneuvers for THIS geometry travel
+    // with the route, so follow-mode never re-derives turns by re-matching
+    // the line (which a closed loop defeats).
+    maneuvers: route.maneuvers,
     country_score: result.countryScore, // measured road-class honesty (R18-1)
     arterial_share: result.arterialShare,
     // R28 — the drive, separate from the commute to it (never averaged).
@@ -302,6 +306,7 @@ function alternatePayload(
     generation_request_id: generationRequestId,
     satisfied_constraints: alt.validation.results,
     stops: alt.stops, // alternates carry stops too (R16-3)
+    maneuvers: alt.route.maneuvers, // and their own turns (device pass 2026-09-04)
     country_score: alt.countryScore,
     arterial_share: alt.arterialShare,
     urban_share: alt.urbanShare,

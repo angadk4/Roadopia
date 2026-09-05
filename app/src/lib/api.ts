@@ -192,10 +192,74 @@ export interface ApiClientOptions {
   fetchImpl?: FetchLike;
 }
 
+/** Every request gives up after this unless the caller says otherwise. Before
+ *  the device pass (2026-09-04) there was NO ceiling: "Snapping to roads…" and
+ *  "Routing…" could sit forever with their only buttons disabled. */
+export const DEFAULT_TIMEOUT_MS = 20_000;
+/** Map-matching a long trace / routing 25 waypoints legitimately takes longer. */
+export const LONG_TIMEOUT_MS = 45_000;
+export const TIMEOUT_MESSAGE = 'That took too long — check your connection and try again.';
+
+/**
+ * An AbortSignal that fires after `ms` OR when `outer` aborts. Built on
+ * AbortController + setTimeout rather than AbortSignal.timeout(), which the
+ * app's Hermes runtime does not guarantee. Call `clear()` when the request
+ * settles so the timer never outlives it.
+ */
+export function withTimeout(
+  ms: number,
+  outer?: AbortSignal,
+): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  const onOuter = (): void => controller.abort();
+  if (outer) {
+    if (outer.aborted) controller.abort();
+    else outer.addEventListener('abort', onOuter);
+  }
+  return {
+    signal: controller.signal,
+    clear: () => {
+      clearTimeout(timer);
+      outer?.removeEventListener('abort', onOuter);
+    },
+  };
+}
+
+/**
+ * The global fetch with a ceiling on reaching the server (headers in). Every
+ * direct Supabase/data call (library, saves, profile, spots, reports, auth)
+ * uses this as its default, so a stalled socket becomes an error a screen
+ * can act on — the same rule request() applies to the backend. Our timeout
+ * surfaces as NetworkError(TIMEOUT_MESSAGE); a caller's own abort is rethrown.
+ */
+export function boundedFetch(timeoutMs: number = DEFAULT_TIMEOUT_MS): FetchLike {
+  return async (url, init) => {
+    const raw = globalThis.fetch as unknown as FetchLike;
+    const guard = withTimeout(timeoutMs, init?.signal);
+    try {
+      return await raw(url, { ...init, signal: guard.signal });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && !init?.signal?.aborted) {
+        throw new NetworkError(TIMEOUT_MESSAGE, { cause: err });
+      }
+      throw err;
+    } finally {
+      guard.clear();
+    }
+  };
+}
+
+/** The friendly line for a transport failure: our timeout's own words when
+ *  that is what happened, else the caller's generic "could not reach". */
+export function transportMessage(err: unknown, fallback: string): string {
+  return err instanceof NetworkError ? err.message : fallback;
+}
+
 async function request<T>(
   opts: ApiClientOptions,
   path: string,
-  init: { method: string; body?: unknown; signal?: AbortSignal },
+  init: { method: string; body?: unknown; signal?: AbortSignal; timeoutMs?: number },
 ): Promise<T> {
   const fetchImpl = opts.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
   const headers: Record<string, string> = { accept: 'application/json' };
@@ -207,20 +271,30 @@ async function request<T>(
     body = JSON.stringify(init.body);
   }
 
+  const guard = withTimeout(init.timeoutMs ?? DEFAULT_TIMEOUT_MS, init.signal);
   let res: FetchResponseLike;
+  let text: string;
   try {
     res = await fetchImpl(`${opts.baseUrl}${path}`, {
       method: init.method,
       headers,
       ...(body !== undefined ? { body } : {}),
-      ...(init.signal ? { signal: init.signal } : {}),
+      signal: guard.signal,
     });
+    text = await res.text();
   } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') throw err;
+    if (err instanceof Error && err.name === 'AbortError') {
+      // The CALLER walked away (screen left, request superseded): rethrow so
+      // ProgressScreen-style code can ignore it. OUR timeout is a network
+      // problem the user must hear about, in words they can act on.
+      if (init.signal?.aborted) throw err;
+      throw new NetworkError(TIMEOUT_MESSAGE, { cause: err });
+    }
     throw new NetworkError(`Could not reach the server at ${opts.baseUrl}.`, { cause: err });
+  } finally {
+    guard.clear();
   }
 
-  const text = await res.text();
   if (!res.ok) throw toApiError(res.status, text, res.headers);
   return JSON.parse(text) as T;
 }
@@ -270,6 +344,7 @@ export async function postRouteThrough(
   return request<RouteThroughOutput>(opts, '/route', {
     method: 'POST',
     body,
+    timeoutMs: LONG_TIMEOUT_MS,
     ...(signal ? { signal } : {}),
   });
 }
@@ -283,6 +358,7 @@ export async function postMatch(
   return request<RouteThroughOutput>(opts, '/match', {
     method: 'POST',
     body,
+    timeoutMs: LONG_TIMEOUT_MS,
     ...(signal ? { signal } : {}),
   });
 }

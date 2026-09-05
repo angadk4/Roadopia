@@ -30,6 +30,12 @@ export interface LocationFix {
   lat: number;
   lng: number;
   accuracyM: number | null;
+  /** Course over ground in degrees clockwise from north; null when the OS
+   *  has none (stationary, or a fix without heading). */
+  headingDeg: number | null;
+  /** Ground speed in m/s; null when unknown. Used ONLY for the follow-mode
+   *  arrival estimate (Hard rule D: never shown as a number, never framed). */
+  speedMps: number | null;
 }
 
 export type StopWatching = () => void;
@@ -53,10 +59,15 @@ export async function watchLocation(
         distanceInterval: 5,
       },
       (pos) => {
+        // iOS reports -1 for "no heading/speed"; Android null. Both → null.
+        const heading = pos.coords.heading;
+        const speed = pos.coords.speed;
         onFix({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           accuracyM: pos.coords.accuracy ?? null,
+          headingDeg: typeof heading === 'number' && heading >= 0 ? heading : null,
+          speedMps: typeof speed === 'number' && speed >= 0 ? speed : null,
         });
       },
     );

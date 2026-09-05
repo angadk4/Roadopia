@@ -19,7 +19,7 @@
 import { LineStringSchema, type LatLng } from '@shared/types';
 import { z } from 'zod';
 
-import type { FetchLike } from './api';
+import { boundedFetch, transportMessage, type FetchLike } from './api';
 
 /** Local `supabase start` API port (Kong gateway). */
 export const SUPABASE_LOCAL_PORT = 54321;
@@ -72,7 +72,7 @@ async function rpc(
   fetchImpl?: FetchLike,
   accessToken?: string | null,
 ): Promise<unknown> {
-  const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const f = fetchImpl ?? boundedFetch();
   let res;
   try {
     res = await f(`${cfg.url}/rest/v1/rpc/${fn}`, {
@@ -89,7 +89,9 @@ async function rpc(
       body: JSON.stringify(args),
     });
   } catch (err) {
-    throw new DataError('Could not reach the map data service.', null, { cause: err });
+    throw new DataError(transportMessage(err, 'Could not reach the map data service.'), null, {
+      cause: err,
+    });
   }
   const text = await res.text();
   if (!res.ok) {

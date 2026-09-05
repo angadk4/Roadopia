@@ -120,6 +120,24 @@ export const RouteStopSchema = z.object({
 });
 export type RouteStop = z.infer<typeof RouteStopSchema>;
 
+// --- Maneuvers (moved here from tools.ts, device pass 2026-09-04) ---
+// A saved Route now carries its turn-by-turn maneuvers, and tools.ts already
+// imports route.ts — the reverse import would cycle. tools.ts re-exports.
+
+/** A single turn-by-turn maneuver, mapped from Valhalla (M2). */
+export const ManeuverSchema = z.object({
+  type: z.string(),
+  instruction: z.string(),
+  distance_m: z.number().nonnegative().optional(),
+  /** R33-U6: the maneuver's road name(s) straight from the engine — the
+   *  continuity metric counts NAME RUNS, not instruction-string parses. */
+  street_names: z.array(z.string()).optional(),
+});
+export type Maneuver = z.infer<typeof ManeuverSchema>;
+
+/** Upper bound on maneuvers per route (a 3-hour loop is ~40–80). */
+export const MAX_ROUTE_MANEUVERS = 2000;
+
 // --- Route ---
 
 /**
@@ -160,6 +178,16 @@ export const RouteSchema = z.object({
   satisfied_constraints: z.array(ConstraintResultSchema).nullable().optional(),
   /** Real, timed stops (R16-3). Default [] keeps pre-R16 rows valid. */
   stops: z.array(RouteStopSchema).default([]),
+  /**
+   * Turn-by-turn maneuvers for THIS geometry (device pass 2026-09-04). The
+   * planner, /route and /match all had them at serve time and dropped them;
+   * follow-mode then re-derived guidance by re-matching the line, which a
+   * closed loop defeats (the matcher shortcuts the retraced stem — a 123 km
+   * loop came back 72 km and guidance was refused on every loop). Nullable
+   * AND optional: rows saved before this column return null, and pre-change
+   * payloads omit it; both mean "guidance honestly absent", never a throw.
+   */
+  maneuvers: z.array(ManeuverSchema).max(MAX_ROUTE_MANEUVERS).nullable().optional(),
   /** MEASURED road-class honesty metrics (R18-1): length-weighted countryness
    *  0..1 and arterial share 0..1 of the routed result. Nullable-optional —
    *  null/absent = trace unavailable (unknown, never claimed). These are

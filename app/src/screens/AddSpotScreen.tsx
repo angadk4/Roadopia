@@ -7,11 +7,28 @@
  * FR-033: saving near an existing SAME-type spot warns first — "there's
  * already one N m away" — and a second press saves anyway. A nudge, never a
  * block: parallel viewpoints on one ridge are real.
+ *
+ * Device pass (2026-09-04): the crosshair now lives INSIDE the map container
+ * and the pin is resolved from the map at press time (the old '55 %'
+ * crosshair and '45 %' panel only lined up when the panel was exactly at its
+ * cap — a 5 % mismatch at zoom 13 is ~290 m, more than the whole nudge
+ * radius); the form rides above the keyboard, so Save is never hidden behind
+ * it; a dismissed sign-in sheet says the spot was not saved.
  */
 
 import Mapbox, { Camera, MapView } from '@rnmapbox/maps';
 import { useRef, useState, type ReactElement } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  type LayoutChangeEvent,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import '../lib/mapbox';
 import { DataError, type SpotRow } from '../lib/data';
@@ -57,7 +74,18 @@ type SaveState =
   | { kind: 'nudge'; message: string; about: { type: string; lat: number; lng: number } }
   | { kind: 'saving' }
   | { kind: 'saved' }
+  /** The sign-in sheet was dismissed with this save parked — nothing saved. */
+  | { kind: 'dropped' }
   | { kind: 'problem'; message: string };
+
+interface Draft {
+  lat: number;
+  lng: number;
+  type: string;
+  name: string;
+  description: string;
+  tags: string[];
+}
 
 /** Did the user move or re-type since acknowledging the nudge? */
 function nudgeStillApplies(
@@ -79,38 +107,59 @@ export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
   const knownSpots = props.route.params?.knownSpots ?? [];
 
   const initialCenter = props.route.params?.startAt ?? FALLBACK_CENTER;
-  const center = useRef<[number, number]>(initialCenter);
+  const mapRef = useRef<MapView>(null);
+  const size = useRef<{ w: number; h: number } | null>(null);
+  /** Camera centre from the last camera event — the fallback when the map
+   *  cannot answer yet. */
+  const cameraCentre = useRef<[number, number]>(initialCenter);
   const [type, setType] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [tagsText, setTagsText] = useState('');
   const [state, setState] = useState<SaveState>({ kind: 'idle' });
 
-  const draftOf = (): {
-    lat: number;
-    lng: number;
-    type: string;
-    name: string;
-    description: string;
-    tags: string[];
-  } => ({
-    lat: center.current[1],
-    lng: center.current[0],
-    type: type ?? '',
-    name,
-    description,
-    tags: parseTags(tagsText),
-  });
+  /** The pin: asked of the map at press time, else the last camera centre. */
+  const resolvePin = async (): Promise<{ lat: number; lng: number }> => {
+    const m = mapRef.current;
+    const s = size.current;
+    if (m && s) {
+      try {
+        const [lng, lat] = await m.getCoordinateFromView([s.w / 2, s.h / 2]);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+      } catch {
+        // fall through
+      }
+    }
+    return { lat: cameraCentre.current[1], lng: cameraCentre.current[0] };
+  };
+
+  const draftOf = async (): Promise<Draft> => {
+    const pin = await resolvePin();
+    return {
+      lat: pin.lat,
+      lng: pin.lng,
+      type: type ?? '',
+      name,
+      description,
+      tags: parseTags(tagsText),
+    };
+  };
 
   const acknowledgedRef = useRef<{ type: string; lat: number; lng: number } | null>(null);
 
-  const doSave = (): void => {
-    const draft = draftOf();
+  const onDismiss = (): void => setState({ kind: 'dropped' });
+
+  const doSave = (draft: Draft): void => {
     setState({ kind: 'saving' });
     void (async () => {
+      const token = await freshAccessToken();
+      if (!token) {
+        // session lapsed between the tap and the save — re-gate the SAME save
+        setState({ kind: 'idle' });
+        gate(() => doSave(draft), { onDismiss });
+        return;
+      }
       try {
-        const token = await freshAccessToken();
-        if (!token) throw new DataError('Your session expired — sign in again.', null);
         await create(cfg, token, draft);
         setState({ kind: 'saved' });
       } catch (err) {
@@ -125,30 +174,50 @@ export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
     })();
   };
 
+  /** Re-entry guard: resolving the pin is async, so without this a double
+   *  tap (or one tap during a slow map round-trip) reached create() twice
+   *  before `saving` could disable the button — two identical spot rows
+   *  (review finding). */
+  const pressing = useRef(false);
+
   const onSavePress = (): void => {
-    const draft = draftOf();
-    const invalid = validateSpotDraft(draft);
-    if (invalid !== null) {
-      setState({ kind: 'problem', message: invalid });
-      return;
-    }
-    // FR-033: warn once about a very close same-type spot; a second press on
-    // the SAME pin and type saves anyway. Changing either re-arms the check.
-    const acknowledged =
-      (state.kind === 'nudge' && nudgeStillApplies(state.about, draft)) ||
-      (acknowledgedRef.current !== null && nudgeStillApplies(acknowledgedRef.current, draft));
-    if (!acknowledged) {
-      const near = nearestSameType(knownSpots, draft, draft.type);
-      if (near !== null) {
-        setState({
-          kind: 'nudge',
-          about: { type: draft.type, lat: draft.lat, lng: draft.lng },
-          message: `There's already a ${draft.type.replace('_', ' ')} spot ${Math.round(near.distanceM)} m away — “${near.name}”. Save yours anyway?`,
-        });
+    if (pressing.current) return;
+    pressing.current = true;
+    void (async () => {
+      try {
+        await onSave();
+      } finally {
+        pressing.current = false;
+      }
+    })();
+  };
+
+  const onSave = async (): Promise<void> => {
+    {
+      const draft = await draftOf();
+      const invalid = validateSpotDraft(draft);
+      if (invalid !== null) {
+        setState({ kind: 'problem', message: invalid });
         return;
       }
+      // FR-033: warn once about a very close same-type spot; a second press on
+      // the SAME pin and type saves anyway. Changing either re-arms the check.
+      const acknowledged =
+        (state.kind === 'nudge' && nudgeStillApplies(state.about, draft)) ||
+        (acknowledgedRef.current !== null && nudgeStillApplies(acknowledgedRef.current, draft));
+      if (!acknowledged) {
+        const near = nearestSameType(knownSpots, draft, draft.type);
+        if (near !== null) {
+          setState({
+            kind: 'nudge',
+            about: { type: draft.type, lat: draft.lat, lng: draft.lng },
+            message: `There's already a ${draft.type.replace('_', ' ')} spot ${Math.round(near.distanceM)} m away — “${near.name}”. Save yours anyway?`,
+          });
+          return;
+        }
+      }
+      gate(() => doSave(draft), { onDismiss });
     }
-    gate(doSave);
   };
 
   if (state.kind === 'saved') {
@@ -173,25 +242,36 @@ export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
   }
 
   return (
-    <View style={styles.root}>
-      <MapView
-        style={styles.map}
-        styleURL={themeName === 'dark' ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light}
-        scaleBarEnabled={false}
-        onCameraChanged={(s) => {
-          const c = (s as unknown as { properties?: { center?: number[] } }).properties?.center;
-          if (c && c.length >= 2) center.current = [c[0]!, c[1]!];
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <View
+        style={styles.mapWrap}
+        onLayout={(e: LayoutChangeEvent) => {
+          size.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height };
         }}
       >
-        <Camera
-          defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: INITIAL_ZOOM }}
-          animationDuration={0}
-        />
-      </MapView>
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          styleURL={themeName === 'dark' ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light}
+          scaleBarEnabled={false}
+          onCameraChanged={(s) => {
+            const c = (s as unknown as { properties?: { center?: number[] } }).properties?.center;
+            if (c && c.length >= 2) cameraCentre.current = [c[0]!, c[1]!];
+          }}
+        >
+          <Camera
+            defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: INITIAL_ZOOM }}
+            animationDuration={0}
+          />
+        </MapView>
 
-      {/* crosshair — the centre is the pin */}
-      <View pointerEvents="none" style={styles.crosshairWrap}>
-        <View style={[styles.crosshairDot, { borderColor: colors.bg }]} />
+        {/* crosshair — INSIDE the map container, so it is the map's centre */}
+        <View pointerEvents="none" style={styles.crosshairWrap}>
+          <View style={[styles.crosshairDot, { borderColor: colors.bg }]} />
+        </View>
       </View>
 
       <ScrollView
@@ -273,6 +353,11 @@ export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
         {state.kind === 'problem' && (
           <Text style={[styles.nudge, { color: colors.danger }]}>{state.message}</Text>
         )}
+        {state.kind === 'dropped' && (
+          <Text style={[styles.nudge, { color: colors.textMuted }]}>
+            Not saved — sign in to keep this spot.
+          </Text>
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={state.kind === 'nudge' ? 'Save anyway' : 'Save spot'}
@@ -295,19 +380,16 @@ export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
           </Text>
         </Pressable>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  mapWrap: { flex: 1 },
   map: { flex: 1 },
   crosshairWrap: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -318,12 +400,12 @@ const styles = StyleSheet.create({
     backgroundColor: AMBER,
     borderWidth: 2,
   },
-  panel: { maxHeight: '45%', borderTopWidth: 1 },
+  panel: { flexGrow: 0, flexShrink: 1, maxHeight: '55%', borderTopWidth: 1 },
   panelContent: { padding: spacing.md, gap: spacing.sm },
   heading: { ...font.body },
   typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   typeChip: {
-    minHeight: HIT_TARGET - 8,
+    minHeight: HIT_TARGET,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,

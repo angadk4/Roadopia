@@ -145,5 +145,7 @@ export function toRecordedRoute(matched: RouteThroughOutput, s: RecorderState): 
     generation_request_id: null,
     satisfied_constraints: null,
     stops: [],
+    // the matcher's turns for exactly this snap — follow-mode uses them as-is
+    maneuvers: matched.maneuvers,
   } as Route;
 }

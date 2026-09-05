@@ -12,7 +12,6 @@ import { EMPTY_DRAFT, PlanDraftContext, type PlanDraft } from '../../lib/plan_dr
 import { memorySessionStore } from '../../lib/session_store';
 import { AuthProvider } from '../../lib/use_auth';
 import MapHome from '../MapHome';
-import { CreateScreen } from '../placeholders';
 import PlanScreen from '../PlanScreen';
 
 /** MapHome reads auth so it can show the signed-in user's OWN spots (their
@@ -101,7 +100,8 @@ describe('screen smoke', () => {
         origin: { source: 'current', point: { lat: 43.26, lng: -79.87 } },
       }),
     );
-    expect(text).toContain('Current location');
+    expect(text).toContain('current location');
+    expect(text).not.toMatch(/43\.26|-79\.87/); // never raw coordinates in copy
     expect(text).not.toContain('Add a start point.');
   });
 
@@ -121,14 +121,6 @@ describe('screen smoke', () => {
     expect(text).toContain('Midway');
     expect(text).toContain('Late');
     expect(text).toContain('Remove');
-  });
-
-  it('Create placeholder renders honest milestone copy', () => {
-    let tree!: ReactTestRenderer;
-    act(() => {
-      tree = create(<CreateScreen />);
-    });
-    expect(textOf(tree)).toContain('Create');
   });
 
   it('MapHome shows the loading banner over the map while routes fetch', () => {

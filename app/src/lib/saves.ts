@@ -10,7 +10,7 @@
 import type { Route } from '@shared/types';
 import { z } from 'zod';
 
-import type { FetchLike } from './api';
+import { boundedFetch, transportMessage, type FetchLike } from './api';
 import { DataError, type SupabaseConfig } from './data';
 
 export interface SaveRouteInput {
@@ -45,6 +45,8 @@ export function buildSavePayload(input: SaveRouteInput): Record<string, unknown>
     generation_request_id: r.generation_request_id ?? null,
     satisfied_constraints: r.satisfied_constraints ?? null,
     agent_explanation: input.agentExplanation ?? null,
+    // Device pass 2026-09-04: turn guidance travels with the row (0031).
+    maneuvers: r.maneuvers ?? null,
   };
 }
 
@@ -55,7 +57,7 @@ export async function saveRoute(
   input: SaveRouteInput,
   fetchImpl?: FetchLike,
 ): Promise<string> {
-  const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const f = fetchImpl ?? boundedFetch();
   let res;
   try {
     res = await f(`${cfg.url}/rest/v1/rpc/save_route`, {
@@ -68,9 +70,11 @@ export async function saveRoute(
       body: JSON.stringify({ p: buildSavePayload(input) }),
     });
   } catch (err) {
-    throw new DataError('Could not reach the data service — check your connection.', null, {
-      cause: err,
-    });
+    throw new DataError(
+      transportMessage(err, 'Could not reach the data service — check your connection.'),
+      null,
+      { cause: err },
+    );
   }
   const text = await res.text();
   if (!res.ok) {
@@ -104,7 +108,7 @@ export async function listMyRoutes(
   userId: string,
   fetchImpl?: FetchLike,
 ): Promise<SavedRow[]> {
-  const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const f = fetchImpl ?? boundedFetch();
   let res;
   try {
     res = await f(
@@ -116,9 +120,11 @@ export async function listMyRoutes(
       },
     );
   } catch (err) {
-    throw new DataError('Could not reach the data service — check your connection.', null, {
-      cause: err,
-    });
+    throw new DataError(
+      transportMessage(err, 'Could not reach the data service — check your connection.'),
+      null,
+      { cause: err },
+    );
   }
   const text = await res.text();
   if (!res.ok) throw new DataError('Could not load saved drives.', res.status);

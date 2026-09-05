@@ -25,6 +25,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 
 import StopsBuilder from '../components/StopsBuilder';
 import { MAX_BRIEF_CHARS } from '../lib/api';
+import { useTopInset } from '../lib/insets';
 import { getCurrentLocation, type LocationResult } from '../lib/location';
 import {
   buildPlanRequest,
@@ -48,12 +49,9 @@ export interface PlanScreenProps {
   locate?: () => Promise<LocationResult>;
 }
 
-function fmt(p: { lat: number; lng: number }): string {
-  return `${p.lat.toFixed(3)}, ${p.lng.toFixed(3)}`;
-}
-
 export default function PlanScreen(props: PlanScreenProps): ReactElement {
   const { colors } = useTheme();
+  const topInset = useTopInset();
   const { draft, setDraft } = usePlanDraft();
   const [locState, setLocState] = useState<LocationState>('idle');
   const locate = props.locate ?? getCurrentLocation;
@@ -107,8 +105,9 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
   return (
     <ScrollView
       style={{ backgroundColor: colors.bg }}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingTop: spacing.xl + topInset }]}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
     >
       <Text style={[styles.title, { color: colors.text }]}>Plan a drive</Text>
 
@@ -160,8 +159,9 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
             ]}
           >
             <Text style={[styles.value, { color: colors.text }]}>
-              {draft.origin.source === 'current' ? 'Current location' : 'Dropped pin'} ·{' '}
-              {fmt(draft.origin.point)}
+              {draft.origin.source === 'current'
+                ? 'Starting from your current location'
+                : 'Starting from the pin you dropped'}
             </Text>
             <Pressable
               accessibilityRole="button"
@@ -256,7 +256,7 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
                 ]}
               >
                 <Text style={[styles.value, { color: colors.text }]}>
-                  Destination · {fmt(draft.destination)}
+                  Destination pinned on the map
                 </Text>
                 <Pressable
                   accessibilityRole="button"
@@ -286,6 +286,12 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
 
       {/* how long (R24-U12) — a real time budget; loops only (A → B time is set
           by the endpoints). "Any" = surprise me. */}
+      {draft.shape !== 'loop' && (
+        <Text style={[styles.note, { color: colors.textMuted }]}>
+          Drive time for an A → B drive comes from the two endpoints, so there is no time control
+          here.
+        </Text>
+      )}
       {draft.shape === 'loop' && (
         <View style={styles.section}>
           <Text style={[styles.label, { color: colors.text }]}>
@@ -472,7 +478,11 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
         <StopsBuilder stops={draft.stops} onChange={(stops) => setDraft({ stops })} />
       </View>
 
-      {/* submit */}
+      {/* submit — the reason a disabled button is disabled sits ABOVE it, where
+          the eye lands before the tap (below the fold it was never read) */}
+      {!build.ok && (
+        <Text style={[styles.note, { color: colors.textMuted }]}>{build.problems.join(' ')}</Text>
+      )}
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ disabled: !build.ok }}
@@ -492,9 +502,6 @@ export default function PlanScreen(props: PlanScreenProps): ReactElement {
           Plan my drive
         </Text>
       </Pressable>
-      {!build.ok && (
-        <Text style={[styles.note, { color: colors.textMuted }]}>{build.problems.join(' ')}</Text>
-      )}
     </ScrollView>
   );
 }

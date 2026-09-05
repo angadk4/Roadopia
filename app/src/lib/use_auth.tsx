@@ -17,7 +17,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { AuthEngine, type AuthState } from './auth_state';
+import { AuthEngine, type AuthState, type GateOptions } from './auth_state';
 import { getSupabaseConfig } from './runtime';
 import { type SessionStore } from './session_store';
 
@@ -25,7 +25,7 @@ export interface AuthContextValue {
   status: AuthState['status'];
   user: { id: string; email: string } | null;
   sheetOpen: boolean;
-  gate: (action: () => void) => void;
+  gate: (action: () => void, opts?: GateOptions) => void;
   dismissSheet: () => void;
   sendCode: (email: string) => Promise<void>;
   verifyCode: (email: string, code: string) => Promise<void>;
@@ -66,7 +66,7 @@ export function AuthProvider(props: {
       status: state.status,
       user: state.session?.user ?? null,
       sheetOpen: state.sheetOpen,
-      gate: (a) => engine.gate(a),
+      gate: (a, opts) => engine.gate(a, opts),
       dismissSheet: () => engine.dismissSheet(),
       sendCode: (email) => engine.sendCode(email),
       verifyCode: (email, code) => engine.verifyCode(email, code),

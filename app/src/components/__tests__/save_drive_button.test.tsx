@@ -99,3 +99,100 @@ describe('SaveDriveButton (M8-T04)', () => {
     expect(JSON.stringify(tree.toJSON())).toContain('Saved to your drives');
   });
 });
+
+describe('SaveDriveButton naming + honesty (device pass, 2026-09-04)', () => {
+  function signedIn(): AuthEngine {
+    return new AuthEngine({
+      cfg: CFG,
+      store: memorySessionStore({
+        accessToken: 'at',
+        refreshToken: 'rt',
+        expiresAt: 9_999_999_999,
+        user: { id: 'u1', email: 'a@b.co' },
+      }),
+    });
+  }
+
+  async function renderWith(
+    engine: AuthEngine,
+    saveFn: ReturnType<typeof vi.fn>,
+    onViewSaved?: () => void,
+  ): Promise<ReactTestRenderer> {
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = create(
+        (
+          <AuthProvider engine={engine}>
+            <SaveDriveButton
+              route={ROUTE}
+              cfg={CFG}
+              saveFn={saveFn as never}
+              {...(onViewSaved ? { onViewSaved } : {})}
+            />
+          </AuthProvider>
+        ) as ReactElement,
+      );
+    });
+    await act(async () => {});
+    return tree;
+  }
+
+  function typeName(tree: ReactTestRenderer, text: string): void {
+    const input = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'Drive name' && !!n.props['onChangeText'],
+    )[0]!;
+    act(() => {
+      (input.props['onChangeText'] as (t: string) => void)(text);
+    });
+  }
+
+  it('saves under the name typed into the field and offers the way to Saved', async () => {
+    const saveFn = vi.fn(async () => 'route-id');
+    const onViewSaved = vi.fn();
+    const tree = await renderWith(signedIn(), saveFn, onViewSaved);
+    expect(JSON.stringify(tree.toJSON())).toContain('60-minute loop'); // prefilled default
+    typeName(tree, '  Escarpment sweep ');
+    pressSave(tree);
+    await act(async () => {});
+    expect(saveFn).toHaveBeenCalledWith(
+      CFG,
+      'at',
+      expect.objectContaining({ name: 'Escarpment sweep' }),
+    );
+    const text = JSON.stringify(tree.toJSON());
+    expect(text).toContain('Saved to your drives as “Escarpment sweep”');
+    const view = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'View in Saved' && !!n.props['onPress'],
+    )[0]!;
+    act(() => {
+      (view.props['onPress'] as () => void)();
+    });
+    expect(onViewSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('a cleared name falls back to the honest default, never an empty name', async () => {
+    const saveFn = vi.fn(async () => 'route-id');
+    const tree = await renderWith(signedIn(), saveFn);
+    typeName(tree, '   ');
+    pressSave(tree);
+    await act(async () => {});
+    expect(saveFn).toHaveBeenCalledWith(
+      CFG,
+      'at',
+      expect.objectContaining({ name: '60-minute loop' }),
+    );
+  });
+
+  it('dismissing the sign-in sheet says the drive was NOT saved', async () => {
+    const engine = new AuthEngine({ cfg: CFG, store: memorySessionStore(null) });
+    const saveFn = vi.fn();
+    const tree = await renderWith(engine, saveFn);
+    pressSave(tree);
+    expect(engine.getState().sheetOpen).toBe(true);
+    await act(async () => {
+      engine.dismissSheet();
+    });
+    expect(saveFn).not.toHaveBeenCalled();
+    expect(JSON.stringify(tree.toJSON())).toContain('Not saved — sign in to keep this drive.');
+  });
+});

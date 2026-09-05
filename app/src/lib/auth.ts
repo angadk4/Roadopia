@@ -19,7 +19,7 @@
 
 import { z } from 'zod';
 
-import type { FetchLike } from './api';
+import { boundedFetch, transportMessage, type FetchLike } from './api';
 import type { SupabaseConfig } from './data';
 
 /** A signed-in session. `expiresAt` is epoch SECONDS (computed at verify). */
@@ -73,7 +73,7 @@ async function authPost(
   body: Record<string, unknown> | null,
   opts: { accessToken?: string; fetchImpl?: FetchLike } = {},
 ): Promise<{ status: number; text: string }> {
-  const f = opts.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const f = opts.fetchImpl ?? boundedFetch();
   let res;
   try {
     res = await f(`${cfg.url}/auth/v1${path}`, {
@@ -88,9 +88,11 @@ async function authPost(
       ...(body !== null ? { body: JSON.stringify(body) } : {}),
     });
   } catch (err) {
-    throw new AuthApiError('Could not reach the sign-in service — check your connection.', null, {
-      cause: err,
-    });
+    throw new AuthApiError(
+      transportMessage(err, 'Could not reach the sign-in service — check your connection.'),
+      null,
+      { cause: err },
+    );
   }
   return { status: res.status, text: await res.text() };
 }

@@ -36,16 +36,25 @@ export default function SavedStack(): ReactElement {
           <SavedScreen
             navigation={{
               navigate: (screen, params) => p.navigation.navigate(screen as never, params as never),
+              // A drive saved on another tab must be here when the user comes
+              // back (device pass: "saved drives aren't saving" was a list
+              // that loaded once and never refreshed).
+              addFocusListener: (cb) => p.navigation.addListener('focus', cb),
             }}
           />
         )}
       </Stack.Screen>
-      <Stack.Screen name="SavedRoute" options={{ title: 'Saved drive' }}>
+      <Stack.Screen
+        name="SavedRoute"
+        options={({ route }) => ({ title: route.params?.name ?? 'Saved drive' })}
+      >
         {(p) => (
           <SavedRouteScreen
             navigation={{
               goBack: () => p.navigation.goBack(),
               navigate: (screen, params) => p.navigation.navigate(screen as never, params as never),
+              addFocusListener: (cb) => p.navigation.addListener('focus', cb),
+              setTitle: (title) => p.navigation.setOptions({ title }),
             }}
             route={{ params: p.route.params }}
           />

@@ -118,17 +118,18 @@ export async function removeObject(
   if (!res.ok && res.status !== 404) throw new StorageError('storage remove failed', res.status);
 }
 
-/**
- * Delete EVERY object under a key prefix. Rows and blobs live in different
- * systems, so a crash between them can orphan blobs; because our keys are
- * `<owner>/<spot>/<photo>.jpg`, a prefix sweep is a complete, retryable
- * cleanup rather than a best-effort one (Hard rule E: deletion is real).
- */
-export async function removeByPrefix(
+interface ListEntry {
+  name: string;
+  /** Storage lists ONE level at a time: a sub-"folder" comes back as an entry
+   *  with `id: null` (and no metadata); a real object has an id. */
+  isFolder: boolean;
+}
+
+async function listOneLevel(
   cfg: StorageConfig,
   prefix: string,
-  fetchImpl: FetchLike = fetch as unknown as FetchLike,
-): Promise<number> {
+  fetchImpl: FetchLike,
+): Promise<ListEntry[]> {
   const res = await call(
     fetchImpl,
     `${cfg.url}/storage/v1/object/list/${cfg.bucket}`,
@@ -140,16 +141,40 @@ export async function removeByPrefix(
     'list',
   );
   if (!res.ok) throw new StorageError('storage list failed', res.status);
-  let names: string[];
   try {
-    names = (JSON.parse(await res.text()) as Array<{ name?: string }>)
-      .map((o) => o.name)
-      .filter((n): n is string => typeof n === 'string' && n.length > 0);
+    return (JSON.parse(await res.text()) as Array<{ name?: string; id?: string | null }>)
+      .filter((o) => typeof o.name === 'string' && o.name.length > 0)
+      .map((o) => ({ name: o.name as string, isFolder: o.id === null || o.id === undefined }));
   } catch {
     throw new StorageError('unreadable list response', null);
   }
-  for (const name of names) {
-    await removeObject(cfg, `${prefix}${name}`, fetchImpl);
+}
+
+/**
+ * Delete EVERY object under a key prefix. Rows and blobs live in different
+ * systems, so a crash between them can orphan blobs; because our keys are
+ * `<owner>/<spot>/<photo>.jpg`, a prefix sweep is a complete, retryable
+ * cleanup rather than a best-effort one (Hard rule E: deletion is real).
+ *
+ * Recursive (device pass 2026-09-04): Storage's list is one level deep, so
+ * an account-wide sweep (`<owner>/`) sees the SPOT folders, not the files
+ * inside them — and deleting a folder path is refused. The first real
+ * account deletion of a user with a photo failed on exactly that; a spot
+ * sweep (`<owner>/<spot>/`) had always been at the leaf level and worked.
+ */
+export async function removeByPrefix(
+  cfg: StorageConfig,
+  prefix: string,
+  fetchImpl: FetchLike = fetch as unknown as FetchLike,
+): Promise<number> {
+  let removed = 0;
+  for (const entry of await listOneLevel(cfg, prefix, fetchImpl)) {
+    if (entry.isFolder) {
+      removed += await removeByPrefix(cfg, `${prefix}${entry.name}/`, fetchImpl);
+    } else {
+      await removeObject(cfg, `${prefix}${entry.name}`, fetchImpl);
+      removed += 1;
+    }
   }
-  return names.length;
+  return removed;
 }

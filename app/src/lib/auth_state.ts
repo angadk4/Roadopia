@@ -47,9 +47,21 @@ export interface AuthEngineOptions {
   onChange?: (state: AuthState) => void;
 }
 
+export interface GateOptions {
+  /** Called when the sheet is dismissed WITHOUT signing in, so the screen can
+   *  say what did not happen ("Not saved — sign in to keep this drive").
+   *  Before this hook the parked action vanished silently (device pass). */
+  onDismiss?: () => void;
+}
+
+interface Pending {
+  run: () => void;
+  onDismiss?: () => void;
+}
+
 export class AuthEngine {
   private state: AuthState = { status: 'loading', session: null, sheetOpen: false };
-  private pending: (() => void) | null = null;
+  private pending: Pending | null = null;
   private listener: ((state: AuthState) => void) | null = null;
 
   constructor(private readonly opts: AuthEngineOptions) {}
@@ -69,30 +81,41 @@ export class AuthEngine {
     this.listener?.(this.state);
   }
 
-  /** Load the persisted session once at startup. */
+  /** Load the persisted session once at startup. An action gated while the
+   *  read was still in flight is flushed here: run if the held session is
+   *  good, else the sheet opens now (never earlier — a cold-start tap must not
+   *  show the sign-in sheet to someone who IS signed in). */
   async init(): Promise<void> {
     const held = await this.opts.store.load();
     if (held === null) {
-      this.set({ status: 'anon', session: null });
+      this.set({ status: 'anon', session: null, sheetOpen: this.pending !== null });
       return;
     }
     this.set({ status: 'signedIn', session: held });
+    const run = this.pending;
+    this.pending = null;
+    if (run) run.run();
   }
 
-  /** FR-201: run now if signed in; else park the action and open the sheet. */
-  gate(action: () => void): void {
+  /** FR-201: run now if signed in; else park the action and open the sheet
+   *  (or, during the initial session read, park it and let init() decide). */
+  gate(action: () => void, opts: GateOptions = {}): void {
     if (this.state.status === 'signedIn') {
       action();
       return;
     }
-    this.pending = action;
+    this.pending = { run: action, ...(opts.onDismiss ? { onDismiss: opts.onDismiss } : {}) };
+    if (this.state.status === 'loading') return;
     this.set({ sheetOpen: true });
   }
 
-  /** Sheet dismissed without signing in — the parked action is dropped. */
+  /** Sheet dismissed without signing in — the parked action is dropped and
+   *  its owner is told so it can say what did not happen. */
   dismissSheet(): void {
+    const dropped = this.pending;
     this.pending = null;
     this.set({ sheetOpen: false });
+    dropped?.onDismiss?.();
   }
 
   async sendCode(email: string): Promise<void> {
@@ -108,7 +131,7 @@ export class AuthEngine {
     this.set({ status: 'signedIn', session, sheetOpen: false });
     const run = this.pending;
     this.pending = null;
-    if (run) run(); // exactly once, after the state is signed-in
+    if (run) run.run(); // exactly once, after the state is signed-in
   }
 
   /**

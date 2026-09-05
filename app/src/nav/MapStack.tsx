@@ -8,6 +8,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { ReactElement } from 'react';
 
 import AddSpotScreen, { type AddSpotScreenParams } from '../screens/AddSpotScreen';
+import FollowScreen, { type FollowScreenParams } from '../screens/FollowScreen';
 import MapHome from '../screens/MapHome';
 import SpotDetailScreen, { type SpotDetailScreenParams } from '../screens/SpotDetailScreen';
 import { useTheme } from '../theme';
@@ -16,6 +17,9 @@ export type MapStackParamList = {
   MapHome: undefined;
   AddSpot: AddSpotScreenParams;
   Spot: SpotDetailScreenParams;
+  /** A seed route tapped on the map is followable in place (device pass:
+   *  the route sheet had no action at all). */
+  Follow: FollowScreenParams;
 };
 
 const Stack = createNativeStackNavigator<MapStackParamList>();
@@ -51,6 +55,17 @@ export default function MapStack(): ReactElement {
       <Stack.Screen name="Spot" options={{ title: 'Spot' }}>
         {(p) => (
           <SpotDetailScreen
+            navigation={{
+              goBack: () => p.navigation.goBack(),
+              addFocusListener: (cb) => p.navigation.addListener('focus', cb),
+            }}
+            route={{ params: p.route.params }}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="Follow" options={{ headerShown: false }}>
+        {(p) => (
+          <FollowScreen
             navigation={{ goBack: () => p.navigation.goBack() }}
             route={{ params: p.route.params }}
           />

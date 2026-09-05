@@ -20,7 +20,7 @@ import type {
   LatLng,
   NearbyDrive,
 } from '@shared/types';
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import DriveLinesMap from '../components/DriveLinesMap';
@@ -40,6 +40,7 @@ import {
   fetchDiscoverDrives,
   nearbyDriveToRoute,
 } from '../lib/discover';
+import { useTopInset } from '../lib/insets';
 import { getCurrentLocation, type LocationResult } from '../lib/location';
 import { usePlanDraft } from '../lib/plan_draft';
 import { getApiBaseUrl } from '../lib/runtime';
@@ -50,6 +51,7 @@ type FetchFn = (origin: LatLng) => Promise<DiscoverResult>;
 
 interface DiscoverNav {
   navigate: (screen: string, params?: Record<string, unknown>) => void;
+  addFocusListener?: (cb: () => void) => () => void;
 }
 
 export interface DiscoverHomeProps {
@@ -78,6 +80,8 @@ type LocState = 'idle' | 'fetching' | 'denied' | 'error';
  *  Never mutated (the screen only ever reads these). */
 const NO_DRIVES: NearbyDrive[] = [];
 const NO_CORE_DRIVES: CoreDrive[] = [];
+/** Rail card width (dp) — also the scroll step when a map line is tapped. */
+const CARD_WIDTH = 232;
 
 /** Whole minutes → a friendly duration ("45 min" / "1 h 50 min" / "2 h"). */
 function fmtDur(s: number): string {
@@ -97,6 +101,7 @@ function curveWord(c: number): string {
 
 export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
   const { colors } = useTheme();
+  const topInset = useTopInset();
   const { draft, setDraft } = usePlanDraft();
   const origin = draft.origin?.point ?? null;
   const locate = props.locate ?? getCurrentLocation;
@@ -116,6 +121,11 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
   const [phase, setPhase] = useState<Phase>({ kind: 'need_origin' });
   const [locState, setLocState] = useState<LocState>('idle');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** Bumped by "Try again" (and by refocus after a failure) so the scan
+   *  re-fires for the SAME origin — the effect used to key on origin only, so
+   *  re-tapping "Use my location" from the same place did nothing. */
+  const [attempt, setAttempt] = useState(0);
+  const railRef = useRef<ScrollView>(null);
 
   const useMyLocation = useCallback(() => {
     setLocState('fetching');
@@ -175,7 +185,16 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
     return () => {
       live = false;
     };
-  }, [origin?.lat, origin?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [origin?.lat, origin?.lng, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Coming back to the tab after a failed scan retries it.
+  useEffect(() => {
+    const off = props.navigation.addFocusListener?.(() => {
+      if (phase.kind === 'error' || phase.kind === 'unavailable') setAttempt((a) => a + 1);
+    });
+    return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase.kind]);
 
   // Memoized on `phase` so the two lists keep a stable identity between renders:
   // a fresh `[]` each render re-ran the map's FeatureCollection/bounds memos and
@@ -223,15 +242,22 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
     [props.navigation],
   );
 
+  // Tapping a line on the map also brings its card into view on the rail.
+  const idsRef = useRef<string[]>([]);
+  idsRef.current =
+    coreDrives.length > 0 ? coreDrives.map((d) => d.id) : drives.map((d) => d.segmentId);
   const onSelectLine = useCallback((p: Record<string, unknown>) => {
-    if (typeof p.id === 'string') setSelectedId(p.id);
+    if (typeof p.id !== 'string') return;
+    setSelectedId(p.id);
+    const i = idsRef.current.indexOf(p.id);
+    if (i >= 0) railRef.current?.scrollTo({ x: i * (CARD_WIDTH + spacing.sm), animated: true });
   }, []);
 
   const styles = makeStyles(colors);
 
   // Top overlay: title + compact origin control + status (no lat/long readout).
   const overlay = (
-    <View pointerEvents="box-none" style={styles.top}>
+    <View pointerEvents="box-none" style={[styles.top, { paddingTop: spacing.md + topInset }]}>
       <View style={[styles.topCard, { backgroundColor: colors.surfaceRaised + 'F2' }]}>
         <Text style={styles.title}>Great drives near you</Text>
         <View style={styles.originButtons}>
@@ -283,6 +309,16 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
             Couldn’t scan for drives — check your connection and try again.
           </Text>
         )}
+        {(phase.kind === 'unavailable' || phase.kind === 'error') && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry scanning"
+            onPress={() => setAttempt((a) => a + 1)}
+            style={[styles.smallBtn, styles.selfStart]}
+          >
+            <Text style={styles.smallBtnText}>Try again</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -291,6 +327,7 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
   const rail = (drives.length > 0 || coreDrives.length > 0) && (
     <View style={styles.railWrap}>
       <ScrollView
+        ref={railRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.rail}
@@ -326,7 +363,7 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
               </Text>
               <Text style={styles.cardSub}>{honesty}</Text>
               <View style={[styles.cta, { backgroundColor: colors.accent }]}>
-                <Text style={[styles.ctaText, { color: colors.onAccent }]}>Let's go</Text>
+                <Text style={[styles.ctaText, { color: colors.onAccent }]}>Let’s go</Text>
               </View>
             </Pressable>
           );
@@ -410,7 +447,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     railWrap: { position: 'absolute', left: 0, right: 0, bottom: 44 },
     rail: { paddingHorizontal: spacing.md, gap: spacing.sm },
     card: {
-      width: 232,
+      width: CARD_WIDTH,
       padding: spacing.md,
       borderRadius: radius.lg,
       backgroundColor: colors.surfaceRaised,
@@ -430,11 +467,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     cardSub: { ...font.caption, color: colors.textMuted },
     cta: {
       marginTop: spacing.xs,
-      minHeight: HIT_TARGET - 8,
+      minHeight: HIT_TARGET,
       borderRadius: radius.md,
       alignItems: 'center',
       justifyContent: 'center',
     },
+    selfStart: { alignSelf: 'flex-start' },
     ctaText: { ...font.button },
   });
 }

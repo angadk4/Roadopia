@@ -11,7 +11,7 @@
 
 import { z } from 'zod';
 
-import type { FetchLike } from './api';
+import { boundedFetch, transportMessage, type FetchLike } from './api';
 import { DataError, type SpotRow, type SupabaseConfig } from './data';
 
 export const SPOT_NAME_MAX = 80;
@@ -95,7 +95,7 @@ async function authedRpc(
   accessToken: string,
   fetchImpl?: FetchLike,
 ): Promise<unknown> {
-  const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const f = fetchImpl ?? boundedFetch();
   let res;
   try {
     res = await f(`${cfg.url}/rest/v1/rpc/${fn}`, {
@@ -108,9 +108,11 @@ async function authedRpc(
       body: JSON.stringify(args),
     });
   } catch (err) {
-    throw new DataError('Could not reach the data service — check your connection.', null, {
-      cause: err,
-    });
+    throw new DataError(
+      transportMessage(err, 'Could not reach the data service — check your connection.'),
+      null,
+      { cause: err },
+    );
   }
   const text = await res.text();
   if (!res.ok) {
@@ -176,7 +178,7 @@ export async function fetchSpotById(
   accessToken: string | null,
   fetchImpl?: FetchLike,
 ): Promise<SpotDetail | null> {
-  const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const f = fetchImpl ?? boundedFetch();
   let res;
   try {
     res = await f(
@@ -190,9 +192,11 @@ export async function fetchSpotById(
       },
     );
   } catch (err) {
-    throw new DataError('Could not reach the data service — check your connection.', null, {
-      cause: err,
-    });
+    throw new DataError(
+      transportMessage(err, 'Could not reach the data service — check your connection.'),
+      null,
+      { cause: err },
+    );
   }
   if (!res.ok) throw new DataError('Could not load that spot.', res.status);
   const rows = z.array(SpotDetailSchema).safeParse(JSON.parse(await res.text()));
@@ -243,7 +247,7 @@ export async function deleteSpot(
   id: string,
   fetchImpl?: FetchLike,
 ): Promise<void> {
-  const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const f = fetchImpl ?? boundedFetch();
   let res;
   try {
     res = await f(`${apiBaseUrl}/spots/${encodeURIComponent(id)}`, {
@@ -251,9 +255,11 @@ export async function deleteSpot(
       headers: { authorization: `Bearer ${accessToken}` },
     });
   } catch (err) {
-    throw new DataError('Could not reach the server — check your connection.', null, {
-      cause: err,
-    });
+    throw new DataError(
+      transportMessage(err, 'Could not reach the server — check your connection.'),
+      null,
+      { cause: err },
+    );
   }
   if (!res.ok) throw new DataError('Could not delete the spot.', res.status);
 }

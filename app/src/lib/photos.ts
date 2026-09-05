@@ -8,7 +8,10 @@
 
 import { z } from 'zod';
 
-import { ApiError, NetworkError } from './api';
+import { ApiError, boundedFetch, NetworkError, transportMessage } from './api';
+
+/** A 10 MB photo on cellular legitimately takes longer than a JSON call. */
+const UPLOAD_TIMEOUT_MS = 90_000;
 
 /** fetch shape for this module — photo bodies are binary (Blob), and the
  *  local-file read needs a bare fetch(uri); api.ts's FetchLike is JSON-only. */
@@ -50,7 +53,7 @@ export async function uploadSpotPhoto(
   spotId: string,
   localUri: string,
 ): Promise<PhotoRef> {
-  const f = opts.fetchImpl ?? (globalThis.fetch as unknown as PhotoFetchLike);
+  const f = opts.fetchImpl ?? (boundedFetch(UPLOAD_TIMEOUT_MS) as unknown as PhotoFetchLike);
   let blob: unknown;
   try {
     const local = await f(localUri, {});
@@ -69,8 +72,10 @@ export async function uploadSpotPhoto(
       },
       body: blob,
     });
-  } catch {
-    throw new NetworkError('Could not reach the server — check your connection.');
+  } catch (err) {
+    throw new NetworkError(
+      transportMessage(err, 'Could not reach the server — check your connection.'),
+    );
   }
   const text = await res.text();
   if (!res.ok) {
@@ -89,7 +94,7 @@ export async function uploadSpotPhoto(
 }
 
 export async function listSpotPhotos(opts: PhotoApiOptions, spotId: string): Promise<PhotoRef[]> {
-  const f = opts.fetchImpl ?? (globalThis.fetch as unknown as PhotoFetchLike);
+  const f = opts.fetchImpl ?? (boundedFetch() as unknown as PhotoFetchLike);
   let res;
   try {
     res = await f(`${opts.baseUrl}/spots/${encodeURIComponent(spotId)}/photos`, {
@@ -106,7 +111,7 @@ export async function listSpotPhotos(opts: PhotoApiOptions, spotId: string): Pro
 }
 
 export async function deletePhoto(opts: PhotoApiOptions, photoId: string): Promise<void> {
-  const f = opts.fetchImpl ?? (globalThis.fetch as unknown as PhotoFetchLike);
+  const f = opts.fetchImpl ?? (boundedFetch() as unknown as PhotoFetchLike);
   let res;
   try {
     res = await f(`${opts.baseUrl}/photos/${encodeURIComponent(photoId)}`, {

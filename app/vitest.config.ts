@@ -21,6 +21,9 @@ export default {
       'expo-keep-awake': fileURLToPath(
         new URL('./src/test/expo-keep-awake-stub.ts', import.meta.url),
       ),
+      'react-native-safe-area-context': fileURLToPath(
+        new URL('./src/test/safe-area-stub.ts', import.meta.url),
+      ),
     },
   },
   test: {

@@ -82,3 +82,32 @@ describe('statsLine', () => {
     expect(statsLine(null)).toContain('two points');
   });
 });
+
+describe('no-op taps have reasons; points are removable (device pass, 2026-09-04)', () => {
+  it('whyCannotAdd names the cap and the duplicate; addWaypoint honours it', async () => {
+    const { whyCannotAdd, removeWaypoint, whyCannotCloseLoop } = await import('../builder');
+    let s = addWaypoint(EMPTY_BUILDER, { lat: 43.2, lng: -79.9 });
+    expect(whyCannotAdd(s, { lat: 43.2, lng: -79.9 })).toBe('duplicate');
+    expect(whyCannotAdd(s, { lat: 43.21, lng: -79.9 })).toBeNull();
+    for (let i = 1; i < MAX_WAYPOINTS; i++)
+      s = addWaypoint(s, { lat: 43.2 + i * 0.01, lng: -79.9 });
+    expect(s.waypoints).toHaveLength(MAX_WAYPOINTS);
+    expect(whyCannotAdd(s, { lat: 44, lng: -79 })).toBe('full');
+    expect(whyCannotCloseLoop(s)).toBe('full');
+    // remove the middle point: the ends stay, the count drops by one
+    const fewer = removeWaypoint(s, 3);
+    expect(fewer.waypoints).toHaveLength(MAX_WAYPOINTS - 1);
+    expect(fewer.waypoints[0]).toEqual(s.waypoints[0]);
+    expect(fewer.waypoints[3]).toEqual(s.waypoints[4]);
+    expect(removeWaypoint(s, 99)).toBe(s); // out of range is a no-op
+  });
+
+  it('whyCannotCloseLoop: too few, already closed, or fine', async () => {
+    const { whyCannotCloseLoop } = await import('../builder');
+    expect(whyCannotCloseLoop(EMPTY_BUILDER)).toBe('too_few');
+    let s = addWaypoint(EMPTY_BUILDER, { lat: 43.2, lng: -79.9 });
+    s = addWaypoint(s, { lat: 43.21, lng: -79.89 });
+    expect(whyCannotCloseLoop(s)).toBeNull();
+    expect(whyCannotCloseLoop(closeLoop(s))).toBe('closed');
+  });
+});

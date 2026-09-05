@@ -259,13 +259,31 @@ const MANEUVER_TYPES: Record<number, string> = {
 
 /** Map a raw (already-validated) Valhalla response body → shared §50 output. */
 export function mapRouteResponse(body: unknown): RouteThroughOutput {
+  return mapRouteResponseDetailed(body).output;
+}
+
+/**
+ * The same mapping plus WHERE each leg begins in the flattened geometry (and
+ * the final vertex): the leg boundaries are exactly where the engine snapped
+ * each BREAK location, which Valhalla's own `locations[]` does not say (it
+ * echoes the input). /route turns these into `locations` for the builder.
+ */
+export function mapRouteResponseDetailed(body: unknown): {
+  output: RouteThroughOutput;
+  /** Vertex index of each leg start, then the last vertex: legs + 1 entries. */
+  boundaries: number[];
+} {
   const parsed = ValhallaRouteResponseSchema.parse(body);
   const { legs, summary } = parsed.trip;
 
-  const coordinates = legs.flatMap((leg, i) => {
+  const coordinates: Array<[number, number]> = [];
+  const boundaries: number[] = [];
+  legs.forEach((leg, i) => {
     const pts = decodePolyline(leg.shape);
-    return i === 0 ? pts : pts.slice(1); // legs share boundary vertices
+    boundaries.push(i === 0 ? 0 : Math.max(0, coordinates.length - 1));
+    coordinates.push(...(i === 0 ? pts : pts.slice(1))); // legs share boundary vertices
   });
+  boundaries.push(Math.max(0, coordinates.length - 1));
 
   const maneuvers: Maneuver[] = legs.flatMap(
     (leg) =>
@@ -280,7 +298,7 @@ export function mapRouteResponse(body: unknown): RouteThroughOutput {
   const warnings = (parsed.warnings ?? [])
     .map((w) => w.text ?? w.message ?? (w.code !== undefined ? `code ${w.code}` : ''))
     .filter((w) => w !== '');
-  return RouteThroughOutputSchema.parse({
+  const output = RouteThroughOutputSchema.parse({
     geometry: { type: 'LineString', coordinates },
     distance_m: summary.length * 1000, // km → m
     duration_s: summary.time,
@@ -293,6 +311,7 @@ export function mapRouteResponse(body: unknown): RouteThroughOutput {
     has_unpaved: false,
     ...(warnings.length > 0 ? { warnings } : {}),
   });
+  return { output, boundaries };
 }
 
 /**
@@ -363,5 +382,16 @@ export async function routeThrough(
     }
     throw new ValhallaRouteError(-1, res.status, `unexpected error shape (HTTP ${res.status})`);
   }
-  return mapRouteResponse(body);
+  const { output, boundaries } = mapRouteResponseDetailed(body);
+  // Where each waypoint landed on the road (device pass 2026-09-04): only
+  // when every waypoint split a leg — all-break calls (/route) — so the
+  // boundaries line up one-to-one with the request. Through-type middles
+  // (the planner's search waypoints) never split legs; then it is omitted.
+  if (boundaries.length !== request.waypoints.length) return output;
+  const coords = output.geometry.coordinates;
+  const locations = boundaries.map((i) => {
+    const c = coords[i] ?? coords[coords.length - 1]!;
+    return { lat: c[1]!, lng: c[0]! };
+  });
+  return { ...output, locations };
 }

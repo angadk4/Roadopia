@@ -151,3 +151,81 @@ describe('PhotoUpload (component)', () => {
     expect(JSON.stringify(tree.toJSON())).toContain('check your connection');
   });
 });
+
+describe('PhotoUpload honesty (device pass, 2026-09-04)', () => {
+  it('delete needs a second tap — a stray tap never removes a photo', async () => {
+    const deleteFn = vi.fn(async () => undefined);
+    const tree = await render({ listFn: async () => [SIGNED], deleteFn: deleteFn as never });
+    await act(async () => {}); // the strip loads after the token resolves
+    const first = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'Delete photo' && !!n.props['onPress'],
+    )[0]!;
+    await act(async () => {
+      (first.props['onPress'] as () => void)();
+    });
+    expect(deleteFn).not.toHaveBeenCalled();
+    const confirm = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'Confirm delete photo' && !!n.props['onPress'],
+    )[0]!;
+    await act(async () => {
+      (confirm.props['onPress'] as () => void)();
+    });
+    expect(deleteFn).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(tree.toJSON())).not.toContain('p1_thumb.jpg');
+  });
+
+  it('an oversized pick is refused BEFORE the upload, in plain words', async () => {
+    const uploadFn = vi.fn(async () => SIGNED);
+    const tree = await render({
+      pickFn: async () => ({ uri: 'file://huge.jpg', bytes: 11 * 1024 * 1024 }),
+      uploadFn: uploadFn as never,
+    });
+    const add = tree.root.findAll((n) => n.props['accessibilityLabel'] === 'Add a photo')[0]!;
+    await act(async () => {
+      (add.props['onPress'] as () => void)();
+    });
+    expect(uploadFn).not.toHaveBeenCalled();
+    expect(JSON.stringify(tree.toJSON())).toContain('over 10 MB');
+  });
+
+  it('shows the count against the cap and refuses a 7th before opening the picker', async () => {
+    const six = Array.from({ length: 6 }, (_, i) => ({ ...SIGNED, id: `p${i}` }));
+    const pickFn = vi.fn(async () => 'file://x.jpg');
+    const tree = await render({ listFn: async () => six, pickFn });
+    await act(async () => {}); // the strip loads after the token resolves
+    expect(JSON.stringify(tree.toJSON())).toContain('Add a photo (6 of 6)');
+    const add = tree.root.findAll((n) => n.props['accessibilityLabel'] === 'Add a photo')[0]!;
+    await act(async () => {
+      (add.props['onPress'] as () => void)();
+    });
+    expect(pickFn).not.toHaveBeenCalled();
+    expect(JSON.stringify(tree.toJSON())).toContain('most photos a spot can have');
+  });
+});
+
+describe('PhotoUpload count honesty (review, 2026-09-04)', () => {
+  it('never claims a count when the list failed to load — and offers a retry', async () => {
+    let attempts = 0;
+    const tree = await render({
+      listFn: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new NetworkError('Could not reach the server.');
+        return [SIGNED];
+      },
+    });
+    await act(async () => {});
+    let text = JSON.stringify(tree.toJSON());
+    expect(text).not.toContain('of 6');
+    expect(text).toContain('Couldn’t load this spot’s photos');
+    const retry = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'Retry loading photos' && !!n.props['onPress'],
+    )[0]!;
+    await act(async () => {
+      (retry.props['onPress'] as () => void)();
+    });
+    await act(async () => {});
+    text = JSON.stringify(tree.toJSON());
+    expect(text).toContain('Add a photo (1 of 6)');
+    expect(text).not.toContain('Couldn’t load this spot’s photos');
+  });
+});

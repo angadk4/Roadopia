@@ -225,3 +225,61 @@ describe('AuthEngine — the FR-201 gate', () => {
     expect(engine.getState().session).toBeNull();
   });
 });
+
+describe('AuthEngine — gate honesty (device pass, 2026-09-04)', () => {
+  function engineWith(
+    routes: Record<string, { status: number; body: unknown }>,
+    initial: AuthSession | null = null,
+  ): AuthEngine {
+    return new AuthEngine({
+      cfg: CFG,
+      store: memorySessionStore(initial),
+      fetchImpl: fakeFetch(routes),
+      now: () => 1000,
+    });
+  }
+
+  it('a tap during the initial session read never shows the sheet to a signed-in user', async () => {
+    const engine = engineWith(
+      {},
+      {
+        accessToken: 'at',
+        refreshToken: 'rt',
+        expiresAt: 9_999_999_999,
+        user: { id: 'u1', email: 'a@b.co' },
+      },
+    );
+    const action = vi.fn();
+    engine.gate(action); // status is still 'loading'
+    expect(engine.getState().sheetOpen).toBe(false);
+    expect(action).not.toHaveBeenCalled();
+    await engine.init();
+    expect(action).toHaveBeenCalledTimes(1); // flushed once the session is known
+    expect(engine.getState().sheetOpen).toBe(false);
+  });
+
+  it('a tap during the initial read by an anonymous user opens the sheet after init', async () => {
+    const engine = engineWith({});
+    const action = vi.fn();
+    engine.gate(action);
+    expect(engine.getState().sheetOpen).toBe(false);
+    await engine.init();
+    expect(engine.getState().status).toBe('anon');
+    expect(engine.getState().sheetOpen).toBe(true);
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  it('dismissing the sheet tells the parked action it was dropped', async () => {
+    const engine = engineWith({});
+    await engine.init();
+    const action = vi.fn();
+    const onDismiss = vi.fn();
+    engine.gate(action, { onDismiss });
+    engine.dismissSheet();
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(action).not.toHaveBeenCalled();
+    // a later verify must not resurrect the dropped action
+    engine.dismissSheet();
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+});

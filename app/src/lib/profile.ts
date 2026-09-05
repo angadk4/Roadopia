@@ -9,7 +9,7 @@
 
 import { z } from 'zod';
 
-import type { FetchLike } from './api';
+import { boundedFetch, transportMessage, type FetchLike } from './api';
 import { DataError, type SupabaseConfig } from './data';
 
 const ProfileSchema = z.object({
@@ -28,7 +28,7 @@ async function rest(
   init: { method: string; body?: unknown; accessToken?: string; headers?: Record<string, string> },
   fetchImpl?: FetchLike,
 ): Promise<{ status: number; text: string }> {
-  const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const f = fetchImpl ?? boundedFetch();
   let res;
   try {
     res = await f(`${cfg.url}/rest/v1${path}`, {
@@ -42,9 +42,11 @@ async function rest(
       ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
     });
   } catch (err) {
-    throw new DataError('Could not reach the data service — check your connection.', null, {
-      cause: err,
-    });
+    throw new DataError(
+      transportMessage(err, 'Could not reach the data service — check your connection.'),
+      null,
+      { cause: err },
+    );
   }
   return { status: res.status, text: await res.text() };
 }

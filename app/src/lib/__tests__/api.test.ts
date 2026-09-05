@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   ApiError,
@@ -120,5 +120,65 @@ describe('request path', () => {
     await expect(getHealth({ baseUrl: 'http://down:1', fetchImpl })).rejects.toBeInstanceOf(
       NetworkError,
     );
+  });
+});
+
+describe('request timeouts (device pass, 2026-09-04)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A fetch that never answers on its own and honours the abort signal. */
+  function hangingFetch(): FetchLike {
+    return (_url, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      });
+  }
+
+  it('a request that never answers fails with words the user can act on', async () => {
+    vi.useFakeTimers();
+    const p = getHealth({ baseUrl: 'http://x', fetchImpl: hangingFetch() });
+    const settled = expect(p).rejects.toSatisfy(
+      (e: unknown) => e instanceof NetworkError && /took too long/.test(e.message),
+    );
+    await vi.advanceTimersByTimeAsync(20_001);
+    await settled;
+  });
+
+  it("the caller's own abort is rethrown as AbortError, not dressed up as a timeout", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const p = postRouteThrough(
+      { baseUrl: 'http://x', fetchImpl: hangingFetch() },
+      {
+        waypoints: [
+          { lat: 0, lng: 0 },
+          { lat: 1, lng: 1 },
+        ],
+      },
+      controller.signal,
+    );
+    const settled = expect(p).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort();
+    await settled;
+  });
+
+  it('a request that answers in time clears its timer (no stray abort later)', async () => {
+    vi.useFakeTimers();
+    let aborted = false;
+    const fetchImpl: FetchLike = (_url, init) => {
+      init?.signal?.addEventListener('abort', () => {
+        aborted = true;
+      });
+      return Promise.resolve(jsonResponse(200, { status: 'ok' }));
+    };
+    await getHealth({ baseUrl: 'http://x', fetchImpl });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(aborted).toBe(false);
   });
 });

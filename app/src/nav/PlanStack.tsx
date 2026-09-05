@@ -87,6 +87,9 @@ export default function PlanStack(): ReactElement {
                 goBack: () => p.navigation.goBack(),
                 navigate: (screen, params) =>
                   p.navigation.navigate(screen as never, params as never),
+                // "Plan another drive" must land on the form, not on the
+                // previous result of a refinement chain.
+                goHome: () => p.navigation.popToTop(),
               }}
               route={{ params: p.route.params as ResultScreenParams }}
             />

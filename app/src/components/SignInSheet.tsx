@@ -14,7 +14,7 @@
  * backdrop dismisses the keyboard without cancelling the sheet.
  */
 
-import { useState, type ReactElement } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -34,6 +34,9 @@ import { font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
 type Step = 'email' | 'code';
 
+/** Resend is offered after this many seconds (email delivery lag, not abuse). */
+export const RESEND_COOLDOWN_S = 30;
+
 export default function SignInSheet(): ReactElement | null {
   const { colors } = useTheme();
   const { sheetOpen, dismissSheet, sendCode, verifyCode } = useAuth();
@@ -42,14 +45,49 @@ export default function SignInSheet(): ReactElement | null {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  /** When "Resend code" becomes available (epoch ms), or null when it is.
+   *  A code that never arrives used to leave "Use a different email" as the
+   *  only way out (device pass); the cooldown keeps a stuck tap from
+   *  hammering the OTP endpoint. Wall-clock based, not a chained countdown,
+   *  so a throttled timer in the background cannot make it drift. */
+  const [resendAt, setResendAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (resendAt === null) return undefined;
+    const id = setInterval(() => {
+      const n = Date.now();
+      setNow(n);
+      if (n >= resendAt) setResendAt(null);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [resendAt]);
 
   if (!sheetOpen) return null;
+
+  const resendIn = resendAt === null ? 0 : Math.max(0, Math.ceil((resendAt - now) / 1000));
+  const startCooldown = (): void => {
+    const at = Date.now();
+    setNow(at);
+    setResendAt(at + RESEND_COOLDOWN_S * 1000);
+  };
 
   const reset = (): void => {
     setStep('email');
     setCode('');
     setBusy(false);
     setProblem(null);
+    setResendAt(null);
+  };
+
+  const resend = (): void => {
+    if (resendIn > 0 || busy) return;
+    setProblem(null);
+    startCooldown();
+    sendCode(email.trim().toLowerCase()).catch((err: unknown) => {
+      setProblem(friendly(err));
+      setResendAt(null); // a failed send should not lock the button
+    });
   };
 
   const close = (): void => {
@@ -72,6 +110,7 @@ export default function SignInSheet(): ReactElement | null {
       .then(() => {
         setStep('code');
         setBusy(false);
+        startCooldown();
       })
       .catch((err: unknown) => {
         setProblem(friendly(err));
@@ -201,17 +240,37 @@ export default function SignInSheet(): ReactElement | null {
           </View>
 
           {step === 'code' && (
-            <Pressable
-              onPress={() => {
-                reset();
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Use a different email"
-            >
-              <Text style={[styles.switchText, { color: colors.textMuted }]}>
-                Use a different email
-              </Text>
-            </Pressable>
+            <View style={styles.secondaryRow}>
+              <Pressable
+                onPress={resend}
+                disabled={resendIn > 0 || busy}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: resendIn > 0 || busy }}
+                accessibilityLabel="Resend code"
+                style={styles.secondary}
+              >
+                <Text
+                  style={[
+                    styles.switchText,
+                    { color: resendIn > 0 ? colors.textMuted : colors.accent },
+                  ]}
+                >
+                  {resendIn > 0 ? `Resend code in ${resendIn} s` : 'Resend code'}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  reset();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Use a different email"
+                style={styles.secondary}
+              >
+                <Text style={[styles.switchText, { color: colors.textMuted }]}>
+                  Use a different email
+                </Text>
+              </Pressable>
+            </View>
           )}
         </View>
       </KeyboardAvoidingView>
@@ -255,5 +314,6 @@ const styles = StyleSheet.create({
   primaryText: { ...font.button },
   secondary: { minHeight: HIT_TARGET, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...font.body },
+  secondaryRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   switchText: { ...font.caption, textAlign: 'center' },
 });

@@ -1,7 +1,19 @@
 import { z } from 'zod';
 
-import { ElevationProfileSchema, LatLngSchema, LineStringSchema, BBoxSchema } from './route';
+import {
+  ElevationProfileSchema,
+  LatLngSchema,
+  LineStringSchema,
+  BBoxSchema,
+  ManeuverSchema,
+} from './route';
 import { SpotSourceSchema, SpotTypeSchema } from './spot';
+
+// ManeuverSchema moved to route.ts (device pass 2026-09-04 — a saved Route
+// carries its maneuvers, and this file already imports route.ts, so the
+// reverse import would cycle). Re-exported so every importer keeps working.
+export { ManeuverSchema };
+export type { Maneuver } from './route';
 
 /**
  * Tool I/O + LLM decision I/O schemas (M0-T06). Authority: Master Spec §50.
@@ -60,17 +72,6 @@ export const RouteThroughInputSchema = z.object({
 });
 export type RouteThroughInput = z.infer<typeof RouteThroughInputSchema>;
 
-/** A single turn-by-turn maneuver. Starting shape; mapped from Valhalla at M2. */
-export const ManeuverSchema = z.object({
-  type: z.string(),
-  instruction: z.string(),
-  distance_m: z.number().nonnegative().optional(),
-  /** R33-U6: the maneuver's road name(s) straight from the engine — the
-   *  continuity metric counts NAME RUNS, not instruction-string parses. */
-  street_names: z.array(z.string()).optional(),
-});
-export type Maneuver = z.infer<typeof ManeuverSchema>;
-
 /** One route leg between consecutive BREAK-type locations (R16-2).
  *  'through' middles never split legs — with S stop waypoints, S+1 legs. */
 export const RouteLegSchema = z.object({
@@ -95,6 +96,12 @@ export const RouteThroughOutputSchema = z.object({
    *  Optional-additive; absent on old fixtures. The engine talks — we now
    *  LISTEN (they were silently discarded for the project's whole life). */
   warnings: z.array(z.string()).optional(),
+  /** Device pass 2026-09-04: where each requested waypoint actually landed on
+   *  the road — the leg-boundary vertices, in request order — so a hand-built
+   *  drive can show its dots ON the line (the engine echoes the INPUT in its
+   *  own `locations`, which is useless for that). Present only when every
+   *  waypoint split a leg (/route's all-break call); absent from /match. */
+  locations: z.array(LatLngSchema).optional(),
 });
 export type RouteThroughOutput = z.infer<typeof RouteThroughOutputSchema>;
 

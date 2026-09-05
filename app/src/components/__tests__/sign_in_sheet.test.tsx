@@ -101,3 +101,46 @@ describe('SignInSheet keyboard behaviour (M8-T01)', () => {
     expect(dismiss.length).toBeGreaterThan(0);
   });
 });
+
+describe('SignInSheet resend (device pass, 2026-09-04)', () => {
+  it('offers "Resend code" after the cooldown and sends again to the same address', async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new AuthEngine({ cfg: CFG, store: memorySessionStore(null) });
+      const send = vi.spyOn(engine, 'sendCode').mockResolvedValue(undefined);
+      const tree = await openSheet(engine);
+      await act(async () => {
+        (fieldNamed(tree, 'Email address').props['onChangeText'] as (t: string) => void)('a@b.co');
+      });
+      await act(async () => {
+        tree.root
+          .findAll((n) => n.props['accessibilityLabel'] === 'Send code' && !!n.props['onPress'])[0]!
+          .props['onPress']();
+      });
+      expect(send).toHaveBeenCalledTimes(1);
+
+      // during the cooldown the button is disabled and says how long
+      const resend = () =>
+        tree.root.findAll(
+          (n) => n.props['accessibilityLabel'] === 'Resend code' && !!n.props['onPress'],
+        )[0]!;
+      expect(JSON.stringify(tree.toJSON())).toContain('Resend code in 30 s');
+      await act(async () => {
+        resend().props['onPress']();
+      });
+      expect(send).toHaveBeenCalledTimes(1); // ignored while cooling down
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
+      expect(JSON.stringify(tree.toJSON())).not.toContain('Resend code in');
+      await act(async () => {
+        resend().props['onPress']();
+      });
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send).toHaveBeenLastCalledWith('a@b.co');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

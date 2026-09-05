@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JwtVerifier } from '../auth/jwt';
 import { hasExif } from '../images/process';
 import type { StorageConfig } from '../images/storage';
+import { RateLimiter } from '../lib/rate_limit';
 import { buildServer } from '../server';
 
 import { reachableFrom } from './photos';
@@ -316,5 +317,64 @@ describe('DELETE /photos/:id', () => {
     expect(res.statusCode).toBe(204);
     expect(h.removed).toEqual(['u/s/p.jpg', 'u/s/p_thumb.jpg']);
     await h.app.close();
+  });
+});
+
+describe('rate limit + LAN host rewrite (device pass, 2026-09-04)', () => {
+  it('a limited request gets 429 and the upload NEVER runs', async () => {
+    // one upload per minute per IP: the second must be refused BEFORE the
+    // handler (the old hook sent the 429 and then let the upload happen)
+    const h = harness(
+      [
+        [{ owner_id: OWNER, source: 'user' }],
+        [{ n: 0 }],
+        [],
+        [{ owner_id: OWNER, source: 'user' }],
+        [{ n: 1 }],
+        [],
+      ],
+      {
+        rateLimiter: new RateLimiter({
+          perIp: [{ limit: 1, windowMs: 60_000 }],
+          perSession: [{ limit: 1, windowMs: 60_000 }],
+        }),
+      },
+    );
+    const body = await gpsJpeg();
+    const send = () =>
+      h.app.inject({
+        method: 'POST',
+        url: `/spots/${SPOT}/photos`,
+        headers: {
+          authorization: `Bearer ${tokenFor(OWNER)}`,
+          'content-type': 'application/octet-stream',
+        },
+        payload: body,
+      });
+    const first = await send();
+    expect(first.statusCode).toBe(201);
+    expect(h.uploads.size).toBe(2);
+    const second = await send();
+    expect(second.statusCode).toBe(429);
+    expect(second.headers['retry-after']).toBeDefined();
+    expect(h.uploads.size).toBe(2); // nothing more stored — the handler did not run
+    await h.app.close();
+  });
+
+  it('reachableFrom swaps a loopback host only for a LAN address', () => {
+    expect(reachableFrom('http://127.0.0.1:54321/o/x', '192.168.50.25:8080')).toBe(
+      'http://192.168.50.25:54321/o/x',
+    );
+    expect(reachableFrom('http://localhost:54321/o/x', '10.0.0.7')).toBe(
+      'http://10.0.0.7:54321/o/x',
+    );
+    // an Expo tunnel host would not forward the storage port — leave it alone
+    expect(reachableFrom('http://127.0.0.1:54321/o/x', 'abc-123.exp.direct')).toBe(
+      'http://127.0.0.1:54321/o/x',
+    );
+    // a hosted URL is never touched
+    expect(reachableFrom('https://proj.supabase.co/o/x', '192.168.1.2')).toBe(
+      'https://proj.supabase.co/o/x',
+    );
   });
 });

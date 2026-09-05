@@ -4,14 +4,17 @@ import type { FetchLike } from '../api';
 import { DataError } from '../data';
 import {
   deleteAccount,
+  deleteRoute,
   favouriteRoute,
   fetchRouteById,
   forkRoute,
   getPreferences,
   listFavouriteRouteIds,
+  renameRoute,
   setPreferences,
   unfavouriteRoute,
   updateVisibility,
+  visibilityLabel,
 } from '../library';
 
 /** M8-T05..T10 — the library wire paths: headers, idempotence hints, zod
@@ -90,5 +93,37 @@ describe('preferences (T10)', () => {
   it('malformed prefs are rejected, not trusted', async () => {
     const { f } = fetchOf(200, [{ weights: 'not-an-object' }]);
     await expect(getPreferences(CFG, 'tok', f)).rejects.toBeInstanceOf(DataError);
+  });
+});
+
+describe('rename + delete (device pass, 2026-09-04)', () => {
+  it('rename PATCHes the trimmed, capped name and asks for the row back', async () => {
+    const { f, holder } = fetchOf(200, [{ id: RID }]);
+    const name = await renameRoute(CFG, 'tok', RID, '  Sunday ridge loop  ', f);
+    expect(name).toBe('Sunday ridge loop');
+    expect(holder.last.url).toContain(`/routes?id=eq.${RID}`);
+    expect(holder.last.headers['prefer']).toBe('return=representation');
+    expect(JSON.parse(holder.last.body!)).toEqual({ name: 'Sunday ridge loop' });
+  });
+  it('rename refuses an empty name before touching the network', async () => {
+    const { f, holder } = fetchOf(200, [{ id: RID }]);
+    await expect(renameRoute(CFG, 'tok', RID, '   ', f)).rejects.toThrow(/name/);
+    expect(holder.last.url).toBe('');
+  });
+  it('rename on a non-owned route surfaces honestly (zero rows)', async () => {
+    const { f } = fetchOf(200, []);
+    await expect(renameRoute(CFG, 'tok', RID, 'x', f)).rejects.toThrow(/isn’t yours/);
+  });
+  it('delete asks for the deleted row back so a silent no-op cannot pass as done', async () => {
+    const { f, holder } = fetchOf(200, [{ id: RID }]);
+    await deleteRoute(CFG, 'tok', RID, f);
+    expect(holder.last.headers['prefer']).toBe('return=representation');
+    const { f: none } = fetchOf(200, []);
+    await expect(deleteRoute(CFG, 'tok', RID, none)).rejects.toThrow(/isn’t yours/);
+  });
+  it('visibility labels are plain words, never the raw enum', () => {
+    expect(visibilityLabel('private')).toBe('Private');
+    expect(visibilityLabel('unlisted')).toBe('Link only');
+    expect(visibilityLabel('public')).toBe('Public');
   });
 });

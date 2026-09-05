@@ -14,6 +14,7 @@
  */
 
 import { CircleLayer, ShapeSource, SymbolLayer } from '@rnmapbox/maps';
+import type { Route } from '@shared/types';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -28,6 +29,7 @@ import {
   type SpotRow,
   type SupabaseConfig,
 } from '../lib/data';
+import { useTopInset } from '../lib/insets';
 import { getSupabaseConfig } from '../lib/runtime';
 import { useAuth } from '../lib/use_auth';
 import { AMBER, font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
@@ -53,6 +55,38 @@ interface Selected {
   tags: string[];
   /** Spot id — present on spot selections (M10: opens the detail screen). */
   spotId?: string;
+  /** The seed route row — present on route selections (device pass: the
+   *  route sheet had no action; now it can be followed in place). */
+  route?: MapRouteRow;
+}
+
+/** A map_routes row as a followable Route. No turns are stored for seed
+ *  routes, so follow-mode takes its legacy path (re-match by position). */
+function routeFromMapRow(r: MapRouteRow): Route {
+  return {
+    geometry: r.geometry,
+    is_loop: r.is_loop,
+    waypoints: [],
+    distance_m: r.distance_m,
+    duration_s: r.duration_s,
+    curviness: r.curviness,
+    elevation_profile: null,
+    climb_m: r.climb_m,
+    highway_flag: false,
+    toll_flag: false,
+    ferry_flag: false,
+    unpaved_flag: false,
+    character_tags: r.character_tags as Route['character_tags'],
+    intensity: r.intensity as Route['intensity'],
+    free_tags: r.free_tags,
+    visibility: r.visibility as Route['visibility'],
+    owner_id: null,
+    origin_type: r.origin_type as Route['origin_type'],
+    forked_from: null,
+    stops: [],
+    name: r.name,
+    maneuvers: null,
+  };
 }
 
 /** Marker colours per spot type (†type distinction pre-iconography). */
@@ -90,6 +124,7 @@ export interface MapHomeProps {
 
 export default function MapHome(props: MapHomeProps): ReactElement {
   const { name: themeName, colors } = useTheme();
+  const topInset = useTopInset();
   const { status, freshAccessToken } = useAuth();
   const [routes, setRoutes] = useState<RoutesPhase>({ phase: 'loading' });
   /** Where the user is looking right now — handed to Add-spot so it opens on
@@ -119,21 +154,36 @@ export default function MapHome(props: MapHomeProps): ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadSpots, status]);
 
-  const load = useCallback(() => {
+  const loadRoutesOnly = useCallback(() => {
     setRoutes({ phase: 'loading' });
     loadRoutes(getSupabaseConfig())
       .then((rows) => setRoutes({ phase: 'loaded', rows }))
       .catch(() => setRoutes({ phase: 'error' }));
+  }, [loadRoutes]);
+
+  /** Retry: everything. */
+  const load = useCallback(() => {
+    loadRoutesOnly();
     pullSpots();
-  }, [loadRoutes, pullSpots]);
+  }, [loadRoutesOnly, pullSpots]);
 
+  // Routes once; spots whenever the credential changes (a sign-in reveals the
+  // user's own pins). Before this split a sign-in re-fetched the routes too
+  // and flashed "Loading routes…" over a map that was already showing them.
   useEffect(() => {
-    load();
-  }, [load]);
+    loadRoutesOnly();
+  }, [loadRoutesOnly]);
+  useEffect(() => {
+    pullSpots();
+  }, [pullSpots]);
 
-  // M10: returning from AddSpot re-pulls pins so the new one is visible (§18)
+  // M10: returning from AddSpot/Spot re-pulls pins so a new one is visible
+  // and a deleted one's sheet does not linger (§18)
   useEffect(() => {
-    const off = props.navigation?.addFocusListener?.(pullSpots);
+    const off = props.navigation?.addFocusListener?.(() => {
+      pullSpots();
+      setSelected((sel) => (sel?.kind === 'spot' ? null : sel));
+    });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pullSpots]);
@@ -148,16 +198,22 @@ export default function MapHome(props: MapHomeProps): ReactElement {
     [routes],
   );
 
+  /** The loaded rows, readable from the stable tap handler below. */
+  const rowsRef = useRef<MapRouteRow[]>([]);
+  if (routes.phase === 'loaded') rowsRef.current = routes.rows;
+
   const onRoutePress = useCallback((p: Record<string, unknown>) => {
     const name = typeof p.name === 'string' ? p.name : undefined;
     if (!name) return;
     const km = typeof p.distance_m === 'number' ? (p.distance_m / 1000).toFixed(1) : '?';
     const min = typeof p.duration_s === 'number' ? Math.round(p.duration_s / 60) : null;
+    const row = typeof p.id === 'string' ? rowsRef.current.find((r) => r.id === p.id) : undefined;
     setSelected({
       kind: 'route',
       title: name,
       line: `${km} km${min !== null ? ` · ≈${min} min` : ''}${p.is_loop ? ' · loop' : ''}`,
       tags: Array.isArray(p.character_tags) ? (p.character_tags as string[]) : [],
+      ...(row ? { route: row } : {}),
     });
   }, []);
 
@@ -230,14 +286,28 @@ export default function MapHome(props: MapHomeProps): ReactElement {
     <>
       {routes.phase === 'loading' && (
         <View
-          style={[styles.banner, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          style={[
+            styles.banner,
+            {
+              top: topInset + spacing.md,
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
         >
           <Text style={[styles.bannerText, { color: colors.textMuted }]}>Loading routes…</Text>
         </View>
       )}
       {routes.phase === 'error' && (
         <View
-          style={[styles.banner, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          style={[
+            styles.banner,
+            {
+              top: topInset + spacing.md,
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
         >
           <Text style={[styles.bannerText, { color: colors.danger }]}>
             Couldn't load routes — the map still works. Check the connection and try again.
@@ -283,6 +353,21 @@ export default function MapHome(props: MapHomeProps): ReactElement {
             </View>
           ))}
         </View>
+      )}
+      {selected.kind === 'route' && selected.route !== undefined && props.navigation && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Follow this drive"
+          onPress={() =>
+            props.navigation!.navigate('Follow', { route: routeFromMapRow(selected.route!) })
+          }
+          style={({ pressed }) => [
+            styles.sheetAction,
+            { borderColor: colors.accent, opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <Text style={[styles.sheetActionLabel, { color: colors.accent }]}>Follow this drive</Text>
+        </Pressable>
       )}
       {selected.kind === 'spot' && selected.spotId !== undefined && props.navigation && (
         <Pressable

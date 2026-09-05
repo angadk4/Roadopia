@@ -5,7 +5,7 @@
  * nothing more; moderation reads happen service-role-side only).
  */
 
-import type { FetchLike } from './api';
+import { boundedFetch, transportMessage, type FetchLike } from './api';
 import { DataError, type SupabaseConfig } from './data';
 
 export const REPORT_REASON_MAX = 500;
@@ -19,7 +19,7 @@ export async function submitReport(
 ): Promise<void> {
   const reason = report.reason.trim().slice(0, REPORT_REASON_MAX);
   if (reason.length === 0) throw new DataError('Say briefly what the problem is.', null);
-  const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const f = fetchImpl ?? boundedFetch();
   let res;
   try {
     // No `returning` on purpose: anon has INSERT but no SELECT (§55) — asking
@@ -39,9 +39,11 @@ export async function submitReport(
       }),
     });
   } catch (err) {
-    throw new DataError('Could not reach the data service — check your connection.', null, {
-      cause: err,
-    });
+    throw new DataError(
+      transportMessage(err, 'Could not reach the data service — check your connection.'),
+      null,
+      { cause: err },
+    );
   }
   if (!res.ok) throw new DataError('Could not send the report right now.', res.status);
 }

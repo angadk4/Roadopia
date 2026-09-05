@@ -12,6 +12,8 @@ import { font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
 export interface RefinePanelProps {
   onSend: (followUp: string) => void;
+  /** An extra line under the hint (e.g. which drive a tweak applies to). */
+  note?: string | null;
 }
 
 export default function RefinePanel(props: RefinePanelProps): ReactElement {
@@ -26,6 +28,7 @@ export default function RefinePanel(props: RefinePanelProps): ReactElement {
         Try “make it longer”, “more twisty”, “avoid highways”, “add a coffee stop” or “add a lunch
         stop”. Your hard constraints carry over.
       </Text>
+      {props.note && <Text style={[styles.hint, { color: colors.warn }]}>{props.note}</Text>}
       <View style={styles.row}>
         <TextInput
           value={text}

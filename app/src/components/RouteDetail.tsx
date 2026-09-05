@@ -162,6 +162,13 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
 
   return (
     <View style={styles.root}>
+      {/* a saved drive opens under its own name (device pass: every saved
+          drive opened under a static "Saved drive" header with no name in sight) */}
+      {route.name !== undefined && route.name.trim() !== '' && (
+        <Text style={[font.title, { color: colors.text }]} accessibilityLabel="Drive name">
+          {route.name}
+        </Text>
+      )}
       {/* the drive on the map */}
       <View style={[styles.mapWrap, { borderColor: colors.border }]}>
         <MapView
@@ -300,11 +307,10 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
         <Stat label="shape" value={route.is_loop ? 'loop' : 'A → B'} colors={colors} />
         {/* A hand-built or recorded route has no measured curvature — showing a
             flat 0.0 next to real measured stats claims a measurement nobody
-            made (Hard rule: never a claimed number). */}
-        {route.origin_type === 'ai' ? (
+            made (Hard rule: never a claimed number), and a "not measured"
+            placeholder in a stat slot just draws the eye to a gap. Omit it. */}
+        {route.origin_type === 'ai' && (
           <Stat label="twistiness" value={route.curviness.toFixed(1)} colors={colors} />
-        ) : (
-          <Stat label="twistiness" value="not measured" colors={colors} />
         )}
         {route.climb_m !== null && (
           <Stat label="climb" value={`↑ ${Math.round(route.climb_m)} m`} colors={colors} />

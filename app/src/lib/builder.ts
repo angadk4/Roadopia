@@ -19,16 +19,43 @@ export const EMPTY_BUILDER: BuilderState = { waypoints: [] };
 /** Spec cap (FR-050): enough for any hand-built drive, bounded for the wire. */
 export const MAX_WAYPOINTS = 25;
 
-export function addWaypoint(s: BuilderState, p: LatLng): BuilderState {
-  if (s.waypoints.length >= MAX_WAYPOINTS) return s;
+/** Why adding `p` would be a no-op — so the screen can SAY it instead of
+ *  silently doing nothing (device pass 2026-09-04). */
+export function whyCannotAdd(s: BuilderState, p: LatLng): 'full' | 'duplicate' | null {
+  if (s.waypoints.length >= MAX_WAYPOINTS) return 'full';
   const last = s.waypoints[s.waypoints.length - 1];
   // a double-tap on the same spot is a no-op, not a zero-length leg
-  if (last && Math.abs(last.lat - p.lat) < 1e-6 && Math.abs(last.lng - p.lng) < 1e-6) return s;
+  if (last && Math.abs(last.lat - p.lat) < 1e-6 && Math.abs(last.lng - p.lng) < 1e-6) {
+    return 'duplicate';
+  }
+  return null;
+}
+
+export function addWaypoint(s: BuilderState, p: LatLng): BuilderState {
+  if (whyCannotAdd(s, p) !== null) return s;
   return { waypoints: [...s.waypoints, p] };
 }
 
 export function undoWaypoint(s: BuilderState): BuilderState {
   return { waypoints: s.waypoints.slice(0, -1) };
+}
+
+/** Remove one point by index (tap a dot) — the legs on either side rejoin. */
+export function removeWaypoint(s: BuilderState, index: number): BuilderState {
+  if (index < 0 || index >= s.waypoints.length) return s;
+  return { waypoints: s.waypoints.filter((_, i) => i !== index) };
+}
+
+/** Why closing the loop would be a no-op, for the screen to say. */
+export function whyCannotCloseLoop(s: BuilderState): 'too_few' | 'closed' | 'full' | null {
+  const first = s.waypoints[0];
+  const last = s.waypoints[s.waypoints.length - 1];
+  if (!first || !last || s.waypoints.length < 2) return 'too_few';
+  if (Math.abs(last.lat - first.lat) < 1e-6 && Math.abs(last.lng - first.lng) < 1e-6) {
+    return 'closed';
+  }
+  if (s.waypoints.length >= MAX_WAYPOINTS) return 'full';
+  return null;
 }
 
 export function clearWaypoints(): BuilderState {
@@ -87,6 +114,8 @@ export function toManualRoute(snapped: RouteThroughOutput, waypoints: LatLng[]):
     generation_request_id: null,
     satisfied_constraints: null,
     stops: [],
+    // the engine's turns for exactly this snap — follow-mode uses them as-is
+    maneuvers: snapped.maneuvers,
   } as Route;
 }
 

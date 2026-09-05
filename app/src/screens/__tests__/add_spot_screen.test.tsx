@@ -128,3 +128,54 @@ describe('AddSpotScreen', () => {
     expect(createFn).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('AddSpotScreen pin + keyboard (device pass, 2026-09-04)', () => {
+  it('the pin is asked of the MAP at press time, not read from a stale layout', async () => {
+    const { MOCK_MAP } = await import('../../test/rnmapbox-stub');
+    const before = MOCK_MAP.center;
+    MOCK_MAP.center = [-79.75, 43.65]; // the user panned here
+    try {
+      const createFn = vi.fn(async () => 'new-id');
+      const tree = await render(createFn, []);
+      const wrap = tree.root.findAll((n) => typeof n.props['onLayout'] === 'function')[0]!;
+      await act(async () => {
+        (wrap.props['onLayout'] as (e: unknown) => void)({
+          nativeEvent: { layout: { width: 390, height: 500 } },
+        });
+      });
+      await press(tree, 'Type Viewpoint');
+      await type(tree, 'Spot name', 'Ridge View');
+      await press(tree, 'Save spot');
+      await act(async () => {});
+      expect(createFn).toHaveBeenCalledTimes(1);
+      const draft = (createFn.mock.calls[0] as unknown[])[2] as { lat: number; lng: number };
+      expect(draft.lat).toBeCloseTo(43.65, 6);
+      expect(draft.lng).toBeCloseTo(-79.75, 6);
+    } finally {
+      MOCK_MAP.center = before;
+    }
+  });
+
+  it('the form rides above the keyboard (Save is never hidden behind it)', async () => {
+    const tree = await render(vi.fn(), []);
+    expect(JSON.stringify(tree.toJSON())).toContain('rn-keyboardavoidingview');
+  });
+});
+
+describe('AddSpotScreen double-tap (review, 2026-09-04)', () => {
+  it('two taps on Save in quick succession create ONE spot', async () => {
+    const createFn = vi.fn(async () => 'new-id');
+    const tree = await render(createFn, []);
+    await press(tree, 'Type Viewpoint');
+    await type(tree, 'Spot name', 'Ridge View');
+    const node = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'Save spot' && !!n.props['onPress'],
+    )[0]!;
+    await act(async () => {
+      (node.props['onPress'] as () => void)();
+      (node.props['onPress'] as () => void)(); // before the pin has resolved
+    });
+    await act(async () => {});
+    expect(createFn).toHaveBeenCalledTimes(1);
+  });
+});

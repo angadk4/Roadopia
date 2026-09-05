@@ -4,6 +4,12 @@
  * the raw original (spec §56: nothing unprocessed is ever retrievable). The
  * picker asks for photo-library access only when tapped (§18) and transcodes
  * HEIC to JPEG on pick, matching the pipeline's accepted formats.
+ *
+ * Device pass (2026-09-04): delete needs a second tap on a 44 pt target; the
+ * button says "Uploading…" (we cannot see the server's processing step, so
+ * we do not claim it); the count against the per-spot cap is shown; and a
+ * photo over the server's size cap is refused before a long upload, not
+ * after it.
  */
 
 import { useEffect, useState, type ReactElement } from 'react';
@@ -15,10 +21,22 @@ import { getApiBaseUrl } from '../lib/runtime';
 import { useAuth } from '../lib/use_auth';
 import { font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
+/** Client mirror of backend/src/routes/photos.ts MAX_PHOTOS_PER_SPOT. The
+ *  server enforces it inside the insert; this only lets the UI say so first. */
+export const MAX_PHOTOS_PER_SPOT = 6;
+/** Client mirror of backend/src/images/process.ts MAX_IMAGE_BYTES (10 MB). */
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+/** What the picker hands back: the local uri, and its size when the OS says. */
+export interface PickedImage {
+  uri: string;
+  bytes?: number | null;
+}
+
 export interface PhotoUploadProps {
   spotId: string;
-  /** Injectable for tests. */
-  pickFn?: () => Promise<string | null>;
+  /** Injectable for tests. A bare string is accepted as a uri. */
+  pickFn?: () => Promise<PickedImage | string | null>;
   uploadFn?: typeof uploadSpotPhoto;
   listFn?: typeof listSpotPhotos;
   deleteFn?: typeof deletePhoto;
@@ -26,7 +44,7 @@ export interface PhotoUploadProps {
 }
 
 /** Default picker — imported lazily so node tests never load the native module. */
-async function pickImage(): Promise<string | null> {
+async function pickImage(): Promise<PickedImage | null> {
   const ImagePicker = await import('expo-image-picker');
   // No permission request: the modern iOS/Android photo pickers hand back one
   // chosen image without library access, and gating on a permission the picker
@@ -38,7 +56,8 @@ async function pickImage(): Promise<string | null> {
     allowsMultipleSelection: false,
   });
   if (result.canceled || result.assets.length === 0) return null;
-  return result.assets[0]!.uri;
+  const asset = result.assets[0]!;
+  return { uri: asset.uri, bytes: asset.fileSize ?? null };
 }
 
 type Phase = { kind: 'idle' } | { kind: 'uploading' } | { kind: 'problem'; message: string };
@@ -52,7 +71,7 @@ function problemText(err: unknown, fallback: string): string {
 
 export default function PhotoUpload(props: PhotoUploadProps): ReactElement {
   const { colors } = useTheme();
-  const { freshAccessToken } = useAuth();
+  const { freshAccessToken, status } = useAuth();
   const baseUrl = props.baseUrl ?? getApiBaseUrl();
   const pick = props.pickFn ?? pickImage;
   const upload = props.uploadFn ?? uploadSpotPhoto;
@@ -61,26 +80,54 @@ export default function PhotoUpload(props: PhotoUploadProps): ReactElement {
 
   const [photos, setPhotos] = useState<PhotoRef[]>([]);
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
+  /** The photo whose delete is armed (first tap); second tap deletes. */
+  const [armedId, setArmedId] = useState<string | null>(null);
+  /** Whether the strip is KNOWN: the count against the cap is only claimed
+   *  once the list actually loaded (review finding: "0 of 6" after a failed
+   *  load was a number the component never measured). */
+  const [listState, setListState] = useState<'loading' | 'ok' | 'failed'>('loading');
+  const [listAttempt, setListAttempt] = useState(0);
 
+  // Keyed on the auth status too: mounted during the initial session read,
+  // the first attempt finds no token and must run again once it is known.
   useEffect(() => {
+    if (status !== 'signedIn') return;
+    let live = true;
     void (async () => {
       try {
         const token = await freshAccessToken();
         if (!token) return;
-        setPhotos(await list({ baseUrl, accessToken: token }, props.spotId));
+        const rows = await list({ baseUrl, accessToken: token }, props.spotId);
+        if (!live) return;
+        setPhotos(rows);
+        setListState('ok');
       } catch {
-        // photo list failing is enrichment loss, not a broken screen (§18)
+        // photo list failing is enrichment loss, not a broken screen (§18) —
+        // but it is SAID, and no count is claimed
+        if (live) setListState('failed');
       }
     })();
+    return () => {
+      live = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.spotId]);
+  }, [props.spotId, status, listAttempt]);
+
+  const full = listState === 'ok' && photos.length >= MAX_PHOTOS_PER_SPOT;
 
   const add = (): void => {
     if (phase.kind === 'uploading') return; // two quick taps opened two pickers
+    if (full) {
+      setPhase({
+        kind: 'problem',
+        message: `That's the most photos a spot can have (${MAX_PHOTOS_PER_SPOT}). Delete one to add another.`,
+      });
+      return;
+    }
     void (async () => {
-      let uri: string | null;
+      let picked: PickedImage | string | null;
       try {
-        uri = await pick();
+        picked = await pick();
       } catch {
         setPhase({
           kind: 'problem',
@@ -88,7 +135,16 @@ export default function PhotoUpload(props: PhotoUploadProps): ReactElement {
         });
         return;
       }
-      if (uri === null) return; // cancelled — not an error
+      if (picked === null) return; // cancelled — not an error
+      const image: PickedImage = typeof picked === 'string' ? { uri: picked } : picked;
+      if (typeof image.bytes === 'number' && image.bytes > MAX_IMAGE_BYTES) {
+        // said BEFORE a 10 MB upload the server would refuse at the end
+        setPhase({
+          kind: 'problem',
+          message: 'That photo is over 10 MB — pick a smaller one, or a screenshot of it.',
+        });
+        return;
+      }
       try {
         setPhase({ kind: 'uploading' });
         const token = await freshAccessToken();
@@ -98,7 +154,7 @@ export default function PhotoUpload(props: PhotoUploadProps): ReactElement {
             code: 'auth',
             message: 'Sign in again to add photos.',
           });
-        const ref = await upload({ baseUrl, accessToken: token }, props.spotId, uri);
+        const ref = await upload({ baseUrl, accessToken: token }, props.spotId, image.uri);
         setPhotos((p) => [...p, ref]);
         setPhase({ kind: 'idle' });
       } catch (err) {
@@ -108,6 +164,11 @@ export default function PhotoUpload(props: PhotoUploadProps): ReactElement {
   };
 
   const removeOne = (id: string): void => {
+    if (armedId !== id) {
+      setArmedId(id); // first tap arms; a stray tap must not delete a photo
+      return;
+    }
+    setArmedId(null);
     void (async () => {
       try {
         const token = await freshAccessToken();
@@ -129,40 +190,70 @@ export default function PhotoUpload(props: PhotoUploadProps): ReactElement {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.strip}
         >
-          {photos.map((p) => (
-            <View key={p.id} style={styles.cell}>
-              <Image
-                source={{ uri: p.thumb_url }}
-                style={[styles.thumb, { backgroundColor: colors.surface }]}
-                accessibilityLabel="Spot photo"
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Delete photo"
-                onPress={() => removeOne(p.id)}
-                style={[
-                  styles.deleteBadge,
-                  { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.deleteMark, { color: colors.danger }]}>✕</Text>
-              </Pressable>
-            </View>
-          ))}
+          {photos.map((p) => {
+            const armed = armedId === p.id;
+            return (
+              <View key={p.id} style={styles.cell}>
+                <Image
+                  source={{ uri: p.thumb_url }}
+                  style={[styles.thumb, { backgroundColor: colors.surface }]}
+                  accessibilityLabel="Spot photo"
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={armed ? 'Confirm delete photo' : 'Delete photo'}
+                  onPress={() => removeOne(p.id)}
+                  style={[
+                    styles.deleteBadge,
+                    armed && styles.deleteBadgeArmed,
+                    {
+                      backgroundColor: armed ? colors.danger : colors.surfaceRaised,
+                      borderColor: armed ? colors.danger : colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[styles.deleteMark, { color: armed ? colors.onAccent : colors.danger }]}
+                  >
+                    {armed ? 'Delete?' : '✕'}
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          })}
         </ScrollView>
       )}
       {phase.kind === 'problem' && (
         <Text style={[styles.problem, { color: colors.danger }]}>{phase.message}</Text>
+      )}
+      {listState === 'failed' && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Retry loading photos"
+          onPress={() => {
+            setListState('loading');
+            setListAttempt((a) => a + 1);
+          }}
+          style={styles.retry}
+        >
+          <Text style={[styles.problem, { color: colors.textMuted }]}>
+            Couldn’t load this spot’s photos — tap to try again.
+          </Text>
+        </Pressable>
       )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Add a photo"
         disabled={phase.kind === 'uploading'}
         onPress={add}
-        style={[styles.addBtn, { borderColor: colors.border }]}
+        style={[styles.addBtn, { borderColor: colors.border, opacity: full ? 0.6 : 1 }]}
       >
         <Text style={[styles.addLabel, { color: colors.text }]}>
-          {phase.kind === 'uploading' ? 'Processing…' : 'Add a photo'}
+          {phase.kind === 'uploading'
+            ? 'Uploading…'
+            : listState === 'ok'
+              ? `Add a photo (${photos.length} of ${MAX_PHOTOS_PER_SPOT})`
+              : 'Add a photo'}
         </Text>
       </Pressable>
       <Text style={[styles.note, { color: colors.textMuted }]}>
@@ -180,17 +271,21 @@ const styles = StyleSheet.create({
   thumb: { width: 96, height: 96, borderRadius: radius.md },
   deleteBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    top: 0,
+    right: 0,
+    minWidth: HIT_TARGET,
+    minHeight: HIT_TARGET,
+    borderBottomLeftRadius: radius.md,
+    borderTopRightRadius: radius.md,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
   },
-  deleteMark: { fontSize: 13, fontWeight: '700' },
+  deleteBadgeArmed: { left: 0, borderRadius: radius.md },
+  deleteMark: { ...font.caption, fontWeight: '700' },
   problem: { ...font.caption },
+  retry: { minHeight: HIT_TARGET, justifyContent: 'center' },
   addBtn: {
     minHeight: HIT_TARGET,
     borderRadius: radius.md,

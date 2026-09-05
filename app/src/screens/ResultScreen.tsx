@@ -46,6 +46,9 @@ export interface ResultScreenProps {
   navigation: {
     goBack: () => void;
     navigate: (screen: string, params?: Record<string, unknown>) => void;
+    /** Pop to the stack's form. Absent in bare test renders → falls back to
+     *  goBack. */
+    goHome?: () => void;
   };
   route: { params?: ResultScreenParams };
 }
@@ -78,6 +81,9 @@ export default function ResultScreen(props: ResultScreenProps): ReactElement {
       style={{ backgroundColor: colors.bg }}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
+      // iOS: the refine input and the drive-name field sit low on the page;
+      // without this the keyboard covers them (device pass)
+      automaticallyAdjustKeyboardInsets
     >
       {/* option switcher — deterministic variety (FB-4) */}
       {alternates.length > 0 && (
@@ -159,10 +165,18 @@ export default function ResultScreen(props: ResultScreenProps): ReactElement {
         )}
         {params.constraints && (
           <RefinePanel
+            // A tweak merges into the RECOMMENDED drive's constraints (that is
+            // what `constraints` holds), so the comparison is against it too —
+            // never against a runner-up the tweak was not applied to.
+            note={
+              viewingBest
+                ? null
+                : 'Tweaks apply to the recommended drive — its constraints are the ones held.'
+            }
             onSend={(followUp) =>
               props.navigation.navigate('Progress', {
                 request: buildRefineRequest(params.constraints!, followUp),
-                previous: summarizeRoute(shown),
+                previous: summarizeRoute(best),
               })
             }
           />
@@ -183,10 +197,16 @@ export default function ResultScreen(props: ResultScreenProps): ReactElement {
       </Pressable>
 
       {/* M8-T04: the product's first gated action (FR-080/201) — saves the
-          currently SHOWN option (runner-ups are saveable too). */}
+          currently SHOWN option (runner-ups are saveable too). Keyed on the
+          option so "Saved ✓" for one option never sticks to the next. */}
       <SaveDriveButton
+        key={selected}
         route={shown}
         agentExplanation={viewingBest ? (params.explanation?.text ?? null) : null}
+        // the TAB name bubbles up to the tab navigator; `screen` + `pop` land
+        // on the LIST (a tab remembers whichever detail it was left on, and
+        // the new row is only reloaded by the list's own focus)
+        onViewSaved={() => props.navigation.navigate('Saved', { screen: 'SavedHome', pop: true })}
       />
 
       {/* M9-T07 (FR-115..117): best-effort, honestly framed */}
@@ -197,7 +217,9 @@ export default function ResultScreen(props: ResultScreenProps): ReactElement {
 
       <Pressable
         accessibilityRole="button"
-        onPress={props.navigation.goBack}
+        // popToTop where the stack provides it: after a refinement chain,
+        // goBack would land on the PREVIOUS result, not the form
+        onPress={props.navigation.goHome ?? props.navigation.goBack}
         style={({ pressed }) => [
           styles.again,
           { borderColor: colors.accent, opacity: pressed ? 0.7 : 1 },

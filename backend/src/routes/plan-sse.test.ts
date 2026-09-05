@@ -75,6 +75,11 @@ describe('POST /plan SSE (M6-T04)', () => {
       expect(routeEvent && routeEvent.type === 'route' && routeEvent.route.distance_m).toBe(
         ROUTE_FIXTURE.distance_m,
       );
+      // Device pass 2026-09-04: the served route carries the engine's
+      // maneuvers, so follow-mode never re-derives turns by re-matching.
+      expect(routeEvent?.type === 'route' ? routeEvent.route.maneuvers : null).toEqual(
+        ROUTE_FIXTURE.maneuvers,
+      );
       const done = run.events[run.events.length - 1];
       expect(done?.type === 'done' && done.status).toBe('ok');
     } finally {

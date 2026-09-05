@@ -12,7 +12,7 @@
 import { RouteSchema, type Route } from '@shared/types';
 import { z } from 'zod';
 
-import type { FetchLike } from './api';
+import { boundedFetch, transportMessage, type FetchLike } from './api';
 import { DataError, type SupabaseConfig } from './data';
 
 async function rest(
@@ -26,7 +26,7 @@ async function rest(
   },
   fetchImpl?: FetchLike,
 ): Promise<{ status: number; text: string }> {
-  const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const f = fetchImpl ?? boundedFetch();
   let res;
   try {
     res = await f(`${cfg.url}/rest/v1${path}`, {
@@ -40,9 +40,11 @@ async function rest(
       ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
     });
   } catch (err) {
-    throw new DataError('Could not reach the data service — check your connection.', null, {
-      cause: err,
-    });
+    throw new DataError(
+      transportMessage(err, 'Could not reach the data service — check your connection.'),
+      null,
+      { cause: err },
+    );
   }
   return { status: res.status, text: await res.text() };
 }
@@ -156,6 +158,70 @@ export async function forkRoute(
   return id.data;
 }
 
+export type Visibility = 'public' | 'private' | 'unlisted';
+
+/** Plain words for a visibility value — the raw enum used to reach the list
+ *  and the chips as "private"/"unlisted" (device pass copy audit). */
+export function visibilityLabel(v: string): string {
+  if (v === 'public') return 'Public';
+  if (v === 'unlisted') return 'Link only';
+  return 'Private';
+}
+
+/** Longest name the DB keeps (0025 save_route: left(name, 80)). */
+export const ROUTE_NAME_MAX = 80;
+
+/** Owner-only rename (device pass: every loop was "42-minute loop" forever —
+ *  the rename path a code comment promised did not exist). */
+export async function renameRoute(
+  cfg: SupabaseConfig,
+  accessToken: string,
+  routeId: string,
+  name: string,
+  fetchImpl?: FetchLike,
+): Promise<string> {
+  const clean = name.trim().slice(0, ROUTE_NAME_MAX);
+  if (clean === '') throw new DataError('Give the drive a name.', null);
+  const { status, text } = await rest(
+    cfg,
+    `/routes?id=eq.${encodeURIComponent(routeId)}`,
+    {
+      method: 'PATCH',
+      body: { name: clean },
+      accessToken,
+      headers: { prefer: 'return=representation' },
+    },
+    fetchImpl,
+  );
+  guard(status, 'Could not rename the drive right now.');
+  const rows = z.array(z.unknown()).safeParse(JSON.parse(text));
+  if (!rows.success || rows.data.length === 0) {
+    throw new DataError('That drive isn’t yours to change.', status);
+  }
+  return clean;
+}
+
+/** Owner-only delete. RLS decides; a zero-row result is surfaced honestly
+ *  rather than reported as done. */
+export async function deleteRoute(
+  cfg: SupabaseConfig,
+  accessToken: string,
+  routeId: string,
+  fetchImpl?: FetchLike,
+): Promise<void> {
+  const { status, text } = await rest(
+    cfg,
+    `/routes?id=eq.${encodeURIComponent(routeId)}`,
+    { method: 'DELETE', accessToken, headers: { prefer: 'return=representation' } },
+    fetchImpl,
+  );
+  guard(status, 'Could not delete the drive right now.');
+  const rows = z.array(z.unknown()).safeParse(JSON.parse(text));
+  if (!rows.success || rows.data.length === 0) {
+    throw new DataError('That drive isn’t yours to delete.', status);
+  }
+}
+
 /** Owner-only visibility change (T08; RLS zero-row = not yours, surfaced). */
 export async function updateVisibility(
   cfg: SupabaseConfig,
@@ -193,7 +259,7 @@ export async function deleteAccount(
   accessToken: string,
   fetchImpl?: FetchLike,
 ): Promise<void> {
-  const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+  const f = fetchImpl ?? boundedFetch();
   let res;
   try {
     res = await f(`${apiBaseUrl}/account`, {
@@ -201,9 +267,11 @@ export async function deleteAccount(
       headers: { authorization: `Bearer ${accessToken}` },
     });
   } catch (err) {
-    throw new DataError('Could not reach the server — check your connection.', null, {
-      cause: err,
-    });
+    throw new DataError(
+      transportMessage(err, 'Could not reach the server — check your connection.'),
+      null,
+      { cause: err },
+    );
   }
   guard(res.status, 'Could not delete the account right now — try again.');
 }

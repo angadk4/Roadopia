@@ -36,9 +36,18 @@ function host(tag: string) {
 
 export const View = host('rn-view');
 export const Text = host('rn-text');
-export const ScrollView = host('rn-scrollview');
+/** ScrollView takes its pull-to-refresh control as an ELEMENT prop; kept as a
+ *  prop it would sit in the JSON tree with its fiber owner and make
+ *  JSON.stringify circular, so it is rendered as a first child instead. */
+export function ScrollView(props: AnyProps & { refreshControl?: ReactNode }): ReactElement {
+  const { children, refreshControl, ...rest } = props;
+  assertNoBareText('rn-scrollview', children);
+  return createElement('rn-scrollview', rest, refreshControl ?? null, children);
+}
 export const TextInput = host('rn-textinput');
 export const ActivityIndicator = host('rn-activityindicator');
+/** Pull-to-refresh: passed as ScrollView's `refreshControl` element. */
+export const RefreshControl = host('rn-refreshcontrol');
 /** M8-T01: the sign-in sheet is a Modal that rides above the keyboard. Modal
  *  renders its children inline here (node has no native overlay), which is
  *  what the sheet tests want to inspect. */
