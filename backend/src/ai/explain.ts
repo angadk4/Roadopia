@@ -20,7 +20,8 @@ export interface RouteFacts {
   durationMin: number;
   distanceKm: number;
   targetMin: number | null;
-  curviness: number;
+  /** Measured twistiness; null = withheld or never measured for this line (BD-203). */
+  curviness: number | null;
   /** Named roads actually on the route (from maneuvers), deduped. */
   roadNames: string[];
   /** Real stops included (name + type from the spots table; arrival measured
@@ -51,6 +52,15 @@ export interface RouteFacts {
     avoids: string[];
     places: string[];
   };
+  /**
+   * BD-203 (I) — the request SHAPE. The template said "loop" for every shape,
+   * so a point-to-point drive was narrated as a loop. Absent (or 'loop') keeps
+   * the loop wording and a byte-identical prompt; 'a_to_b' narrates "a drive
+   * from X to Y". The caller (plan.ts) sets it from constraints.shape.
+   */
+  shape?: 'loop' | 'a_to_b';
+  /** BD-203 (I) — the destination's name for an A→B (grounding allows it). */
+  destinationName?: string | null;
 }
 
 export interface Explanation {
@@ -71,6 +81,7 @@ function groundingFactsOf(facts: RouteFacts): GroundingFacts {
   return {
     allowedNames: [
       ...(facts.originName ? [facts.originName] : []),
+      ...(facts.destinationName ? [facts.destinationName] : []), // BD-203: A→B destination
       ...facts.roadNames,
       ...facts.stops.map((s) => s.name),
     ],
@@ -78,7 +89,7 @@ function groundingFactsOf(facts: RouteFacts): GroundingFacts {
       facts.durationMin,
       facts.distanceKm,
       ...(facts.targetMin !== null ? [facts.targetMin] : []),
-      facts.curviness,
+      ...(facts.curviness !== null ? [facts.curviness] : []),
       // measured stop arrivals (R16-3) — "≈40 min in" must ground
       ...facts.stops.flatMap((s) => (s.arrival_min !== null ? [s.arrival_min] : [])),
     ],
@@ -94,9 +105,12 @@ export function templateExplanation(facts: RouteFacts): Explanation {
         `${s.name} (${s.type}${s.arrival_min !== null ? `, ≈${Math.round(s.arrival_min)} min in` : ''})`,
     )
     .join(', ');
+  // BD-203 (I): a point-to-point request is "a drive from X to Y", never a loop
+  const isAtoB = facts.shape === 'a_to_b';
   const bits = [
-    `A ${Math.round(facts.durationMin)} minute, ${Math.round(facts.distanceKm)} km loop` +
+    `A ${Math.round(facts.durationMin)} minute, ${Math.round(facts.distanceKm)} km ${isAtoB ? 'drive' : 'loop'}` +
       (facts.originName ? ` from ${facts.originName}` : '') +
+      (isAtoB && facts.destinationName ? ` to ${facts.destinationName}` : '') +
       (roads ? `, running ${roads}` : '') +
       '.',
   ];
@@ -115,12 +129,14 @@ export function templateTitleSummaryTags(facts: RouteFacts): TitleSummaryTags {
   const road = facts.roadNames[0];
   const title = (
     (facts.originName ? `${facts.originName} ` : '') +
-    (road ? `via ${road}` : `${Math.round(facts.durationMin)} min loop`)
+    (road
+      ? `via ${road}`
+      : `${Math.round(facts.durationMin)} min ${facts.shape === 'a_to_b' ? 'drive' : 'loop'}`)
   ).slice(0, 60);
   return {
     title,
     summary: templateExplanation(facts).text,
-    tags: facts.curviness >= 1.5 ? ['twisty'] : ['rural'],
+    tags: facts.curviness !== null && facts.curviness >= 1.5 ? ['twisty'] : ['rural'],
     source: 'template',
   };
 }

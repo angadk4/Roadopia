@@ -14,6 +14,7 @@ import {
   matchAgrees,
   pointAtDistance,
   splitAtAlong,
+  trimProgressWindow,
 } from '../follow';
 
 /** M9-T06 — follow-mode geometry (FR-110/111). */
@@ -42,6 +43,38 @@ describe('buildFollowTrack', () => {
 
   it('yields no anchors without maneuvers — guidance honestly absent', () => {
     expect(buildFollowTrack(LINE, []).anchors).toHaveLength(0);
+  });
+
+  it('a saved multi-leg drive never anchors "you have arrived" mid-drive (device pass, 2026-09-07)', () => {
+    // as the engine returned a hand-built drive with a waypoint at 4 km: the
+    // first leg "arrives" there (length 0) and the second "starts" again on
+    // the same road — the card read "then: You have arrived at your destination"
+    const t = buildFollowTrack(LINE, [
+      { type: 'start', instruction: 'Drive east.', distance_m: 4000, street_names: ['Main St'] },
+      { type: 'destination', instruction: 'You have arrived at your destination.', distance_m: 0 },
+      {
+        type: 'start',
+        instruction: 'Drive east on Main St.',
+        distance_m: 1000,
+        street_names: ['Main St'],
+      },
+      {
+        type: 'left',
+        instruction: 'Turn left onto Forks Rd.',
+        distance_m: 2000,
+        street_names: ['Forks Rd'],
+      },
+      { type: 'destination', instruction: 'You have arrived at your destination.', distance_m: 0 },
+    ]);
+    expect(t.anchors.map((a) => a.instruction)).toEqual([
+      'Turn left onto Forks Rd.',
+      'You have arrived at your destination.',
+    ]);
+    // the turn is still at 5/7 of the line: the folded leg kept the running sum honest
+    expect(t.anchors[0]!.atM / t.totalM).toBeCloseTo(5 / 7, 2);
+    const st = followStatus(t, { lat: 43, lng: -80 }, null);
+    expect(st.hint?.instruction).toBe('Turn left onto Forks Rd.');
+    expect(st.then?.instruction).toBe('You have arrived at your destination.');
   });
 });
 
@@ -264,17 +297,151 @@ describe('guidance travelling with the route (device pass, 2026-09-04)', () => {
     expect(loc.alongM).toBeLessThan(200);
   });
 
-  it('etaSeconds uses the route pace until real movement is observed', () => {
+  it('etaSeconds: the planned pace until a real window of progress exists, then the windowed rate', () => {
     expect(etaSeconds(10_000, [], 40_000, 3_600)).toBeCloseTo(900, 0);
-    expect(etaSeconds(10_000, [20, 20, 20, 20], 40_000, 3_600)).toBeCloseTo(500, 0);
-    expect(etaSeconds(10_000, [0.2, 0.1], 40_000, 3_600)).toBeCloseTo(900, 0); // parked
+    // 20 m/s for two minutes (2.4 km): the observed pace takes over
+    const cruise = Array.from({ length: 13 }, (_, i) => ({ t: i * 10_000, alongM: i * 200 }));
+    expect(etaSeconds(10_000, cruise, 40_000, 3_600)).toBeCloseTo(500, 0);
+    // a 45 s red light inside the window moves the estimate a little — never 4×
+    const light = [
+      ...cruise,
+      ...Array.from({ length: 5 }, (_, i) => ({ t: 120_000 + (i + 1) * 9_000, alongM: 2_400 })),
+    ];
+    const eta = etaSeconds(10_000, light, 40_000, 3_600)!;
+    expect(eta).toBeGreaterThan(500);
+    expect(eta).toBeLessThan(750);
+    // too little to judge (30 s / 600 m) → still the planned pace
+    expect(
+      etaSeconds(
+        10_000,
+        [
+          { t: 0, alongM: 0 },
+          { t: 30_000, alongM: 600 },
+        ],
+        40_000,
+        3_600,
+      ),
+    ).toBeCloseTo(900, 0);
+    // parked for the whole window → no progress → planned pace, not infinity
+    const parked = Array.from({ length: 10 }, (_, i) => ({ t: i * 10_000, alongM: 5_000 }));
+    expect(etaSeconds(10_000, parked, 40_000, 3_600)).toBeCloseTo(900, 0);
     expect(etaSeconds(10_000, [], 0, 0)).toBeNull();
+    // the window forgets what is older than PACE_WINDOW_MS
+    expect(trimProgressWindow(cruise, 400_000)).toHaveLength(0);
+    expect(trimProgressWindow(cruise, 120_000)).toHaveLength(13);
   });
 
   it('fmtDuration reads as a duration', () => {
     expect(fmtDuration(720)).toBe('12 min');
     expect(fmtDuration(4_800)).toBe('1 h 20 min');
     expect(fmtDuration(7_200)).toBe('2 h');
+  });
+});
+
+describe('driving logic (review, 2026-09-07)', () => {
+  /** An out-and-back: 2 km east, then straight back over the same road. */
+  const OUT_AND_BACK: LineString = {
+    type: 'LineString',
+    coordinates: [
+      [-80, 43],
+      [-79.99, 43],
+      [-79.98, 43],
+      [-79.99, 43],
+      [-80, 43],
+    ],
+  };
+  const EW = 0.01 * 111_320 * Math.cos((43 * Math.PI) / 180); // ~814 m per vertex
+
+  it('progress never walks backwards through a U-turn when the course is known', () => {
+    const t = buildFollowTrack(OUT_AND_BACK, [
+      { type: 'start', instruction: 'Drive east.', distance_m: 2 * EW },
+      { type: 'uturn_left', instruction: 'Make a U-turn.', distance_m: 2 * EW },
+      { type: 'destination', instruction: 'Arrive.', distance_m: 0 },
+    ]);
+    let last: number | null = null;
+    let minAlong: number | null = null;
+    const trail: number[] = [];
+    for (let d = 0; d <= t.totalM; d += 15) {
+      const heading = d < t.totalM / 2 ? 90 : 270; // east out, west home
+      const st = followStatus(t, pointAtDistance(t, d), last, {
+        course: { headingDeg: heading, speedMps: 15 },
+        minAlongM: minAlong,
+      });
+      expect(st.offRoute).toBe(false);
+      trail.push(st.alongM);
+      last = st.alongM;
+      minAlong = minAlong === null ? st.alongM : Math.min(minAlong, st.alongM);
+    }
+    for (let i = 1; i < trail.length; i++) {
+      expect(trail[i]!).toBeGreaterThanOrEqual(trail[i - 1]! - 1);
+    }
+    // ...and the U-turn hint is gone once the car is heading home
+    const home = followStatus(t, pointAtDistance(t, t.totalM * 0.7), t.totalM * 0.69, {
+      course: { headingDeg: 270, speedMps: 15 },
+      minAlongM: 0,
+    });
+    expect(home.hint?.instruction).toBe('Arrive.');
+    // arrival is recognised at the end
+    const end = followStatus(t, pointAtDistance(t, t.totalM), t.totalM - 20, {
+      course: { headingDeg: 270, speedMps: 15 },
+      minAlongM: 0,
+    });
+    expect(end.done).toBe(true);
+  });
+
+  it('without a course (parked, or no heading) the old position rule still applies', () => {
+    const t = buildFollowTrack(OUT_AND_BACK, []);
+    const st = followStatus(t, pointAtDistance(t, 400), 380, {
+      course: { headingDeg: null, speedMps: 0 },
+    });
+    expect(st.alongM).toBeCloseTo(400, 0);
+  });
+
+  it('a turn stays the hint AT its junction and hands over once it is passed', () => {
+    const t = buildFollowTrack(LINE, MANEUVERS);
+    const turnAt = t.anchors[0]!.atM;
+    const before = followStatus(t, pointAtDistance(t, turnAt - 5), turnAt - 20);
+    expect(before.hint?.instruction).toBe('Turn left onto Forks Rd.');
+    expect(before.hint?.inM).toBeCloseTo(5, 0);
+    const at = followStatus(t, pointAtDistance(t, turnAt), turnAt - 5);
+    expect(at.hint?.instruction).toBe('Turn left onto Forks Rd.');
+    const past = followStatus(t, pointAtDistance(t, turnAt + 30), turnAt);
+    expect(past.hint?.instruction).toBe('Arrive.');
+  });
+
+  it('a first fix that is OFF the line seeds no progress, and cannot finish a loop at its origin', () => {
+    const ring: LineString = {
+      type: 'LineString',
+      coordinates: Array.from({ length: 61 }, (_, i) => {
+        const a = (i / 60) * Math.PI * 2;
+        return [-79.9 + 0.05 * Math.cos(a) * 1.37, 43.4 + 0.05 * Math.sin(a)];
+      }),
+    };
+    (ring.coordinates as number[][])[60] = (ring.coordinates as number[][])[0]!;
+    const t = buildFollowTrack(ring, []);
+    // parked 200 m OUTSIDE the ring, nearest to its last stretch
+    const near = pointAtDistance(t, t.totalM - 300);
+    const off = { lat: near.lat + 200 / 111_320, lng: near.lng + 200 / 81_400 };
+    const first = followStatus(t, off, null, { minAlongM: null });
+    expect(first.offRoute).toBe(true);
+    expect(first.alongM).toBe(0); // no progress to keep yet
+    expect(first.remainingM).toBeCloseTo(t.totalM, 0);
+    // the screen commits nothing off-route, so lastAlong stays null → the
+    // origin resolves to the START on the first on-route fix
+    const [lng0, lat0] = ring.coordinates[0] as [number, number];
+    const atOrigin = followStatus(t, { lat: lat0, lng: lng0 }, null, { minAlongM: null });
+    expect(atOrigin.alongM).toBeLessThan(50);
+    expect(atOrigin.done).toBe(false);
+    const second = followStatus(t, { lat: lat0, lng: lng0 }, atOrigin.alongM, {
+      minAlongM: atOrigin.alongM,
+    });
+    expect(second.done).toBe(false);
+    expect(second.remainingM).toBeGreaterThan(t.totalM * 0.9);
+    // and even a car that somehow joined the line at the end never "finishes" it
+    const joinedLate = followStatus(t, { lat: lat0, lng: lng0 }, t.totalM - 10, {
+      minAlongM: t.totalM - 300,
+    });
+    expect(joinedLate.done).toBe(false);
   });
 });
 

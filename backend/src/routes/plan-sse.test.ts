@@ -387,3 +387,78 @@ describe('canonical brief end-to-end (real db + Valhalla; AI transport canned �
     },
   );
 });
+
+describe('BD-203 — a structural verdict is stated as itself, never as an outage', () => {
+  it("no_clean_route: the planner's own sentence first, then what to try; no 'temporarily unavailable'", async () => {
+    const { deps } = baseDeps({
+      planFn: async () => ({
+        ...okPlannerResult(),
+        status: 'no_clean_route' as const,
+        route: null,
+        disclosures: [
+          'No clean 90-minute loop from this exact start right now — the best live attempt had self-crossings ×2, which we don’t ship.',
+        ],
+      }),
+    });
+    const app = buildServer({ plan: deps as never });
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, {
+        brief: '90 minute loop',
+        origin: { lat: 43.2557, lng: -79.8711 },
+      });
+      const err = run.events.find((e) => e.type === 'error');
+      const message = err && 'message' in err ? err.message : '';
+      expect(message.startsWith('No clean 90-minute loop from this exact start')).toBe(true);
+      expect(message).toContain('Try a nearby start, or a different drive time.');
+      expect(message).not.toContain('temporarily unavailable');
+      expect(run.events.at(-1)).toMatchObject({ type: 'done', status: 'unavailable' });
+    } finally {
+      await close();
+    }
+  });
+
+  it('out_of_time: says the clock ran out, never that the planner is down', async () => {
+    const { deps } = baseDeps({
+      planFn: async () => ({ ...okPlannerResult(), status: 'out_of_time' as const, route: null }),
+    });
+    const app = buildServer({ plan: deps as never });
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, {
+        brief: '90 minute loop',
+        origin: { lat: 43.2557, lng: -79.8711 },
+      });
+      const err = run.events.find((e) => e.type === 'error');
+      const message = err && 'message' in err ? err.message : '';
+      expect(message).toContain('ran out of time');
+      expect(message).not.toContain('temporarily unavailable');
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe('BD-203 — A→B copy does not blame the start', () => {
+  it('an A→B redirect names both ends', async () => {
+    const { deps } = baseDeps({
+      planFn: async () => ({ ...okPlannerResult(), status: 'redirect' as const, route: null }),
+    });
+    const app = buildServer({ plan: deps as never });
+    const { port, close } = await listen(app);
+    try {
+      const run = await postPlan(port, {
+        brief: 'drive from Hamilton to Guelph',
+        origin: { lat: 43.2557, lng: -79.8711 },
+        destination: { lat: 43.5448, lng: -80.2482 },
+        shape: 'a_to_b',
+      });
+      const err = run.events.find((e) => e.type === 'error');
+      const message = err && 'message' in err ? err.message : '';
+      expect(message).toContain('between those two points');
+      expect(message).not.toContain('that start');
+    } finally {
+      await close();
+    }
+  });
+});

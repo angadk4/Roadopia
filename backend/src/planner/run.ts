@@ -30,10 +30,19 @@ import type { Client } from 'pg';
 
 import { getElevationProfile } from '../valhalla/elevation';
 import { travelMatrix } from '../valhalla/matrix';
-import { routeThrough } from '../valhalla/route';
 import { traceRoadClasses } from '../valhalla/trace';
 
-import { assembleAtoBWithRepair, ATOB_ASSEMBLY_RELAX_ON } from './atob';
+import {
+  assembleAtoBWithRepair,
+  ATOB_ASSEMBLY_RELAX_ON,
+  atobDefectLabels,
+  atobStructuralDefects,
+  atobWorthItVerdict,
+  directAvoidDisclosures,
+  filterAtoBAlternates,
+  routeDirectBaseline,
+  type DirectBaseline,
+} from './atob';
 import { bundleForRequest } from './bundles';
 import {
   generateAtoBCandidates,
@@ -50,14 +59,21 @@ import {
 } from './chain';
 import { CONNECTOR_KEY_TOLERANCE, CONNECTOR_REFINE_ON, refineLoopFinalist } from './connectors';
 import { CORE_REACH_FRAC, CORE_SEED_MAX, CORE_SEED_ON, coreSeedCandidates } from './core_seed';
+import { haversineM } from './corridor';
 import { profileExcludesHighways, profileForRequest, type CostingMode } from './costing';
+import { LEGACY } from './costing';
 import { selfIntersections, summarizeCrossings } from './crossings';
 import { measureCurvatureClassAware } from './curvature';
 import { CORES_BROWSE_LIMIT, DRIVE_CORES_VERSION, readDriveCores } from './discover_cores';
 import { diversify, prefilterByDuration } from './diversify';
 import { DRIVE_FIRST_ON, readDriveFirstCores } from './drive_first';
 import { atobDriveFirst, ATOB_DRIVE_FIRST_ON } from './drive_first_atob';
-import { driveFirstTrip, STATS_PROVENANCE_MIN } from './drive_first_trip';
+import {
+  driveFirstTrip,
+  TRIP_REACH_FRAC,
+  type DriveFirstOutcome,
+  type DriveFirstTrip,
+} from './drive_first_trip';
 import { driveGeometry, splitLoopLegs, type LegSplit } from './legs';
 import {
   assembleLoop,
@@ -70,18 +86,22 @@ import {
   RESIDENTIAL_SOFT_SHARE,
   RETRACE_RUN_SOFT_M,
   SELF_OVERLAP_CAP,
+  UNPAVED_MIN_M,
 } from './loop';
+import { SWEEP_ON, sweepTrip } from './loop_sweep';
 import { computeOriginStem, STEM_ON } from './origin_stem';
 import { outAndBack } from './outandback';
 import {
   corridorDoublingRatio,
   loopiness,
   microloopPositions,
+  selfOverlapRatio,
   spurPositions,
   SPUR_WINDOW_WIDE_STEPS,
 } from './overlap';
 import { weightsForPreset } from './presets';
 import { initialParams, nextRelaxation, type SearchParams } from './relax';
+import { arterialShareOf, classRunStatsOf, countryScoreOf, maxClassRunInfo } from './residential';
 import { AVOID_DISC_RADIUS_M, resolveLocations, type ResolvedLocation } from './resolve_locations';
 import { retrieveAnchorPoints, retrieveCandidates } from './retrieve';
 import { revisitCount } from './revisit';
@@ -92,8 +112,16 @@ import {
   ribbonPool,
   ribbonsAsSegments,
 } from './ribbon_chain';
-import { classMixOf, type ClassMix } from './roadclass';
-import { buildScope } from './scope';
+import {
+  BACKROAD_CLASSES,
+  classMixOf,
+  HOOD_CLASSES,
+  TRACE_HIGHWAY_FLOOR_M,
+  tracedHighwayM,
+  turnsPer10minOf,
+  type ClassMix,
+} from './roadclass';
+import { atobCorridorHalfWidthM, buildScope, corridorScope, type Scope } from './scope';
 import {
   ARTERIAL_SHARE_SOFT,
   CORRIDOR_DOUBLING_SOFT,
@@ -109,7 +137,7 @@ import {
   type ScoreBreakdown,
 } from './score';
 import { resolveStopArrivals, stopCoverageOf, stopCoverScore, type ResolvedStop } from './stops';
-import { TRIP_EXACT_BAND, tripShapeMetrics } from './trip_gates';
+import { TRIP_EXACT_BAND, TRIP_OAB_ORIGIN_GRACE_M, tripShapeMetrics } from './trip_gates';
 import {
   URBAN_CONTEXT_ON,
   urbanIndexFor,
@@ -123,6 +151,9 @@ import { DURATION_TOLERANCE_DEFAULT, validateCandidate, type ValidationVerdict }
 const RIBBON_ATOB_ON = (process.env['RIBBON_ATOB'] ?? 'off') !== 'off';
 
 export const WALL_CLOCK_BUDGET_MS = 25_000;
+/** BD-203: the legacy planner needs at least this much wall to be worth
+ *  starting; with less, a held measured alternate is served instead. */
+export const LEGACY_MIN_SLICE_MS = 12_000;
 /** R34-U8: nothing structurally dirty ships — the legacy pipeline's output
  *  passes the same final judge as measured trips, or the result is an honest
  *  no-clean state. Off = pre-R34 serving. */
@@ -333,7 +364,19 @@ export interface ScoredDebugRow {
 }
 
 export interface PlannerResult {
-  status: 'ok' | 'relaxed' | 'best_so_far' | 'clarify' | 'refused' | 'redirect' | 'unavailable';
+  status:
+    | 'ok'
+    | 'relaxed'
+    | 'best_so_far'
+    | 'clarify'
+    | 'refused'
+    | 'redirect'
+    | 'unavailable'
+    /** BD-203: a deterministic structural verdict — nothing clean exists from
+     *  this exact start; retrying changes nothing (never 'temporarily unavailable'). */
+    | 'no_clean_route'
+    /** BD-203: the wall clock ran out before anything clean came together. */
+    | 'out_of_time';
   route: RouteThroughOutput | null;
   curviness: number | null;
   score: ScoreBreakdown | null;
@@ -392,6 +435,30 @@ export interface PlannerResult {
    *  treatment that never happened (audit-v11 issue #10: 'scenic' tagged on
    *  routes that got zero scenic handling). Optional: minimal results omit it. */
   characterApplied?: CharacterTag[];
+  /** BD-203 — the A→B direct baseline this request was judged against
+   *  (engine-fastest, full avoid set, traced once). Null when the engine could
+   *  not route it; absent for loops. Summary numbers only — never coordinates. */
+  atobBaseline?: AtobBaselineSummary | null;
+  /** BD-203 — what an A→B result actually served: the planner's own route
+   *  ('planned'), or the honest direct after a law reject / a failed worth-it
+   *  gate / a corridor where nothing assembled. Null when nothing was served;
+   *  absent for loops. */
+  atobServe?: 'planned' | 'direct_law' | 'direct_worth_it' | 'direct_no_route' | null;
+}
+
+/** BD-203 — the direct baseline as the wire/eval may see it (no geometry). */
+export interface AtobBaselineSummary {
+  distanceM: number;
+  durationS: number;
+  /** Traced backroad / main share of the direct route; null = untraced. */
+  backroadShare: number | null;
+  mainShare: number | null;
+  hasHighway: boolean;
+  hasToll: boolean;
+  hasFerry: boolean;
+  hasUnpaved: boolean;
+  /** false = the avoid set left no direct route; the baseline dropped the exclusions. */
+  avoidHonoured: boolean;
 }
 
 /** Wire-shaped stop (matches shared RouteStopSchema field-for-field). */
@@ -561,6 +628,8 @@ export async function runPlanner(
   // `restoreHeld` first resets every field legacy may have touched.
   let heldAlternate: (() => void) | null = null;
   let heldServeBase: string[] = [];
+  /** BD-203: the held trip itself, so a closer alternate can replace it. */
+  let heldTrip: DriveFirstTrip | null = null;
   const restoreHeld = (): void => {
     result.route = null;
     result.curviness = null;
@@ -582,31 +651,73 @@ export async function runPlanner(
     result.urbanShare = null;
     heldAlternate?.();
   };
+  // BD-203 (C) — THE DIRECT ROUTE, ONCE. Engine-fastest o→d under the FULL
+  // avoid set, traced once: the single baseline for the detour cap, the
+  // duration guard, the worth-it gate, the honest direct serve and every
+  // disclosure. (Before: a distance-only direct per candidate per repair
+  // pass under the candidate's `shortest` costing, and a different
+  // highway-avoid-only direct for the fallback.) Fail-open null: assembly
+  // falls back to its own distance baseline, Ω to the endpoint isochrones,
+  // and the worth-it gate is skipped with a trace line — never a guessed
+  // number. Computed BEFORE the judge closures so every A→B exit can use it.
+  let atobBaseline: DirectBaseline | null = null;
+  if (!isLoop && destination !== null) {
+    result.atobServe = null;
+    emit({ type: 'tool_call', tool: 'route_direct' });
+    try {
+      atobBaseline = await routeDirectBaseline(
+        deps.valhallaUrl,
+        origin,
+        destination,
+        constraints.avoid,
+      );
+      emit({ type: 'tool_result', tool: 'route_direct', ok: true, count: 1 });
+      result.atobBaseline = {
+        distanceM: atobBaseline.distanceM,
+        durationS: atobBaseline.durationS,
+        backroadShare: atobBaseline.classMix?.backroadShare ?? null,
+        mainShare: atobBaseline.classMix?.mainShare ?? null,
+        hasHighway: atobBaseline.route.has_highway,
+        hasToll: atobBaseline.route.has_toll,
+        hasFerry: atobBaseline.route.has_ferry,
+        hasUnpaved: atobBaseline.route.has_unpaved,
+        avoidHonoured: atobBaseline.avoidHonoured,
+      };
+    } catch {
+      emit({ type: 'tool_result', tool: 'route_direct', ok: false });
+      result.atobBaseline = null;
+    }
+  }
+  /** The direct baseline's backroad share as a whole percent (trace lines). */
+  const directBackroadPct = (): string =>
+    atobBaseline?.classMix ? `${Math.round(atobBaseline.classMix.backroadShare * 100)}%` : '—';
+
   /**
    * BD-179 — THE A→B STRUCTURAL JUDGE. Same closure discipline as the loop
    * judge above (callable from every exit that ships a point-to-point route);
    * same defect vocabulary minus the loop-only laws. Returns true if the route
    * was rejected (result becomes an honest no-clean state).
+   *
+   * BD-203: reads the ONE shared measurement (`atobStructuralDefects` — the
+   * same detectors assembly ranks on and repair aims at, graced 500 m at BOTH
+   * endpoints: (B) the destination too, per BD-185), so nothing is refused
+   * here that selection could not see. (F) The ALTERNATES meet the judge as
+   * well: a refused main route clears them; a passing one keeps only the
+   * alternates the judge would pass.
    */
   const applyAtoBStructuralJudge = (): boolean => {
-    if (!ATOB_STRUCTURAL_LAW_ON || isLoop || result.route === null) return false;
-    const geo = result.route.geometry;
-    const structural: string[] = [];
-    const spurs = spurPositions(geo, origin, 500, SPUR_WINDOW_WIDE_STEPS).length;
-    const crescents = microloopPositions(geo, origin, 500).length;
-    const ut = uturnCount(result.route);
-    const x = summarizeCrossings(selfIntersections(geo, origin));
-    const crossings = x.knots + x.pierces;
-    if (spurs > 0) structural.push(`street stubs ×${spurs}`);
-    if (crescents > 0) structural.push(`crescents ×${crescents}`);
-    if (ut > 0) structural.push(`u-turn${ut > 1 ? 's' : ''} ×${ut}`);
-    if (crossings > 0) structural.push(`self-crossings ×${crossings}`);
+    if (!ATOB_STRUCTURAL_LAW_ON || isLoop || result.route === null || destination === null) {
+      return false;
+    }
+    const structural = atobDefectLabels(atobStructuralDefects(result.route, origin, destination));
     if (structural.length === 0) {
+      const before = result.alternates.length;
+      result.alternates = filterAtoBAlternates(result.alternates, origin, destination);
       step(
         emit,
         'validate_route',
         'completed',
-        `A→B final judge PASS (x 0/0, stubs 0, crescents 0, u-turns 0)`,
+        `A→B final judge PASS (x 0/0, stubs 0, crescents 0, u-turns 0; alternates ${result.alternates.length}/${before} clean)`,
       );
       return false;
     }
@@ -614,357 +725,315 @@ export async function runPlanner(
     result.route = null;
     result.status = 'unavailable';
     result.legs = null;
+    result.alternates = []; // BD-203 (F): nothing rides along with a refused route
     result.disclosures = [
       `No clean backroads route between these two points right now — the best live attempt had ` +
         `${structural.join(' and ')}, which we don't ship.`,
     ];
-    atobLawRejected = true;
+    atobDirectReason = 'law';
     return true;
   };
 
   /**
    * BD-181 (option (ii), owner-approved): a corridor the LAW refused serves
    * the plain DIRECT route with honest words — an A→B has a destination, so a
-   * dead end is worse than the truth plus a usable answer. Scope: law rejects
-   * ONLY (pre-law unavailables unchanged). The direct route is judged too —
-   * nothing dirty ships, not even the fallback. No backroads framing.
+   * dead end is worse than the truth plus a usable answer. No backroads
+   * framing. BD-185: the direct is served engine-fastest AS-IS (the label is
+   * the honesty); the pre-BD-185 judged fallback survives behind the flag.
+   *
+   * BD-203 — this closure now owns the whole "what does an A→B actually
+   * serve" decision, at EVERY A→B exit:
+   *   (D) a surviving backroads-framed serve meets the WORTH-IT gate — traced
+   *       backroad share ≥ direct + ATOB_WORTH_IT_MIN_GAIN and duration ratio
+   *       ≤ ATOB_DURATION_RATIO_MAX — or the direct is served with the reason
+   *       in plain words (the law reject path is unchanged);
+   *   (E) the served direct is THE baseline (full avoid set, traced once) and
+   *       its payload describes THAT line: no stops, no alternates, no score,
+   *       no character tags, class mix / shares / flow from the direct trace,
+   *       validation rows of the direct route, violated avoids disclosed.
+   * `result.atobServe` records the outcome for the wire and the eval.
    */
-  let atobLawRejected = false;
-  const serveDirectFallback = async (): Promise<void> => {
-    if (!atobLawRejected || result.route !== null || destination === null) return;
-    try {
-      const direct = await routeThrough(deps.valhallaUrl, {
-        waypoints: [
-          [origin.lng, origin.lat],
-          [destination.lng, destination.lat],
-        ],
-        costingOptions: constraints.avoid.highways === true ? { exclude_highways: true } : {},
-      });
-      // BD-185: as-is mode skips the aesthetic judge entirely — the label is
-      // the honesty; the engine's fastest path is the product being served.
-      if (!DIRECT_FALLBACK_ASIS_ON) {
-        // the FULL law, as frozen — crossings, u-turns, crescents, stubs.
-        // BD-184: on the direct route, defects that map to highway-class edges
-        // are grade-separation artifacts of 2D geometry, not real defects.
-        let hwClassAt: ((pt: [number, number]) => string | null) | null = null;
-        if (BRIDGE_AWARE_FALLBACK_ON) {
-          try {
-            const tr = await traceRoadClasses(deps.valhallaUrl, direct.geometry);
-            const shape = tr.matchedShape?.coordinates as Array<[number, number]> | undefined;
-            if (shape && tr.edges.every((e) => e.beginShapeIndex !== undefined)) {
-              hwClassAt = (pt: [number, number]): string | null => {
-                let best = Infinity;
-                let bi = 0;
-                for (let i = 0; i < shape.length; i++) {
-                  const d =
-                    (shape[i]![0] - pt[0]) * (shape[i]![0] - pt[0]) +
-                    (shape[i]![1] - pt[1]) * (shape[i]![1] - pt[1]);
-                  if (d < best) {
-                    best = d;
-                    bi = i;
-                  }
-                }
-                for (const e of tr.edges) {
-                  if (e.beginShapeIndex! <= bi && bi <= (e.endShapeIndex ?? e.beginShapeIndex!)) {
-                    const cls = e.roadClass;
-                    const use = e.use ?? 'road';
-                    if (
-                      cls === 'motorway' ||
-                      cls === 'trunk' ||
-                      use === 'ramp' ||
-                      use === 'turn_channel'
-                    ) {
-                      return `${cls}/${use}`;
-                    }
-                    return null;
-                  }
+  let atobDirectReason: 'law' | 'worth_it' | 'no_route' | null = null;
+  let worthItReasons: string[] = [];
+  /** Pre-BD-185 judged fallback (DIRECT_FALLBACK_ASIS=off): the full law on
+   *  the direct line, with BD-184's grade-separation exemptions. As-is = pass. */
+  const directPassesJudge = async (direct: RouteThroughOutput): Promise<boolean> => {
+    // BD-185: as-is mode skips the aesthetic judge entirely — the label is
+    // the honesty; the engine's fastest path is the product being served.
+    if (DIRECT_FALLBACK_ASIS_ON) return true;
+    // the FULL law, as frozen — crossings, u-turns, crescents, stubs.
+    // BD-184: on the direct route, defects that map to highway-class edges
+    // are grade-separation artifacts of 2D geometry, not real defects.
+    let hwClassAt: ((pt: [number, number]) => string | null) | null = null;
+    if (BRIDGE_AWARE_FALLBACK_ON) {
+      try {
+        const tr = await traceRoadClasses(deps.valhallaUrl, direct.geometry);
+        const shape = tr.matchedShape?.coordinates as Array<[number, number]> | undefined;
+        if (shape && tr.edges.every((e) => e.beginShapeIndex !== undefined)) {
+          hwClassAt = (pt: [number, number]): string | null => {
+            let best = Infinity;
+            let bi = 0;
+            for (let i = 0; i < shape.length; i++) {
+              const d =
+                (shape[i]![0] - pt[0]) * (shape[i]![0] - pt[0]) +
+                (shape[i]![1] - pt[1]) * (shape[i]![1] - pt[1]);
+              if (d < best) {
+                best = d;
+                bi = i;
+              }
+            }
+            for (const e of tr.edges) {
+              if (e.beginShapeIndex! <= bi && bi <= (e.endShapeIndex ?? e.beginShapeIndex!)) {
+                const cls = e.roadClass;
+                const use = e.use ?? 'road';
+                if (
+                  cls === 'motorway' ||
+                  cls === 'trunk' ||
+                  use === 'ramp' ||
+                  use === 'turn_channel'
+                ) {
+                  return `${cls}/${use}`;
                 }
                 return null;
-              };
+              }
             }
-          } catch {
-            hwClassAt = null; // trace down — no exemptions, full strictness
-          }
+            return null;
+          };
         }
-        const coordsD = direct.geometry.coordinates as Array<[number, number]>;
-        const pointAtM = (m: number): [number, number] => {
-          let acc = 0;
-          for (let i = 1; i < coordsD.length; i++) {
-            const a = coordsD[i - 1]!;
-            const b = coordsD[i]!;
-            const seg = Math.hypot(
-              (b[1] - a[1]) * 111_320,
-              (b[0] - a[0]) * 111_320 * Math.cos((a[1] * Math.PI) / 180),
-            );
-            if (acc + seg >= m && seg > 0) {
-              const t = (m - acc) / seg;
-              return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-            }
-            acc += seg;
-          }
-          return coordsD[coordsD.length - 1]!;
-        };
-        const rawXs = selfIntersections(direct.geometry, origin);
-        const keptXs = rawXs.filter((c) => {
-          if (hwClassAt === null) return true;
-          const c1 = hwClassAt(pointAtM(c.atM[0]));
-          const c2 = hwClassAt(pointAtM(c.atM[1]));
-          if (c1 !== null || c2 !== null) {
-            step(
-              emit,
-              'validate_route',
-              'completed',
-              `exempted 2D crossing on grade-separated infrastructure (${c1 ?? c2})`,
-            );
-            return false;
-          }
-          return true;
-        });
-        const xs = summarizeCrossings(keptXs);
-        const ut = uturnCount(direct);
-        const cresPos = microloopPositions(direct.geometry, origin, 500);
-        const cres = cresPos.filter((ptL) => {
-          if (hwClassAt === null) return true;
-          const cls = hwClassAt(ptL as [number, number]);
-          if (cls !== null && (cls.includes('ramp') || cls.includes('turn_channel'))) {
-            step(emit, 'validate_route', 'completed', `exempted jug-handle crescent on ${cls}`);
-            return false;
-          }
-          return true;
-        }).length;
-        const stubs = spurPositions(direct.geometry, origin, 500, SPUR_WINDOW_WIDE_STEPS).length;
-        if (xs.knots + xs.pierces > 0 || ut > 0 || cres > 0 || stubs > 0) {
-          step(
-            emit,
-            'validate_route',
-            'completed',
-            `direct fallback ALSO fails structure (x ${xs.knots + xs.pierces}, uturns ${ut}, crescents ${cres}, stubs ${stubs}) — honest unavailable stands`,
-          );
-          return;
-        }
+      } catch {
+        hwClassAt = null; // trace down — no exemptions, full strictness
       }
-      result.status = 'relaxed';
-      result.route = {
-        geometry: direct.geometry,
-        distance_m: direct.distance_m,
-        duration_s: direct.duration_s,
-        legs: direct.legs,
-        maneuvers: direct.maneuvers,
-        has_highway: direct.has_highway,
-        has_toll: direct.has_toll,
-        has_ferry: direct.has_ferry,
-        has_unpaved: direct.has_unpaved,
-      };
-      result.curviness = null; // NOT a backroads product — no measured framing
-      result.waypoints = [];
-      result.legs = null;
-      result.disclosures = [
-        'No clean backroads route between these two points right now — routed you the direct way instead.',
-      ];
+    }
+    const coordsD = direct.geometry.coordinates as Array<[number, number]>;
+    const pointAtM = (m: number): [number, number] => {
+      let acc = 0;
+      for (let i = 1; i < coordsD.length; i++) {
+        const a = coordsD[i - 1]!;
+        const b = coordsD[i]!;
+        const seg = Math.hypot(
+          (b[1] - a[1]) * 111_320,
+          (b[0] - a[0]) * 111_320 * Math.cos((a[1] * Math.PI) / 180),
+        );
+        if (acc + seg >= m && seg > 0) {
+          const t = (m - acc) / seg;
+          return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+        }
+        acc += seg;
+      }
+      return coordsD[coordsD.length - 1]!;
+    };
+    const rawXs = selfIntersections(direct.geometry, origin);
+    const keptXs = rawXs.filter((c) => {
+      if (hwClassAt === null) return true;
+      const c1 = hwClassAt(pointAtM(c.atM[0]));
+      const c2 = hwClassAt(pointAtM(c.atM[1]));
+      if (c1 !== null || c2 !== null) {
+        step(
+          emit,
+          'validate_route',
+          'completed',
+          `exempted 2D crossing on grade-separated infrastructure (${c1 ?? c2})`,
+        );
+        return false;
+      }
+      return true;
+    });
+    const xs = summarizeCrossings(keptXs);
+    const ut = uturnCount(direct);
+    const cresPos = microloopPositions(direct.geometry, origin, 500);
+    const cres = cresPos.filter((ptL) => {
+      if (hwClassAt === null) return true;
+      const cls = hwClassAt(ptL as [number, number]);
+      if (cls !== null && (cls.includes('ramp') || cls.includes('turn_channel'))) {
+        step(emit, 'validate_route', 'completed', `exempted jug-handle crescent on ${cls}`);
+        return false;
+      }
+      return true;
+    }).length;
+    const stubs = spurPositions(direct.geometry, origin, 500, SPUR_WINDOW_WIDE_STEPS).length;
+    if (xs.knots + xs.pierces > 0 || ut > 0 || cres > 0 || stubs > 0) {
       step(
         emit,
         'validate_route',
         'completed',
-        `A→B law reject → direct fallback served (${Math.round(direct.duration_s / 60)} min, engine-fastest as-is)`,
+        `direct fallback ALSO fails structure (x ${xs.knots + xs.pierces}, uturns ${ut}, crescents ${cres}, stubs ${stubs}) — honest unavailable stands`,
       );
-    } catch {
-      /* engine failure — the honest unavailable stands */
+      return false;
     }
+    return true;
   };
-
-  if (isLoop && DRIVE_FIRST_ON && constraints.duration_target_s !== null) {
-    const outcome = await driveFirstTrip(
-      deps.db,
-      deps.valhallaUrl,
-      origin,
-      constraints.duration_target_s,
-      {
-        avoidHighways: constraints.avoid.highways === true,
-        character: constraints.character,
-        ...(originStemM !== null ? { oabGraceM: originStemM } : {}),
-        // The attempt may spend at most 40 % of the wall; the legacy planner
-        // keeps the rest (measured: unbounded stacking hit 25.8 s live).
-        deadlineMs: Date.now() + WALL_CLOCK_BUDGET_MS * 0.4,
-      },
-    );
-    const trip = outcome.trip;
-    if (trip !== null) {
-      const mins = (x: number): number => Math.round(x / 60);
-      const exact = trip.tier === 'exact';
-      const applyTripServe = (): void => {
-        result.status = 'ok';
-        // ONE routed request end to end — real geometry, real maneuvers, real
-        // duration, real has_* flags (v4: no glued seams, rq30c).
-        result.route = {
-          geometry: trip.route.geometry,
-          distance_m: trip.route.distance_m,
-          duration_s: trip.route.duration_s,
-          legs: trip.route.legs,
-          maneuvers: trip.route.maneuvers,
-          has_highway: trip.route.has_highway,
-          has_toll: trip.route.has_toll,
-          has_ferry: trip.route.has_ferry,
-          has_unpaved: trip.route.has_unpaved,
-        };
-        // R34-U9 provenance: the core's MEASURED numbers are advertised only
-        // when the routed drive is essentially the measured ring.
-        result.curviness = trip.fidelity >= STATS_PROVENANCE_MIN ? trip.core.curviness : null;
-        // Waypoints mark J1 / arc-mid / J2 — the audit's geometric split needs
-        // them; the USER-facing result carries NO leg framing (BD-149: "that
-        // loop should be the full drive as the loop itself").
-        result.waypoints = [trip.drive.entry, trip.drive.mid, trip.drive.exit];
-        result.legs = null;
-        const driveName = trip.drive.frac < 0.97 ? `most of ${trip.core.name}` : trip.core.name;
-        if (exact) {
-          result.disclosures.push(
-            `Built a ${mins(trip.durationS)}-minute loop around ${driveName} — measured roads, honest time.`,
-          );
-        } else {
-          // R34-U8: an honest ALTERNATE duration — never a silent miss.
-          result.disclosures.push(
-            `No clean ${Math.round((constraints.duration_target_s ?? 0) / 60)}-minute loop fits from here — ` +
-              `built a clean ${mins(trip.durationS)}-minute one around ${driveName} instead.`,
-          );
-        }
-        for (const alt of outcome.alternates) {
-          result.disclosures.push(
-            `Also built a clean ${mins(alt.durationS)}-minute option around ${alt.core.name}.`,
-          );
-        }
-        if (originStemM !== null && originStemM >= 1_500) {
-          result.disclosures.push(
-            `This area has one practical way out — the first and last ~${Math.round(
-              originStemM / 1000,
-            )} km repeat by necessity.`,
-          );
-        }
+  const serveDirectFallback = async (): Promise<void> => {
+    if (isLoop || destination === null) return;
+    // (G) a corridor where NOTHING assembled — the ladder ran out with no
+    // fallback material (cap/guard rejects are no longer material) — still
+    // has a destination: the direct way, with honest words, not a dead end
+    // (the BD-181 principle, extended from law rejects — owner to confirm).
+    if (atobDirectReason === null && result.route === null && atobBaseline !== null) {
+      atobDirectReason = 'no_route';
+    }
+    // (D) the WORTH-IT gate on a surviving backroads-framed serve
+    if (atobDirectReason === null && result.route !== null) {
+      if (atobBaseline === null) {
         step(
           emit,
-          'drive_first_trip',
+          'validate_route',
           'completed',
-          `served ${trip.tier} ${trip.core.id} (x ${trip.metrics.knots}/${trip.metrics.pierces}, stem ${originStemM ?? '—'}m, fidelity ${trip.fidelity.toFixed(2)}, ` +
-            `loopiness ${trip.metrics.loopiness?.toFixed(2) ?? '—'}, ` +
-            `commute ${Math.round(trip.metrics.commuteShare * 100)}%` +
-            (outcome.rejected.length > 0
-              ? `; rejected ${outcome.rejected.map((r) => `${r.id}: ${r.failures.join('+')}`).join(', ')}`
-              : '') +
-            ')',
+          'A→B worth-it gate skipped — direct baseline unavailable (served as planned)',
         );
-      };
-      if (exact || !ALT_HOLD_LEGACY_ON) {
-        applyTripServe();
-        return result;
+        result.atobServe = 'planned';
+        return;
       }
-      // BD-169: hold the out-of-band clean alternate; legacy gets its shot at
-      // the exact band and the better serve wins at the exits.
-      heldServeBase = [...result.disclosures];
-      heldAlternate = applyTripServe;
+      // 'simple' asks for the fast main roads — nothing backroads-framed to judge
+      if (profileForRequest(constraints, deps.costingMode ?? 'on').id === 'simple') {
+        result.atobServe = 'planned';
+        return;
+      }
+      let routeShare: number | null = result.classMix?.backroadShare ?? null;
+      if (routeShare === null) {
+        // exits that carry no class mix (least-flawed / drive-first) measure it now
+        try {
+          const t = await traceRoadClasses(deps.valhallaUrl, result.route.geometry);
+          routeShare = classMixOf(t.edges)?.backroadShare ?? null;
+        } catch {
+          routeShare = null;
+        }
+      }
+      const durationRatio = result.route.duration_s / Math.max(1, atobBaseline.durationS);
+      const verdict = atobWorthItVerdict({
+        routeBackroadShare: routeShare,
+        directBackroadShare: atobBaseline.classMix?.backroadShare ?? null,
+        durationRatio,
+      });
+      if (verdict.worthIt) {
+        step(
+          emit,
+          'validate_route',
+          'completed',
+          `A→B worth-it PASS (backroad +${verdict.gainPp} pp vs direct ${directBackroadPct()}, duration ${durationRatio.toFixed(2)}×)`,
+        );
+        result.atobServe = 'planned';
+        return;
+      }
+      if (!(await directPassesJudge(atobBaseline.route))) {
+        step(
+          emit,
+          'validate_route',
+          'completed',
+          `A→B worth-it FAIL (${verdict.reasons.join('; ')}) but the direct way fails structure — served as planned`,
+        );
+        result.atobServe = 'planned';
+        return;
+      }
       step(
         emit,
-        'drive_first_trip',
+        'validate_route',
         'completed',
-        `holding clean ${mins(trip.durationS)}-min alternate ${trip.core.id} — ` +
-          `trying for an exact ${Math.round((constraints.duration_target_s ?? 0) / 60)}-min loop live`,
+        `A→B worth-it FAIL → direct served: ${verdict.reasons.join('; ')}`,
       );
+      atobDirectReason = 'worth_it';
+      worthItReasons = verdict.reasons;
+      result.route = null;
     }
-    if (heldAlternate === null && outcome.rejected.length > 0) {
-      // The truth, not an excuse: which cores were tried and which of the
-      // owner's rules each one broke (BD-146 — gates reject, disclosures
-      // don't excuse).
-      step(
-        emit,
-        'drive_first_trip',
-        'completed',
-        `no candidate passed as-driven gates — ${outcome.rejected
-          .map((r) => `${r.id}: ${r.failures.join('+')}`)
-          .join(', ')}`,
-      );
+    if (atobDirectReason === null || result.route !== null) return;
+    const direct = atobBaseline;
+    if (direct === null) return; // the engine could not route the direct — the honest unavailable stands
+    if (atobDirectReason === 'law' && !(await directPassesJudge(direct.route))) return;
+    // (E) the payload describes the SERVED line, never the rejected attempt
+    const served: RouteThroughOutput = {
+      geometry: direct.route.geometry,
+      distance_m: direct.route.distance_m,
+      duration_s: direct.route.duration_s,
+      legs: direct.route.legs,
+      maneuvers: direct.route.maneuvers,
+      has_highway: direct.route.has_highway,
+      has_toll: direct.route.has_toll,
+      has_ferry: direct.route.has_ferry,
+      has_unpaved: direct.route.has_unpaved,
+    };
+    result.status = 'relaxed';
+    result.route = served;
+    result.curviness = null; // NOT a backroads product — no measured framing
+    result.score = null; // never scored against the pool — honest null
+    result.stops = [];
+    result.waypoints = [];
+    result.alternates = [];
+    result.legs = null;
+    result.elevation = null; // enrich ran on the rejected attempt, not on this line
+    result.characterApplied = []; // no character treatment ran on the direct way
+    result.classMix = direct.classMix;
+    result.backroadLongestM = direct.backroadLongestM;
+    result.backroadMeanM = direct.backroadMeanM;
+    result.hoodRunM = direct.hoodRunM;
+    result.turnsPer10min = direct.turnsPer10min;
+    result.countryScore = direct.countryScore;
+    result.arterialShare = direct.arterialShare;
+    result.urbanShare = null;
+    if (URBAN_CONTEXT_ON) {
+      try {
+        // the cached index for this area (fail-open null — never a claimed number)
+        const reachDeg = 0.65;
+        const idx = await urbanIndexFor(deps.db, {
+          west: Math.min(origin.lng, destination.lng) - reachDeg,
+          south: Math.min(origin.lat, destination.lat) - reachDeg,
+          east: Math.max(origin.lng, destination.lng) + reachDeg,
+          north: Math.max(origin.lat, destination.lat) + reachDeg,
+        });
+        result.urbanShare = urbanShareOf(idx, served.geometry, [origin, destination]);
+      } catch {
+        result.urbanShare = null;
+      }
     }
-    if (heldAlternate === null) {
-      result.disclosures.push(
-        'No measured drive fits that time cleanly from this start yet — planned live instead.',
-      );
-    }
-  }
-
-  // R31 (BD-151) — A→B DRIVE-FIRST: the best measured ribbon ON THE WAY,
-  // served as one routed request (A → through-samples → B), judged as driven
-  // (fidelity, spurs, doubling, the standing detour cap). Fail-open to the
-  // legacy corridor planner with the rejections in the trace.
-  if (!isLoop && ATOB_DRIVE_FIRST_ON && destination !== null) {
-    const outcome = await atobDriveFirst(deps.db, deps.valhallaUrl, origin, destination, {
-      avoidHighways: constraints.avoid.highways === true,
-      costingOptions: profileForRequest(constraints, deps.costingMode ?? 'on').options,
-      // Date.now(), NOT t0: t0 rides performance.now() (process uptime), and
-      // the module compares epoch — mixing them made the deadline read as
-      // already-expired, silently rejecting every candidate as time_budget.
-      deadlineMs: Date.now() + WALL_CLOCK_BUDGET_MS * 0.4,
+    result.validation = validateCandidate({
+      route: served,
+      constraints,
+      closureM: null,
+      selfOverlap: selfOverlapRatio(served.geometry, undefined, origin),
+      stopCoverage: stopCoverageOf(constraints.stops, []), // asked stops are NOT on this line
+      stops: [],
+      relaxedConstraints: [],
+      effectiveAvoid: constraints.avoid, // the FULL ask — every violated avoid gets a real row
     });
-    const trip = outcome.trip;
-    if (trip !== null) {
-      result.status = 'ok';
-      result.route = {
-        geometry: trip.route.geometry,
-        distance_m: trip.route.distance_m,
-        duration_s: trip.route.duration_s,
-        legs: trip.route.legs,
-        maneuvers: trip.route.maneuvers,
-        has_highway: trip.route.has_highway,
-        has_toll: trip.route.has_toll,
-        has_ferry: trip.route.has_ferry,
-        has_unpaved: trip.route.has_unpaved,
-      };
-      // curviness: length-weighted over the chained measured ribbons
-      const chainLen = trip.ribbons.reduce((v, r) => v + r.distance_m, 0);
-      result.curviness =
-        trip.ribbons.reduce((v, r) => v + r.curviness * r.distance_m, 0) / Math.max(1, chainLen);
-      result.waypoints = trip.ribbons.map((r) => r.entry);
-      result.legs = null;
-      const names = trip.ribbons.map((r) => r.name);
-      const nameLine =
-        names.length === 1
-          ? names[0]!
-          : names.length === 2
-            ? `${names[0]} and ${names[1]}`
-            : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-      result.disclosures.push(
-        `Routed you along ${nameLine} on the way — measured backroad stretches, ` +
-          `about ${Math.round((trip.detourRatio - 1) * 100)}% longer than the direct route.`,
-      );
-      step(
-        emit,
-        'drive_first_trip',
-        'completed',
-        `served atob chain [${trip.ribbons.map((r) => r.id).join('>')}] (fidelity ${trip.metrics.fidelity.toFixed(2)}, detour ${trip.detourRatio.toFixed(2)}×` +
-          (outcome.rejected.length > 0
-            ? `; rejected ${outcome.rejected.map((r) => `${r.id}: ${r.failures.join('+')}`).join(', ')}`
-            : '') +
-          ')',
-      );
-      // BD-179: this exit bypassed the judge exactly as `presentDirtyBest`
-      // did for loops (BD-163) — measured: 2 chain serves shipped crossings.
-      if (applyAtoBStructuralJudge()) {
-        await serveDirectFallback();
-        emit({ type: 'done', status: result.route !== null ? 'relaxed' : 'unavailable' });
-      }
-      return result;
-    }
-    if (outcome.rejected.length > 0) {
-      step(
-        emit,
-        'drive_first_trip',
-        'completed',
-        `no ribbon passed on this corridor — ${outcome.rejected
-          .map((r) => `${r.id}: ${r.failures.join('+')}`)
-          .join(', ')}`,
-      );
-    }
-  }
+    const lead =
+      atobDirectReason === 'law'
+        ? 'No clean backroads route between these two points right now — routed you the direct way instead.'
+        : atobDirectReason === 'no_route'
+          ? 'No backroads route came together between these two points — routed you the direct way instead.'
+          : `Routed you the direct way instead — ${worthItReasons.join('; ')}.`;
+    result.disclosures = [lead, ...directAvoidDisclosures(direct, constraints.avoid)];
+    result.atobServe =
+      atobDirectReason === 'law'
+        ? 'direct_law'
+        : atobDirectReason === 'no_route'
+          ? 'direct_no_route'
+          : 'direct_worth_it';
+    const why =
+      atobDirectReason === 'law'
+        ? 'law reject'
+        : atobDirectReason === 'no_route'
+          ? 'nothing assembled'
+          : 'worth-it fail';
+    step(
+      emit,
+      'validate_route',
+      'completed',
+      `A→B ${why} → direct served (${Math.round(served.duration_s / 60)} min, ${Math.round(
+        served.distance_m / 1000,
+      )} km, backroad ${directBackroadPct()}, engine-fastest as-is)`,
+    );
+  };
 
   // R18-4 character bundles: the levers a character ACTUALLY moves (costing
   // rides profileForRequest below; here: weights, arterial bar, duration
   // tolerance, scenic's optional viewpoint garnish)
   const bundle = CHARACTER_BUNDLES_ON ? bundleForRequest(constraints) : null;
+  // BD-203: the Twisty CHIP (preset) reaches the measured paths as the twisty
+  // character too — the ring/sweep rankers read character tags, and a chip
+  // alone left them character-blind (measured: chip and Backroads served the
+  // identical loop at the owner's home).
+  const tripCharacter: readonly string[] =
+    bundle?.id === 'twisty' && !constraints.character.includes('twisty')
+      ? [...constraints.character, 'twisty']
+      : constraints.character;
   // R25-U8b — the treatments that actually RAN (from the resolved bundle),
   // never the ask. plan.ts tags the route and feeds the explain prompt from
   // THIS list, so narration can't claim a treatment that never happened.
@@ -1047,7 +1116,446 @@ export async function runPlanner(
     }
   }
 
+  // ---- BD-203: the MEASURED paths (ring trip, then the sweep) -----------
+  // What the measured paths can honour: a duration, the highway avoid, the
+  // standing no-highway rule for fun/backroads loops. Stops, location pins
+  // and toll/ferry/unpaved avoids belong to the legacy pipeline for now (an
+  // honest interim, disclosed — the served trip used to drop them silently).
+  const measuredPathsAllowed =
+    isLoop &&
+    constraints.duration_target_s !== null &&
+    constraints.stops.length === 0 &&
+    constraints.location_constraints.length === 0 &&
+    constraints.avoid.tolls !== true &&
+    constraints.avoid.ferries !== true &&
+    constraints.avoid.unpaved !== true;
+  if (
+    isLoop &&
+    constraints.duration_target_s !== null &&
+    !measuredPathsAllowed &&
+    (DRIVE_FIRST_ON || SWEEP_ON)
+  ) {
+    result.disclosures.push(
+      'Planned live to honour your stops and avoids — the measured drives cannot place those yet.',
+    );
+  }
+  // Spokes and connectors: direct costing, the user's own avoids, and the
+  // standing rule that a fun/backroads LOOP never rides a highway (R25-U3,
+  // legacy-only until now) — through the proven hard key (BD-154).
+  const imposedNoHighway = isLoop && profileExcludesHighways(profile);
+  const tripAvoidHighways = constraints.avoid.highways === true || imposedNoHighway;
+  const tripCosting = {
+    ...LEGACY.options,
+    ...(tripAvoidHighways ? { exclude_highways: true } : {}),
+  };
+
+  interface ServeBundle {
+    trip: DriveFirstTrip;
+    alternates: DriveFirstTrip[];
+    curviness: number | null;
+    hasHighway: boolean;
+    hasUnpaved: boolean;
+    classMix: ClassMix | null;
+    countryScore: number | null;
+    arterialShare: number | null;
+    urbanShare: number | null;
+    backroadLongestM: number | null;
+    backroadMeanM: number | null;
+    hoodRunM: number | null;
+    turnsPer10min: number | null;
+    climb: { climb_m: number } | null;
+    validation: ValidationVerdict;
+  }
+
+  /** One trace of a candidate trip: road-class truth + the imposed no-highway
+   *  rule as a MEASURED reject (trunk roads never carried the summary flag). */
+  const traceTrip = async (
+    trip: DriveFirstTrip,
+  ): Promise<{
+    ok: boolean;
+    reason?: string;
+    bundle?: Omit<ServeBundle, 'alternates' | 'validation' | 'climb'>;
+  }> => {
+    let trace: Awaited<ReturnType<typeof traceRoadClasses>> | null = null;
+    try {
+      trace = await traceRoadClasses(deps.valhallaUrl, trip.route.geometry);
+    } catch {
+      trace = null;
+    }
+    const edges = trace?.edges ?? [];
+    const hwM = trace ? tracedHighwayM(edges) : 0;
+    if (trace && imposedNoHighway && hwM > TRACE_HIGHWAY_FLOOR_M) {
+      return { ok: false, reason: `highway ${Math.round(hwM)}m` };
+    }
+    const unpavedM = edges.reduce((acc, e) => acc + (e.unpaved === true ? e.lengthM : 0), 0);
+    const geometry = trip.route.geometry;
+    const backStats = trace ? classRunStatsOf(edges, geometry, BACKROAD_CLASSES, origin, 0) : null;
+    return {
+      ok: true,
+      bundle: {
+        trip,
+        // the served LINE, measured with the frozen class-aware formula —
+        // never the stored ring's number for a line that is not the ring
+        curviness: measureCurvatureClassAware(geometry, trace).curviness,
+        hasHighway: trace ? hwM > TRACE_HIGHWAY_FLOOR_M : trip.route.has_highway,
+        hasUnpaved: trace ? unpavedM > UNPAVED_MIN_M : trip.route.has_unpaved,
+        classMix: trace ? classMixOf(edges) : null,
+        countryScore: trace ? countryScoreOf(edges) : null,
+        arterialShare: trace ? arterialShareOf(edges) : null,
+        urbanShare: URBAN_CONTEXT_ON ? urbanShareOf(urbanIndex, geometry, [origin]) : null,
+        backroadLongestM: backStats?.longestM ?? null,
+        backroadMeanM: backStats?.meanM ?? null,
+        hoodRunM: trace ? maxClassRunInfo(edges, geometry, HOOD_CLASSES, origin, 0).runM : null,
+        turnsPer10min: turnsPer10minOf(trip.route),
+      },
+    };
+  };
+
+  /** Pick the first candidate that survives the trace rule and enrich it. */
+  const prepareServe = async (outcome: DriveFirstOutcome): Promise<ServeBundle | null> => {
+    const candidates = outcome.trip ? [outcome.trip, ...outcome.alternates] : [];
+    for (let i = 0; i < candidates.length; i++) {
+      const cand = candidates[i]!;
+      const traced = await traceTrip(cand);
+      if (!traced.ok || !traced.bundle) {
+        outcome.rejected.push({ id: cand.core.id, failures: [traced.reason ?? 'trace'] });
+        continue;
+      }
+      let climb: { climb_m: number } | null = null;
+      try {
+        const profile = await getElevationProfile(deps.valhallaUrl, cand.route.geometry);
+        climb = profile ? { climb_m: profile.climb_m } : null;
+      } catch {
+        climb = null;
+      }
+      const c = cand.route.geometry.coordinates as Array<[number, number]>;
+      const validation = validateCandidate(
+        {
+          route: {
+            ...cand.route,
+            has_highway: traced.bundle.hasHighway,
+            has_unpaved: traced.bundle.hasUnpaved,
+          },
+          constraints,
+          closureM: haversineM(c[0]!, c[c.length - 1]!),
+          selfOverlap: selfOverlapRatio(cand.route.geometry, undefined, origin),
+          stopCoverage: stopCoverageOf([], []),
+          stops: [],
+          relaxedConstraints: [],
+          effectiveAvoid: { ...constraints.avoid, highways: tripAvoidHighways },
+        },
+        { durationTolerance: TRIP_EXACT_BAND },
+      );
+      return {
+        ...traced.bundle,
+        alternates: candidates.slice(i + 1),
+        climb,
+        validation,
+      };
+    }
+    return null;
+  };
+
+  const mins = (x: number): number => Math.round(x / 60);
+  const tripWords = (t: DriveFirstTrip): string =>
+    t.source === 'sweep'
+      ? `through ${t.core.name}`
+      : `around ${t.drive.frac < 0.97 ? `most of ${t.core.name}` : t.core.name}`;
+
+  /** Serve a prepared measured trip (synchronous — replayable as a held alternate). */
+  const applyServe = (b: ServeBundle, outcome: DriveFirstOutcome): void => {
+    const trip = b.trip;
+    const asked = constraints.duration_target_s ?? 0;
+    result.status = 'ok';
+    result.route = {
+      geometry: trip.route.geometry,
+      distance_m: trip.route.distance_m,
+      duration_s: trip.route.duration_s,
+      legs: trip.route.legs,
+      maneuvers: trip.route.maneuvers,
+      has_highway: b.hasHighway,
+      has_toll: trip.route.has_toll,
+      has_ferry: trip.route.has_ferry,
+      has_unpaved: b.hasUnpaved,
+    };
+    result.curviness = b.curviness;
+    result.validation = b.validation;
+    result.classMix = b.classMix;
+    result.countryScore = b.countryScore;
+    result.arterialShare = b.arterialShare;
+    result.urbanShare = b.urbanShare;
+    result.backroadLongestM = b.backroadLongestM;
+    result.backroadMeanM = b.backroadMeanM;
+    result.hoodRunM = b.hoodRunM;
+    result.turnsPer10min = b.turnsPer10min;
+    result.elevation = b.climb;
+    // Waypoints mark J1 / arc-mid / J2 — the audit's geometric split needs
+    // them; the USER-facing result carries NO leg framing (BD-149: "that
+    // loop should be the full drive as the loop itself").
+    result.waypoints = [trip.drive.entry, trip.drive.mid, trip.drive.exit];
+    result.legs = null;
+    result.stops = [];
+    // the clean alternates go on the wire (they were prose until BD-203)
+    result.alternates = b.alternates.map((alt) => ({
+      route: alt.route,
+      curviness: measureCurvatureClassAware(alt.route.geometry, null).curviness,
+      validation: validateCandidate(
+        {
+          route: alt.route,
+          constraints,
+          closureM: null,
+          selfOverlap: 0,
+          stopCoverage: stopCoverageOf([], []),
+          stops: [],
+          relaxedConstraints: [],
+          effectiveAvoid: { ...constraints.avoid, highways: tripAvoidHighways },
+        },
+        { durationTolerance: TRIP_EXACT_BAND },
+      ),
+      presentKey: 0,
+      stops: [],
+      waypoints: [alt.drive.entry, alt.drive.mid, alt.drive.exit],
+      countryScore: null,
+      arterialShare: null,
+      urbanShare: URBAN_CONTEXT_ON ? urbanShareOf(urbanIndex, alt.route.geometry, [origin]) : null,
+    }));
+    if (trip.tier === 'exact') {
+      result.disclosures.push(
+        `Built a ${mins(trip.durationS)}-minute loop ${tripWords(trip)} — measured roads, honest time.`,
+      );
+    } else {
+      // R34-U8: an honest ALTERNATE duration — never a silent miss.
+      result.disclosures.push(
+        `No clean ${mins(asked)}-minute loop fits from here — ` +
+          `built a clean ${mins(trip.durationS)}-minute one ${tripWords(trip)} instead.`,
+      );
+    }
+    // the commute, in plain words (BD-186: disclosed, never a reject)
+    const commuteS = trip.legs.thereS + trip.legs.homeS;
+    if (trip.metrics.commuteShare >= 0.3) {
+      result.disclosures.push(
+        `About ${mins(commuteS)} min of it is getting to and from the good roads.`,
+      );
+    }
+    for (const alt of b.alternates) {
+      result.disclosures.push(
+        `Also built a clean ${mins(alt.durationS)}-minute option ${tripWords(alt)}.`,
+      );
+    }
+    if (originStemM !== null && originStemM >= 1_500) {
+      result.disclosures.push(
+        `This area has one practical way out — the first and last ~${Math.round(
+          originStemM / 1000,
+        )} km repeat by necessity.`,
+      );
+    }
+    step(
+      emit,
+      'drive_first_trip',
+      'completed',
+      `served ${trip.tier} ${trip.source ?? 'ring'} ${trip.core.id} (x ${trip.metrics.knots}/${trip.metrics.pierces}, ` +
+        `stem ${originStemM ?? '—'}m, fidelity ${trip.fidelity.toFixed(2)}, ` +
+        `loopiness ${trip.metrics.loopiness?.toFixed(2) ?? '—'}, ` +
+        `commute ${Math.round(trip.metrics.commuteShare * 100)}%` +
+        (b.classMix ? `, backroad ${Math.round(b.classMix.backroadShare * 100)}%` : '') +
+        (trip.holes
+          ? `, holes ${trip.holes.map((h) => `${h.startHoleM}/${h.stemHoleM}`).join(' ')}`
+          : '') +
+        (outcome.rejected.length > 0
+          ? `; rejected ${outcome.rejected.map((r) => `${r.id}: ${r.failures.join('+')}`).join(', ')}`
+          : '') +
+        ')',
+    );
+  };
+
+  /** Hold or serve a measured outcome. Returns true when the request is served. */
+  const settleMeasured = async (outcome: DriveFirstOutcome, label: string): Promise<boolean> => {
+    const bundle = await prepareServe(outcome);
+    if (bundle === null) {
+      if (outcome.rejected.length > 0) {
+        step(
+          emit,
+          'drive_first_trip',
+          'completed',
+          `${label}: no candidate passed as-driven gates — ${outcome.rejected
+            .map((r) => `${r.id}: ${r.failures.join('+')}`)
+            .join(', ')}`,
+        );
+      }
+      return false;
+    }
+    if (bundle.trip.tier === 'exact' || !ALT_HOLD_LEGACY_ON) {
+      applyServe(bundle, outcome);
+      return true;
+    }
+    // BD-169: hold the out-of-band clean alternate; legacy gets its shot at
+    // the exact band and the better serve wins at the exits. A closer
+    // alternate replaces a farther one already held.
+    const asked = constraints.duration_target_s ?? 1;
+    const errOf = (t: DriveFirstTrip): number => Math.abs(t.durationS - asked) / asked;
+    if (heldTrip === null || errOf(bundle.trip) < errOf(heldTrip)) {
+      heldTrip = bundle.trip;
+      heldServeBase = [...result.disclosures];
+      heldAlternate = () => applyServe(bundle, outcome);
+      step(
+        emit,
+        'drive_first_trip',
+        'completed',
+        `${label}: holding clean ${mins(bundle.trip.durationS)}-min alternate ${bundle.trip.core.id} — ` +
+          `trying for an exact ${mins(asked)}-min loop live`,
+      );
+    }
+    return false;
+  };
+
+  if (measuredPathsAllowed && DRIVE_FIRST_ON && constraints.duration_target_s !== null) {
+    const outcome = await driveFirstTrip(
+      deps.db,
+      deps.valhallaUrl,
+      origin,
+      constraints.duration_target_s,
+      {
+        avoidHighways: tripAvoidHighways,
+        character: tripCharacter,
+        ...(originStemM !== null ? { oabGraceM: originStemM } : {}),
+        // The attempt may spend at most 40 % of the wall; the sweep and the
+        // legacy planner keep the rest (measured: unbounded stacking hit 25.8 s live).
+        deadlineMs: Date.now() + WALL_CLOCK_BUDGET_MS * 0.4,
+      },
+    );
+    if (await settleMeasured(outcome, 'ring')) return result;
+  }
+  if (
+    measuredPathsAllowed &&
+    SWEEP_ON &&
+    constraints.duration_target_s !== null &&
+    !outOfBudget()
+  ) {
+    // BD-203: the sweep — a loop BUILT from measured pieces with corridor-
+    // excluded legs; runs when no ring served the exact band, inside what is
+    // left of the measured slice (70 % of the wall), the legacy planner after.
+    const target = constraints.duration_target_s;
+    const reachM = Math.max(12_000, target * TRIP_REACH_FRAC * (55_000 / 3600));
+    const remainingMs = WALL_CLOCK_BUDGET_MS * 0.7 - (now() - t0);
+    if (remainingMs > 2_500) {
+      step(emit, 'drive_first_trip', 'started', 'sweep');
+      const sw = await sweepTrip(deps.db, deps.valhallaUrl, origin, target, {
+        reachM,
+        stemM: originStemM ?? TRIP_OAB_ORIGIN_GRACE_M,
+        costingOptions: tripCosting,
+        deadlineMs: Date.now() + remainingMs,
+        character: tripCharacter,
+      });
+      step(
+        emit,
+        'drive_first_trip',
+        'completed',
+        `sweep: ${sw.pieces} pieces, ${sw.plans} plans, ${sw.calls} engine calls` +
+          (sw.trip ? `, best ${sw.trip.tier} ${mins(sw.trip.durationS)} min` : ', nothing clean'),
+      );
+      if (await settleMeasured(sw, 'sweep')) return result;
+    }
+    // A held alternate with too little wall left for the legacy planner to
+    // do anything but overrun (measured: 35 s) is served now, honestly.
+    if (heldTrip !== null && WALL_CLOCK_BUDGET_MS - (now() - t0) < LEGACY_MIN_SLICE_MS) {
+      step(
+        emit,
+        'drive_first_trip',
+        'completed',
+        'serving the held alternate — no wall left for a live attempt',
+      );
+      restoreHeld();
+      emit({ type: 'done', status: 'ok' });
+      return result;
+    }
+  }
+  if (isLoop && measuredPathsAllowed && heldTrip === null && (DRIVE_FIRST_ON || SWEEP_ON)) {
+    result.disclosures.push(
+      'No measured drive fits that time cleanly from this start yet — planned live instead.',
+    );
+  }
+
+  // R31 (BD-151) — A→B DRIVE-FIRST: the best measured ribbon ON THE WAY,
+  // served as one routed request (A → through-samples → B), judged as driven
+  // (fidelity, spurs, doubling, the standing detour cap). Fail-open to the
+  // legacy corridor planner with the rejections in the trace.
+  if (!isLoop && ATOB_DRIVE_FIRST_ON && destination !== null) {
+    const outcome = await atobDriveFirst(deps.db, deps.valhallaUrl, origin, destination, {
+      avoidHighways: constraints.avoid.highways === true,
+      costingOptions: profileForRequest(constraints, deps.costingMode ?? 'on').options,
+      // Date.now(), NOT t0: t0 rides performance.now() (process uptime), and
+      // the module compares epoch — mixing them made the deadline read as
+      // already-expired, silently rejecting every candidate as time_budget.
+      deadlineMs: Date.now() + WALL_CLOCK_BUDGET_MS * 0.4,
+    });
+    const trip = outcome.trip;
+    if (trip !== null) {
+      result.status = 'ok';
+      result.route = {
+        geometry: trip.route.geometry,
+        distance_m: trip.route.distance_m,
+        duration_s: trip.route.duration_s,
+        legs: trip.route.legs,
+        maneuvers: trip.route.maneuvers,
+        has_highway: trip.route.has_highway,
+        has_toll: trip.route.has_toll,
+        has_ferry: trip.route.has_ferry,
+        has_unpaved: trip.route.has_unpaved,
+      };
+      // curviness: length-weighted over the chained measured ribbons
+      const chainLen = trip.ribbons.reduce((v, r) => v + r.distance_m, 0);
+      result.curviness =
+        trip.ribbons.reduce((v, r) => v + r.curviness * r.distance_m, 0) / Math.max(1, chainLen);
+      result.waypoints = trip.ribbons.map((r) => r.entry);
+      result.legs = null;
+      const names = trip.ribbons.map((r) => r.name);
+      const nameLine =
+        names.length === 1
+          ? names[0]!
+          : names.length === 2
+            ? `${names[0]} and ${names[1]}`
+            : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+      result.disclosures.push(
+        `Routed you along ${nameLine} on the way — measured backroad stretches, ` +
+          `about ${Math.round((trip.detourRatio - 1) * 100)}% longer than the direct route.`,
+      );
+      step(
+        emit,
+        'drive_first_trip',
+        'completed',
+        `served atob chain [${trip.ribbons.map((r) => r.id).join('>')}] (fidelity ${trip.metrics.fidelity.toFixed(2)}, detour ${trip.detourRatio.toFixed(2)}×` +
+          (outcome.rejected.length > 0
+            ? `; rejected ${outcome.rejected.map((r) => `${r.id}: ${r.failures.join('+')}`).join(', ')}`
+            : '') +
+          ')',
+      );
+      // BD-179: this exit bypassed the judge exactly as `presentDirtyBest`
+      // did for loops (BD-163) — measured: 2 chain serves shipped crossings.
+      // BD-203: the worth-it gate rides the same closure on a judge PASS.
+      const refused = applyAtoBStructuralJudge();
+      await serveDirectFallback();
+      if (refused || atobDirectReason !== null) {
+        emit({ type: 'done', status: result.route !== null ? 'relaxed' : 'unavailable' });
+      }
+      return result;
+    }
+    if (outcome.rejected.length > 0) {
+      step(
+        emit,
+        'drive_first_trip',
+        'completed',
+        `no ribbon passed on this corridor — ${outcome.rejected
+          .map((r) => `${r.id}: ${r.failures.join('+')}`)
+          .join(', ')}`,
+      );
+    }
+  }
+
   let params: SearchParams = initialParams(constraints);
+  // BD-203: what the measured paths already said (planned live to honour a
+  // stop, no measured drive fits) must survive the legacy exit, which
+  // replaces result.disclosures with the ladder's own list.
+  params.disclosures.push(...result.disclosures);
   if (distanceNote !== null) params.disclosures.push(distanceNote);
   if (bundle !== null && bundle.durationTolerance !== DURATION_TOLERANCE_DEFAULT) {
     params = { ...params, durationTolerance: bundle.durationTolerance };
@@ -1182,6 +1690,9 @@ export async function runPlanner(
       microloops: number;
       closureM: number | null;
       trace: import('../valhalla/trace').TraceResult | null;
+      /** BD-203: A→B rows carry their measured crossings + assembly reasons. */
+      crossings?: number | null;
+      rejectReasons?: string[];
     };
     units: number;
     curviness: number;
@@ -1197,6 +1708,13 @@ export async function runPlanner(
         !(params.avoid.ferries && r.route.has_ferry) &&
         !(params.avoid.unpaved && r.route.has_unpaved);
       if (!routable || !closed || !avoidClean) continue;
+      // BD-203 (G): an A→B row the detour cap or the duration guard refused is
+      // NOT fallback material — presenting it would ship the very thing the
+      // cap exists to stop (the direct way is the honest answer instead)
+      const overCap =
+        !isLoop &&
+        (r.rejectReasons ?? []).some((x) => x.startsWith('detour') || x.startsWith('duration'));
+      if (overCap) continue;
       const units = fallbackOffenceUnits({
         uturns: uturnCount(r.route),
         microloops: r.microloops,
@@ -1208,6 +1726,7 @@ export async function runPlanner(
         outAndBackLongestM: outAndBack(r.route.geometry).longestM,
         revisitPlaces: revisitCount(r.route.geometry, origin),
         traceNull: r.trace === null,
+        crossings: r.crossings ?? null, // BD-203: a crossing costs a u-turn's unit
         // R21-1: least-degenerate sliver wins the never-empty fallback too
         loopiness: SHAPE_QUALITY_ON && isLoop ? loopiness(r.route.geometry) : null,
         corridorDoubling:
@@ -1262,7 +1781,7 @@ export async function runPlanner(
     }
     step(emit, 'validate_route', 'completed', `FINAL JUDGE reject: ${structural.join(', ')}`);
     result.route = null;
-    result.status = 'unavailable';
+    result.status = 'no_clean_route'; // BD-203: a verdict, not an outage
     result.legs = null;
     result.disclosures = [
       `No clean ${Math.round((constraints.duration_target_s ?? 3600) / 60)}-minute loop from this exact start right now — ` +
@@ -1282,7 +1801,16 @@ export async function runPlanner(
       emit({ type: 'done', status: 'ok' });
       return true;
     }
-    if (dirtyBest === null) return false;
+    if (dirtyBest === null) {
+      // BD-203 (G): an A→B with NO fallback material still has a destination —
+      // the direct way is served honestly instead of a dead end
+      await serveDirectFallback();
+      if (atobDirectReason !== null && result.route !== null) {
+        emit({ type: 'done', status: 'relaxed' });
+        return true;
+      }
+      return false;
+    }
     const { row, units, curviness } = dirtyBest;
     const effStops = params.dropNiceToHaveStops
       ? requestStops.filter((x) => x.importance === 'required')
@@ -1325,7 +1853,7 @@ export async function runPlanner(
     }
     if (bits.length === 0) bits.push(`carries ${units.toFixed(1)} quality flaws`);
     params.disclosures.push(
-      `no clean loop exists around here — presenting the least-flawed option (${bits.join('; ')})`,
+      `no clean ${isLoop ? 'loop exists around here' : 'backroads route exists between these points'} — presenting the least-flawed option (${bits.join('; ')})`,
     );
     result.status = 'relaxed';
     result.route = row.route;
@@ -1341,8 +1869,10 @@ export async function runPlanner(
       ? urbanShareOf(urbanIndex, row.route.geometry, destination ? [origin, destination] : [origin])
       : null;
     // BD-163/179: the dirtiest material meets the judge like everything else.
-    if (applyFinalStructuralJudge() || applyAtoBStructuralJudge()) {
-      await serveDirectFallback(); // BD-181: law-refused A→B gets the direct way
+    // BD-203: and the A→B worth-it gate (serveDirectFallback owns both serves).
+    const refused = applyFinalStructuralJudge() || applyAtoBStructuralJudge();
+    await serveDirectFallback(); // BD-181/203: the direct way on a law reject or a failed worth-it gate
+    if (refused || atobDirectReason !== null) {
       emit({ type: 'done', status: result.route !== null ? 'relaxed' : 'unavailable' });
       return true; // the request IS answered — honestly, either way
     }
@@ -1351,25 +1881,54 @@ export async function runPlanner(
   };
 
   // --- iteration loop (cap 3 / wall clock) ---
-  for (let iteration = 1; iteration <= ITERATION_CAP && !outOfBudget(); iteration++) {
+  // BD-203: with a clean measured alternate already HELD, the live attempt
+  // gets ONE iteration for the exact band — a full ladder behind a held trip
+  // overran the wall (measured 36 s: the seams only check between batches).
+  const iterationCap = heldTrip !== null ? 1 : ITERATION_CAP;
+  for (let iteration = 1; iteration <= iterationCap && !outOfBudget(); iteration++) {
     result.iterations = iteration;
 
-    // scope
+    // scope — BD-203 (H): an A→B with a direct baseline searches a CORRIDOR
+    // buffer of that route (half-width max(8 km, 0.2 × direct), widened by
+    // the ladder's τ multiplier, ≤ 60 km chunks so a long corridor's middle
+    // gets its own retrieval seats); the endpoint isochrones — sized from a
+    // duration the app never sends for A→B — remain the fallback only.
     step(emit, 'scope', 'started');
-    emit({ type: 'tool_call', tool: 'get_isochrone' });
-    const scope = await buildScope(deps.valhallaUrl, {
-      origin,
-      shape: constraints.shape,
-      durationS: Math.round(durationS * params.tauMultiplier),
-      ...(destination ? { destination } : {}),
-    });
-    emit({
-      type: 'tool_result',
-      tool: 'get_isochrone',
-      ok: true,
-      count: scope.rings.length,
-    });
-    step(emit, 'scope', 'completed', `τ_out ${scope.tauOutS}s ×${params.tauMultiplier.toFixed(2)}`);
+    let scope: Scope;
+    if (!isLoop && atobBaseline !== null) {
+      const halfWidthM = atobCorridorHalfWidthM(atobBaseline.distanceM, params.tauMultiplier);
+      scope = corridorScope(atobBaseline.route.geometry, halfWidthM);
+      step(
+        emit,
+        'scope',
+        'completed',
+        `corridor Ω half-width ${Math.round(halfWidthM / 1000)} km ×${params.tauMultiplier.toFixed(2)}, ${scope.rings.length} ring(s); ` +
+          `direct ${Math.round(atobBaseline.distanceM / 1000)} km · ${Math.round(atobBaseline.durationS / 60)} min · backroad ${directBackroadPct()}` +
+          (atobBaseline.avoidHonoured
+            ? ''
+            : ' · avoid set NOT routable — baseline routed without exclusions'),
+      );
+    } else {
+      emit({ type: 'tool_call', tool: 'get_isochrone' });
+      scope = await buildScope(deps.valhallaUrl, {
+        origin,
+        shape: constraints.shape,
+        durationS: Math.round(durationS * params.tauMultiplier),
+        ...(destination ? { destination } : {}),
+      });
+      emit({
+        type: 'tool_result',
+        tool: 'get_isochrone',
+        ok: true,
+        count: scope.rings.length,
+      });
+      step(
+        emit,
+        'scope',
+        'completed',
+        `τ_out ${scope.tauOutS}s ×${params.tauMultiplier.toFixed(2)}`,
+      );
+    }
 
     // effective stop requests this iteration (rung 3 drops nice-to-haves) —
     // ONE definition feeds retrieve, generate, scoring, and validation so the
@@ -1651,12 +2210,21 @@ export async function runPlanner(
                 candidate,
                 {
                   costingOptions: {
-                    ...profile.options, // R18-1 (also costs the direct baseline identically)
+                    ...profile.options, // R18-1: fun-vs-fast connector costing
                     exclude_highways: params.avoid.highways,
                     exclude_tolls: params.avoid.tolls,
                     exclude_ferries: params.avoid.ferries,
                     exclude_unpaved: params.avoid.unpaved, // best-effort; trace scan = truth (R16-2)
                   },
+                  // BD-203 (C): ONE direct baseline per request (engine-fastest,
+                  // the full avoid set) for the detour cap AND the duration guard
+                  // — no more per-candidate-per-pass direct routing
+                  ...(atobBaseline !== null
+                    ? {
+                        directDistanceM: atobBaseline.distanceM,
+                        directDurationS: atobBaseline.durationS,
+                      }
+                    : {}),
                   scanUnpaved: params.avoid.unpaved, // unpaved flag only when it matters
                   repairSegments: retrieved.segments,
                   shouldStop: outOfBudget,
@@ -1671,13 +2239,18 @@ export async function runPlanner(
                 candidate: a.candidate, // TSP/repair may have reshaped waypoints + stops
                 route: a.route,
                 selfOverlap: a.selfOverlap,
-                spursWide: 0,
-                retraceRunM: 0,
+                // BD-203 (A): the judge's defects, MEASURED at assembly with the
+                // judge's own grace (were hard-coded 0 — the dirty clauses and
+                // the fallback units could never fire on an A→B row)
+                spursWide: a.spursWide,
+                retraceRunM: a.retraceRunM,
                 residentialShare: a.residentialShare, // R18-3: measured (was M6 IOU)
                 residentialRunM: a.residentialRunM,
                 countryScore: a.countryScore,
                 arterialShare: a.arterialShare, // R18-3 A→B trace parity
-                microloops: 0,
+                microloops: a.microloops,
+                crossings: a.crossings, // knots + pierces outside both graces
+                rejectReasons: a.rejectReasons, // BD-203 (G): dirtyBest skips cap/guard rejects
                 closureM: null as number | null,
                 snapOffsetM: 0, // A→B endpoints are user-chosen; no loop-pin snap story
                 trace: a.trace, // R18-3: always attempted (fail-open null)
@@ -1715,7 +2288,9 @@ export async function runPlanner(
       const target = constraints.duration_target_s;
       let sizingV = sizingSpeed;
       let batch = routed;
-      const maxResizeAttempts = RESIZE_ATTEMPTS_3_ON ? 3 : 2; // R25-U7b
+      // BD-203: behind a held measured alternate the live attempt gets ONE batch —
+      // each resize re-routes the whole batch (measured 24 s for one iteration).
+      const maxResizeAttempts = heldTrip !== null ? 0 : RESIZE_ATTEMPTS_3_ON ? 3 : 2; // R25-U7b
       for (
         let attempt = 1;
         attempt <= maxResizeAttempts && batch.length > 0 && !outOfBudget();
@@ -1815,9 +2390,12 @@ export async function runPlanner(
       // signal lets a clean pool-mate win before the judge has to refuse the
       // whole request (Recovery §11.3 applied to A→B). Loops keep their own
       // zero-tolerance veto regardless.
-      if (ATOB_STRUCTURAL_LAW_ON && !isLoop) {
-        const xs = summarizeCrossings(selfIntersections(r.route.geometry, origin));
-        if (xs.knots + xs.pierces > 0) dirtyClauses.push('self_crossing');
+      // BD-203: read the assembly's OWN measurement (graced 500 m at both
+      // endpoints — the judge's numbers) instead of re-detecting here with the
+      // origin grace only; a loop row carries none (its veto is the final judge).
+      const atobCrossings = 'crossings' in r ? r.crossings : null;
+      if (ATOB_STRUCTURAL_LAW_ON && !isLoop && (atobCrossings ?? 0) > 0) {
+        dirtyClauses.push('self_crossing');
       }
       const dirty = dirtyClauses.length > 0;
       // BD-146: the ask means the TRIP the driver sits through — EVERY
@@ -1865,6 +2443,7 @@ export async function runPlanner(
         traceNull: r.trace === null,
         loopiness: shapeLoopiness, // R21-1 (null → 0)
         corridorDoubling: shapeCorridor,
+        crossings: atobCrossings, // BD-203: a crossing costs a u-turn's unit (A→B rows)
       });
       // R25-U9a: THE shared presentation key (score.ts presentationKey) —
       // run.ts, eval and the tier-order proof can no longer drift.
@@ -2123,7 +2702,7 @@ export async function runPlanner(
     // R18-2 never-empty: iteration/budget exhaustion also falls back before
     // giving up (redirect survives only for truly unroutable requests)
     if (await presentDirtyBest()) return result;
-    result.status = outOfBudget() ? 'unavailable' : 'redirect';
+    result.status = outOfBudget() ? 'out_of_time' : 'redirect'; // BD-203: honest exhaustion
     result.disclosures = params.disclosures;
     emit({ type: 'done', status: 'unavailable' });
     return result;
@@ -2245,7 +2824,7 @@ export async function runPlanner(
         result.disclosures.push(
           `about ${Math.round(result.route.duration_s / 60)} min — ${degree} ${
             err < 0 ? 'under' : 'over'
-          } the ${Math.round(target / 60)} you asked; the roads here don’t form a cleaner loop at that exact length`,
+          } the ${Math.round(target / 60)} you asked; the roads here don’t form a cleaner ${isLoop ? 'loop' : 'route'} at that exact length`,
         );
       }
     }
@@ -2267,8 +2846,10 @@ export async function runPlanner(
   // final-judge reject just above) serves the held alternate.
   if (heldAlternate !== null) {
     const target = constraints.duration_target_s;
+    // BD-203 one ruler: the arbitration is on the ROUTE (judge-passed, no
+    // relaxed constraint, in the exact band) — not on the status string,
+    // which any informational disclosure flips to 'relaxed'.
     const legacyWins =
-      result.status === 'ok' &&
       result.route !== null &&
       params.relaxedConstraints.length === 0 &&
       target !== null &&

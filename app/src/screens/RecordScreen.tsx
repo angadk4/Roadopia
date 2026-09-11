@@ -13,14 +13,16 @@
  * offers Try again / Discard (before, the only button left wiped it); the
  * snap itself has a Cancel and a timeout, so "Snapping to roads…" can no
  * longer sit forever; the clock and distance hold their final values after
- * Stop; and thirty seconds without a GPS fix is said out loud.
+ * Stop; and thirty seconds without a GPS fix is said out loud. Review
+ * (2026-09-07): Discard is two-tap like every other destructive action — a
+ * stray thumb under "Save this drive" used to wipe a 90-minute capture.
  */
 
 import Mapbox, { Camera, LineLayer, MapView, ShapeSource } from '@rnmapbox/maps';
 import type { RouteThroughOutput } from '@shared/types';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import '../lib/mapbox';
 import SafetyNote from '../components/SafetyNote';
@@ -44,7 +46,11 @@ import { sessionId } from '../lib/session';
 import { AMBER, font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
 export interface RecordScreenProps {
-  navigation: { goBack: () => void };
+  navigation: {
+    goBack: () => void;
+    /** Present in CreateStack: opens follow-mode on the reviewed drive. */
+    navigate?: (screen: string, params?: Record<string, unknown>) => void;
+  };
   /** Injectable for tests. */
   watchFn?: typeof watchLocation;
   matchFn?: typeof postMatch;
@@ -74,6 +80,8 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
 
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [rec, setRec] = useState<RecorderState>(IDLE_RECORDER);
+  /** Discard takes the capture with it — one stray tap shouldn't. */
+  const [discardArmed, setDiscardArmed] = useState(false);
   const [, forceTick] = useState(0);
   const stopFixes = useRef<StopWatching | null>(null);
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -145,6 +153,7 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
 
   /** Snap the kept capture; failure and cancellation both keep it. */
   const runMatch = (captured: RecorderState): void => {
+    setDiscardArmed(false); // a Discard armed on the failed panel must not carry over
     setPhase({ kind: 'matching' });
     const controller = new AbortController();
     matchAbort.current = controller;
@@ -194,9 +203,21 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
   const reset = (): void => {
     matchAbort.current?.abort();
     lastFixAt.current = null;
+    setDiscardArmed(false);
     setRec(IDLE_RECORDER);
     setPhase({ kind: 'idle' });
   };
+
+  /** First tap arms, second tap discards (the pattern every delete uses). */
+  const discard = (): void => {
+    if (!discardArmed) {
+      setDiscardArmed(true);
+      return;
+    }
+    reset();
+  };
+  const discardLabel = discardArmed ? 'Confirm discard recording' : 'Discard recording';
+  const discardText = discardArmed ? 'Tap again to discard' : 'Discard';
 
   const elapsed = elapsedS(rec, now());
   const mins = Math.floor(elapsed / 60);
@@ -211,7 +232,12 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
     `${km} km · ${rec.points.length} points${rec.droppedFixes > 0 ? ` · ${rec.droppedFixes} noisy fixes dropped` : ''}`;
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.bg }]}>
+    // the drive-name field sits at the bottom of the review panel: without
+    // this the iOS keyboard covered it and the Save button (review finding)
+    <KeyboardAvoidingView
+      style={[styles.root, { backgroundColor: colors.bg }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       {phase.kind === 'review' ? (
         <MapView
           style={styles.map}
@@ -237,7 +263,7 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
         </MapView>
       ) : (
         <View style={[styles.map, styles.hud]}>
-          <Text style={[styles.clock, { color: colors.text }]} accessibilityLabel="Recording time">
+          <Text style={[styles.clock, { color: colors.text }]}>
             {rec.startedAtMs !== null ? `${mins}:${String(secs).padStart(2, '0')}` : '—:——'}
           </Text>
           <Text style={[styles.hudLine, { color: colors.textMuted }]}>
@@ -292,14 +318,39 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
               Snapped to real roads from {rec.points.length} GPS points
               {rec.droppedFixes > 0 ? ` (${rec.droppedFixes} noisy fixes dropped)` : ''}.
             </Text>
+            {/* a recorded drive is followable straight from the review — with
+                the matcher's own turns (device pass 2026-09-07) */}
+            {props.navigation.navigate && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Follow this drive"
+                onPress={() =>
+                  props.navigation.navigate?.('Follow', {
+                    route: toRecordedRoute(phase.matched, rec),
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.recordBtn,
+                  { backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={[styles.recordLabel, { color: colors.onAccent }]}>
+                  Follow this drive
+                </Text>
+              </Pressable>
+            )}
             <SaveDriveButton route={toRecordedRoute(phase.matched, rec)} agentExplanation={null} />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Discard recording"
-              onPress={reset}
+              accessibilityLabel={discardLabel}
+              onPress={discard}
               style={styles.discard}
             >
-              <Text style={[styles.hint, { color: colors.textMuted }]}>Discard</Text>
+              <Text
+                style={[styles.hint, { color: discardArmed ? colors.danger : colors.textMuted }]}
+              >
+                {discardText}
+              </Text>
             </Pressable>
             <SafetyNote context="route" />
           </>
@@ -328,11 +379,21 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Discard recording"
-              onPress={reset}
-              style={[styles.secondaryBtn, { borderColor: colors.border }]}
+              accessibilityLabel={discardLabel}
+              onPress={discard}
+              style={[
+                styles.secondaryBtn,
+                { borderColor: discardArmed ? colors.danger : colors.border },
+              ]}
             >
-              <Text style={[styles.secondaryLabel, { color: colors.textMuted }]}>Discard</Text>
+              <Text
+                style={[
+                  styles.secondaryLabel,
+                  { color: discardArmed ? colors.danger : colors.textMuted },
+                ]}
+              >
+                {discardText}
+              </Text>
             </Pressable>
           </View>
         ) : (
@@ -354,7 +415,7 @@ export default function RecordScreen(props: RecordScreenProps): ReactElement {
           </Pressable>
         )}
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -295,3 +295,28 @@ describe('presets (M3-T10 AC)', () => {
     expect((merged as unknown as Record<string, number>)['nonsense']).toBeUndefined();
   });
 });
+
+describe('BD-203 — self-crossings are a never-empty-fallback offence unit', () => {
+  it('a crossing costs exactly a u-turn unit; absent or null costs nothing', () => {
+    const base = {
+      uturns: 0,
+      microloops: 0,
+      spursWide: 0,
+      selfOverlap: 0.05,
+      retraceRunM: 0,
+      residentialShare: 0.02 as number | null,
+      residentialRunM: 100 as number | null,
+      traceNull: false,
+    };
+    expect(fallbackOffenceUnits(base)).toBe(0);
+    expect(fallbackOffenceUnits({ ...base, crossings: null })).toBe(0);
+    expect(fallbackOffenceUnits({ ...base, crossings: 1 })).toBe(
+      fallbackOffenceUnits({ ...base, uturns: 1 }),
+    );
+    expect(fallbackOffenceUnits({ ...base, crossings: 2 })).toBe(2);
+    // an uncrossed row wins the fallback over a crossed one of equal shape
+    expect(fallbackOffenceUnits({ ...base, spursWide: 1 })).toBeLessThan(
+      fallbackOffenceUnits({ ...base, spursWide: 1, crossings: 1 }),
+    );
+  });
+});

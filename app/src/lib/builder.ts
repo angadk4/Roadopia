@@ -97,7 +97,7 @@ export function toManualRoute(snapped: RouteThroughOutput, waypoints: LatLng[]):
     waypoints,
     distance_m: snapped.distance_m,
     duration_s: snapped.duration_s,
-    curviness: 0,
+    curviness: null, // not measured for this line (BD-203) — never a claimed 0
     elevation_profile: null,
     climb_m: null,
     highway_flag: snapped.has_highway,

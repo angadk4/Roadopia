@@ -165,7 +165,7 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
       {/* a saved drive opens under its own name (device pass: every saved
           drive opened under a static "Saved drive" header with no name in sight) */}
       {route.name !== undefined && route.name.trim() !== '' && (
-        <Text style={[font.title, { color: colors.text }]} accessibilityLabel="Drive name">
+        <Text style={[font.title, { color: colors.text }]} accessibilityRole="header">
           {route.name}
         </Text>
       )}
@@ -287,15 +287,19 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
               ]}
             />
           </View>
+          {/* BD-203: measured seconds per leg when the trip carries them (a
+              Discover drive's engine-priced connectors + stored core), else
+              the distance share of the total — never a number that
+              contradicts the card the user just tapped. */}
           <Text style={[styles.legsText, { color: colors.textMuted }]}>
-            {`getting there ${Math.round((min * route.legs.there_pct) / 100)} min · `}
+            {`getting there ${Math.round((route.legs.there_s ?? (min * 60 * route.legs.there_pct) / 100) / 60)} min · `}
             <Text style={{ color: colors.text, fontWeight: '600' }}>
-              {`the drive ${Math.round((min * route.legs.drive_pct) / 100)} min`}
+              {`the drive ${Math.round((route.legs.drive_s ?? (min * 60 * route.legs.drive_pct) / 100) / 60)} min`}
               {route.legs.drive_backroad_pct !== null
                 ? ` (${route.legs.drive_backroad_pct}% backroad)`
                 : ''}
             </Text>
-            {` · home ${Math.round((min * route.legs.home_pct) / 100)} min`}
+            {` · home ${Math.round((route.legs.home_s ?? (min * 60 * route.legs.home_pct) / 100) / 60)} min`}
           </Text>
         </View>
       )}
@@ -309,7 +313,7 @@ export default function RouteDetail(props: RouteDetailProps): ReactElement {
             flat 0.0 next to real measured stats claims a measurement nobody
             made (Hard rule: never a claimed number), and a "not measured"
             placeholder in a stat slot just draws the eye to a gap. Omit it. */}
-        {route.origin_type === 'ai' && (
+        {route.origin_type === 'ai' && route.curviness !== null && (
           <Stat label="twistiness" value={route.curviness.toFixed(1)} colors={colors} />
         )}
         {route.climb_m !== null && (

@@ -128,7 +128,7 @@ export function toRecordedRoute(matched: RouteThroughOutput, s: RecorderState): 
     waypoints: first && last ? [first, last] : [],
     distance_m: matched.distance_m,
     duration_s: elapsedS(s, s.stoppedAtMs ?? 0),
-    curviness: 0,
+    curviness: null, // not measured for this line (BD-203) — never a claimed 0
     elevation_profile: null,
     climb_m: null,
     highway_flag: matched.has_highway,

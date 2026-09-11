@@ -47,6 +47,28 @@ function messageOf(status: number, fallback: string): string {
   return status === 401 || status === 403 ? 'Sign in to use this.' : fallback;
 }
 
+/**
+ * The backend's error body (`{error:{code,message}}`, lib/errors.ts) → an
+ * ApiError carrying its plain-words reason and code; a non-JSON body keeps
+ * `fallback`. Review 2026-09-07: the message used to be read from the TOP
+ * level, so "A spot holds up to 6 photos.", "That upload is too large." and
+ * the 429's "try again in Ns" all collapsed to the generic line.
+ */
+function failure(status: number, text: string, fallback: string): ApiError {
+  let message = fallback;
+  let code = 'photo_api';
+  try {
+    const parsed = JSON.parse(text) as { error?: { code?: unknown; message?: unknown } };
+    if (typeof parsed.error?.message === 'string' && parsed.error.message.trim() !== '') {
+      message = parsed.error.message;
+    }
+    if (typeof parsed.error?.code === 'string') code = parsed.error.code;
+  } catch {
+    // keep the fallback wording
+  }
+  return new ApiError({ status, code, message: messageOf(status, message) });
+}
+
 /** Read the picked image and stream it to the processing pipeline. */
 export async function uploadSpotPhoto(
   opts: PhotoApiOptions,
@@ -78,16 +100,7 @@ export async function uploadSpotPhoto(
     );
   }
   const text = await res.text();
-  if (!res.ok) {
-    let friendly = 'Could not upload the photo.';
-    try {
-      const parsed = JSON.parse(text) as { message?: string };
-      if (typeof parsed.message === 'string') friendly = parsed.message;
-    } catch {
-      // keep the fallback wording
-    }
-    throw apiError(res.status, messageOf(res.status, friendly));
-  }
+  if (!res.ok) throw failure(res.status, text, 'Could not upload the photo.');
   const parsed = PhotoRefSchema.safeParse(JSON.parse(text));
   if (!parsed.success) throw apiError(res.status, 'The server sent an unreadable response.');
   return parsed.data;
@@ -104,8 +117,9 @@ export async function listSpotPhotos(opts: PhotoApiOptions, spotId: string): Pro
   } catch {
     throw new NetworkError('Could not reach the server — check your connection.');
   }
-  if (!res.ok) throw apiError(res.status, messageOf(res.status, 'Could not load photos.'));
-  const parsed = PhotoListSchema.safeParse(JSON.parse(await res.text()));
+  const text = await res.text();
+  if (!res.ok) throw failure(res.status, text, 'Could not load photos.');
+  const parsed = PhotoListSchema.safeParse(JSON.parse(text));
   if (!parsed.success) throw apiError(res.status, 'The server sent an unreadable response.');
   return parsed.data.photos;
 }
@@ -122,6 +136,6 @@ export async function deletePhoto(opts: PhotoApiOptions, photoId: string): Promi
     throw new NetworkError('Could not reach the server — check your connection.');
   }
   if (!res.ok && res.status !== 404) {
-    throw apiError(res.status, messageOf(res.status, 'Could not delete the photo.'));
+    throw failure(res.status, await res.text(), 'Could not delete the photo.');
   }
 }

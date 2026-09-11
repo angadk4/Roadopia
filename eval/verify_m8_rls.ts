@@ -143,12 +143,52 @@ async function main(): Promise<void> {
     check('B deletes own route', del.rows.length === 1);
   });
 
+  // ---- profiles (0032): the owner reads their own row; nobody else lists them ----
+  await as(db, { role: 'anon' }, async () => {
+    check('profiles: anon has no read grant at all', await denied(db, 'select id from profiles'));
+  });
+  await as(db, { role: 'authenticated', sub: B }, async () => {
+    const other = await db.query('select id from profiles where id = $1', [A]);
+    check("profiles: B cannot read A's profile", other.rows.length === 0);
+    const own = await db.query(
+      `update profiles set display_name = 'B driver' where id = $1 returning display_name`,
+      [B],
+    );
+    check(
+      'profiles: the owner reads + renames their own row',
+      own.rows.length === 1 &&
+        (own.rows[0] as { display_name: string }).display_name === 'B driver',
+    );
+    check(
+      'profiles: a blank name is refused at the DB',
+      await denied(db, `update profiles set display_name = '' where id = $1`, [B]),
+    );
+    check(
+      'profiles: a 41-char name is refused at the DB',
+      await denied(db, `update profiles set display_name = $2 where id = $1`, [B, 'x'.repeat(41)]),
+    );
+  });
+
   // ---- T05/T07/T08/T09 integration (fork · unlisted link · visibility · deletion) ----
   const routeUnlistedA = await mk(A, 'unlisted');
   let forkId = '';
+  // 0032: "link only" is LINK only — opened by id through route_by_id, never
+  // listable through the table, never on the map home
+  await as(db, { role: 'anon' }, async () => {
+    const byLink = await db.query('select id from route_by_id($1)', [routeUnlistedA]);
+    check('anon opens an UNLISTED route by link (route_by_id)', byLink.rows.length === 1);
+    const listed = await db.query('select id from routes where id = $1', [routeUnlistedA]);
+    check('anon cannot LIST an unlisted route (bare select is empty)', listed.rows.length === 0);
+    const onMap = await db.query('select id from map_routes(500) where id = $1', [routeUnlistedA]);
+    check('an unlisted route never appears on the map home', onMap.rows.length === 0);
+    const priv = await db.query('select id from route_by_id($1)', [routePrivB]);
+    check("route_by_id hides B's PRIVATE route from anon", priv.rows.length === 0);
+  });
   await as(db, { role: 'authenticated', sub: B }, async () => {
-    const viaLink = await db.query('select id from routes where id = $1', [routeUnlistedA]);
-    check('B reads an UNLISTED route by link (uuid)', viaLink.rows.length === 1);
+    const viaLink = await db.query('select id from route_by_id($1)', [routeUnlistedA]);
+    check('B opens an UNLISTED route by link (route_by_id)', viaLink.rows.length === 1);
+    const listed = await db.query('select id from routes where id = $1', [routeUnlistedA]);
+    check('B cannot LIST an unlisted route (bare select is empty)', listed.rows.length === 0);
     const f = await db.query('select fork_route($1) as id', [routeUnlistedA]);
     forkId = (f.rows[0] as { id: string }).id;
     check('B forks it', forkId.length > 0);
@@ -193,12 +233,32 @@ async function main(): Promise<void> {
   // M10/M11-T03: photos — the pipeline is the only writer; owner-only reads
   const spotA = (
     await db.query(
-      `insert into spots (owner_id, type, name, location, source)
-       values ($1, 'viewpoint', 'RLS Photo Spot', st_setsrid(st_makepoint(-79.9, 43.3), 4326), 'user')
+      `insert into spots (owner_id, type, name, location, source, tags)
+       values ($1, 'viewpoint', 'RLS Photo Spot', st_setsrid(st_makepoint(-79.9, 43.3), 4326), 'user', '{view,quiet}')
        returning id`,
       [A],
     )
   ).rows[0] as { id: string };
+  // 0032: update_spot can CLEAR tags; a patch without the key keeps them
+  await as(db, { role: 'authenticated', sub: A }, async () => {
+    const cleared = await db.query(`select update_spot($1, '{"tags":[]}'::jsonb) as changed`, [
+      spotA.id,
+    ]);
+    const after = await db.query('select tags from spots where id = $1', [spotA.id]);
+    check(
+      'spots: update_spot with [] clears the tags',
+      (cleared.rows[0] as { changed: boolean }).changed === true &&
+        (after.rows[0] as { tags: string[] }).tags.length === 0,
+    );
+  });
+  await as(db, { role: 'authenticated', sub: A }, async () => {
+    await db.query(`select update_spot($1, '{"description":"x"}'::jsonb)`, [spotA.id]);
+    const kept = await db.query('select tags from spots where id = $1', [spotA.id]);
+    check(
+      'spots: a patch without tags keeps them',
+      (kept.rows[0] as { tags: string[] }).tags.length === 2,
+    );
+  });
   await db.query(
     `insert into photos (owner_id, spot_id, storage_path, thumb_path)
      values ($1, $2, 'a/p.jpg', 'a/p_thumb.jpg')`,
@@ -246,7 +306,16 @@ async function main(): Promise<void> {
     );
   });
 
-  // T09: A deletes their account — A's rows go, B's fork survives, auth row gone
+  // T09: A deletes their account — A's rows go, B's fork survives, auth row gone,
+  // and (0032) A's generation ledger row keeps its cost but loses its content
+  const agr = (
+    await db.query(
+      `insert into ai_generation_requests (user_id, brief, parsed_constraints, status, token_cost_usd)
+       values ($1, 'from my place, a 90 minute loop', '{"origin":{"lat":43.5,"lng":-79.8}}', 'ok', 0.03)
+       returning id`,
+      [A],
+    )
+  ).rows[0] as { id: string };
   await db.query('begin');
   await db.query('set local role authenticated');
   await db.query(
@@ -263,6 +332,25 @@ async function main(): Promise<void> {
     "T09: B's fork SURVIVES (forked_from nulled)",
     bFork.rows.length === 1 && (bFork.rows[0] as { forked_from: null }).forked_from === null,
   );
+  const scrubbed = await db.query(
+    'select brief, parsed_constraints, user_id, token_cost_usd from ai_generation_requests where id=$1',
+    [agr.id],
+  );
+  const sr = scrubbed.rows[0] as {
+    brief: string;
+    parsed_constraints: unknown;
+    user_id: string | null;
+    token_cost_usd: number;
+  };
+  check(
+    "T09: A's generation row keeps its cost but loses brief + origin (0032)",
+    sr !== undefined &&
+      sr.brief === '' &&
+      sr.parsed_constraints === null &&
+      sr.user_id === null &&
+      Math.abs(Number(sr.token_cost_usd) - 0.03) < 1e-9,
+  );
+  await db.query('delete from ai_generation_requests where id=$1', [agr.id]);
 
   // cleanup
   await db.query('delete from auth.users where id = any($1::uuid[])', [[A, B]]);

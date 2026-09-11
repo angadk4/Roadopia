@@ -46,8 +46,11 @@ import {
   followStatus,
   pointAtDistance,
   splitAtAlong,
+  trimProgressWindow,
+  type Course,
   type FollowStatus,
   type FollowTrack,
+  type ProgressSample,
 } from '../lib/follow';
 import { useTopInset } from '../lib/insets';
 import { watchLocation, type LocationFix, type StopWatching } from '../lib/location';
@@ -74,8 +77,6 @@ const KEEP_AWAKE_TAG = 'roadopia-follow';
 const FOLLOW_ZOOM = 14.5;
 /** The driven part of the line. */
 const DRIVEN_GREY = '#8a93a6';
-/** Observed ground rates kept for the arrival estimate. */
-const RECENT_RATES = 5;
 
 export default function FollowScreen(props: FollowScreenProps): ReactElement {
   const { name: themeName, colors } = useTheme();
@@ -97,8 +98,13 @@ export default function FollowScreen(props: FollowScreenProps): ReactElement {
   /** Camera follows the car until the user pans; Recenter re-enables it. */
   const [following, setFollowing] = useState(true);
   const lastAlong = useRef<number | null>(null);
+  /** The smallest on-route progress seen — `done` needs the drive to have
+   *  been started, not joined at its end (review finding). */
+  const minAlong = useRef<number | null>(null);
   const lastFix = useRef<LatLng | null>(null);
-  const recentMps = useRef<number[]>([]);
+  const lastCourse = useRef<Course | null>(null);
+  /** On-route progress over the last few minutes, for the arrival estimate. */
+  const progress = useRef<ProgressSample[]>([]);
   const stopFixes = useRef<StopWatching | null>(null);
   /** False once the screen is gone. Starting is async (a permission dialog can
    *  sit open for a minute), so without this the watcher and the wake-lock
@@ -107,50 +113,79 @@ export default function FollowScreen(props: FollowScreenProps): ReactElement {
   const live = useRef(true);
   const starting = useRef(false);
 
+  /** Status from a fix → screen. Progress is committed from ON-ROUTE fixes
+   *  only: an off-route fix keeps the last progress on screen but must never
+   *  seed it (a first fix near a loop's return leg used to declare the drive
+   *  finished at the origin — review finding). */
+  const commit = (st: FollowStatus): void => {
+    if (!st.offRoute) {
+      lastAlong.current = st.alongM;
+      minAlong.current =
+        minAlong.current === null ? st.alongM : Math.min(minAlong.current, st.alongM);
+      const now = Date.now();
+      progress.current = [
+        ...trimProgressWindow(progress.current, now),
+        { t: now, alongM: st.alongM },
+      ];
+    }
+    setStatus(st);
+  };
+
+  const statusFor = (t: FollowTrack, fix: LatLng): FollowStatus =>
+    followStatus(t, fix, lastAlong.current, {
+      ...(lastCourse.current ? { course: lastCourse.current } : {}),
+      minAlongM: minAlong.current,
+    });
+
   const applyFix = (f: LocationFix): void => {
     if (!live.current) return;
     lastFix.current = { lat: f.lat, lng: f.lng };
-    if (f.speedMps !== null) {
-      recentMps.current = [...recentMps.current.slice(-(RECENT_RATES - 1)), f.speedMps];
-    }
+    // the heading tells a retraced road's two copies apart (review finding)
+    lastCourse.current = { headingDeg: f.headingDeg, speedMps: f.speedMps };
     setGps('ok');
     const t = track.current;
     if (!t) return;
-    const st = followStatus(t, lastFix.current, lastAlong.current);
-    lastAlong.current = st.alongM;
-    setStatus(st);
+    commit(statusFor(t, lastFix.current));
+  };
+
+  /** Ask for location and start the stream (+ the FR-113 wake-lock). Also the
+   *  Retry after a denied permission or a GPS error — the banner used to say
+   *  "try again" with nothing to press (review finding). Guarded so a second
+   *  start never installs a second watcher. */
+  const startTracking = (): void => {
+    if (starting.current || stopFixes.current !== null) return;
+    starting.current = true;
+    setGps('acquiring');
+    void (async () => {
+      try {
+        const res = await watch(applyFix);
+        if (!live.current) {
+          if (res.status === 'ok') res.stop(); // the screen left while the dialog was open
+          return;
+        }
+        if (res.status !== 'ok') {
+          setGps(res.status);
+          return;
+        }
+        stopFixes.current = res.stop;
+        try {
+          await activateKeepAwakeAsync(KEEP_AWAKE_TAG);
+        } catch {
+          // no wake-lock (Android throws when the activity is momentarily
+          // gone) — following still works, the screen may just dim
+        }
+        if (!live.current) deactivateKeepAwake(KEEP_AWAKE_TAG);
+      } finally {
+        starting.current = false;
+      }
+    })();
   };
 
   // FR-113 wake-lock + GPS stream, released on unmount (live-guarded)
   useEffect(() => {
     if (drive === null) return undefined;
     live.current = true;
-    if (!starting.current) {
-      starting.current = true;
-      void (async () => {
-        try {
-          const res = await watch(applyFix);
-          if (!live.current) {
-            if (res.status === 'ok') res.stop(); // the screen left while the dialog was open
-            return;
-          }
-          if (res.status !== 'ok') {
-            setGps(res.status);
-            return;
-          }
-          stopFixes.current = res.stop;
-          try {
-            await activateKeepAwakeAsync(KEEP_AWAKE_TAG);
-          } catch {
-            // no wake-lock (Android throws when the activity is momentarily
-            // gone) — following still works, the screen may just dim
-          }
-          if (!live.current) deactivateKeepAwake(KEEP_AWAKE_TAG);
-        } finally {
-          starting.current = false;
-        }
-      })();
-    }
+    startTracking();
     return () => {
       live.current = false;
       stopFixes.current?.();
@@ -182,11 +217,7 @@ export default function FollowScreen(props: FollowScreenProps): ReactElement {
         setGuidance('ready');
         // recompute for the fix already in hand — the banner must not wait
         // for the next GPS tick to show the first turn
-        if (lastFix.current) {
-          const st = followStatus(track.current, lastFix.current, lastAlong.current);
-          lastAlong.current = st.alongM;
-          setStatus(st);
-        }
+        if (lastFix.current) commit(statusFor(track.current, lastFix.current));
       })
       .catch(() => {
         if (live.current) setGuidance('unavailable');
@@ -230,18 +261,18 @@ export default function FollowScreen(props: FollowScreenProps): ReactElement {
       : null;
   const eta =
     status !== null && !status.done
-      ? etaSeconds(status.remainingM, recentMps.current, drive.distance_m, drive.duration_s)
+      ? etaSeconds(status.remainingM, progress.current, drive.distance_m, drive.duration_s)
       : null;
 
   /** One-line status when there is no turn to show; null → the turn card. */
   const line = ((): { text: string; tone: 'ok' | 'warn' | 'muted' } | null => {
     if (gps === 'denied') {
       return {
-        text: 'Location permission is off — enable it in Settings to follow.',
+        text: 'Location permission is off — enable it in Settings, then tap Retry.',
         tone: 'warn',
       };
     }
-    if (gps === 'error') return { text: 'Could not read the GPS — try again.', tone: 'warn' };
+    if (gps === 'error') return { text: 'Could not read the GPS — tap Retry.', tone: 'warn' };
     if (gps === 'acquiring') return { text: 'Getting a GPS fix…', tone: 'muted' };
     if (status?.done) return { text: 'That’s the drive — nice one.', tone: 'ok' };
     if (status?.offRoute) {
@@ -356,15 +387,26 @@ export default function FollowScreen(props: FollowScreenProps): ReactElement {
             },
           ]}
         >
+          {/* no accessibilityLabel: a label REPLACES the text for a screen
+              reader, and "Guidance" said nothing (review finding) */}
           <Text
             style={[
               styles.bannerText,
               { color: line.tone === 'warn' ? colors.danger : colors.text },
             ]}
-            accessibilityLabel="Guidance"
           >
             {line.text}
           </Text>
+          {(gps === 'denied' || gps === 'error') && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Retry location"
+              onPress={startTracking}
+              style={[styles.retryBtn, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.exitLabel, { color: colors.text }]}>Retry</Text>
+            </Pressable>
+          )}
         </View>
       ) : (
         <View
@@ -376,7 +418,10 @@ export default function FollowScreen(props: FollowScreenProps): ReactElement {
               borderColor: AMBER,
             },
           ]}
-          accessibilityLabel="Guidance"
+          accessible
+          accessibilityLabel={`In ${fmtDistance(status!.hint!.inM)}, ${status!.hint!.instruction}${
+            status!.then ? `, then ${status!.then.instruction}` : ''
+          }`}
         >
           <Text style={[styles.hintIn, { color: colors.textMuted }]}>
             {`In ${fmtDistance(status!.hint!.inM)}`}
@@ -409,7 +454,7 @@ export default function FollowScreen(props: FollowScreenProps): ReactElement {
       >
         <View style={styles.row}>
           <View style={styles.remainingWrap}>
-            <Text style={[styles.remaining, { color: colors.text }]} accessibilityLabel="Remaining">
+            <Text style={[styles.remaining, { color: colors.text }]}>
               {status !== null ? `${fmtDistance(status.remainingM)} to go` : '—'}
             </Text>
             {eta !== null && (
@@ -453,6 +498,14 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   bannerText: { ...font.body, lineHeight: 21 },
+  retryBtn: {
+    minHeight: HIT_TARGET,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+  },
   hintIn: { ...font.heading },
   /** The next turn is the biggest text on the screen (device pass). */
   hintTurn: { fontSize: 26, fontWeight: '700', lineHeight: 32 },

@@ -10,6 +10,7 @@ import {
   forkRoute,
   getPreferences,
   listFavouriteRouteIds,
+  normalizeRouteRow,
   renameRoute,
   setPreferences,
   unfavouriteRoute,
@@ -59,8 +60,17 @@ describe('favourites (T06)', () => {
 
 describe('route ops (T05/07/08/09)', () => {
   it('fetchRouteById returns null for invisible/absent (RLS empty)', async () => {
-    const { f } = fetchOf(200, []);
+    const { f, holder } = fetchOf(200, []);
     expect(await fetchRouteById(CFG, RID, null, f)).toBeNull();
+    // 0032: the by-id read is the least-privilege RPC, never a table list
+    expect(holder.last.url).toBe('http://sb.local/rest/v1/rpc/route_by_id');
+    expect(JSON.parse(holder.last.body!)).toEqual({ p_id: RID });
+    expect(holder.last.headers['authorization']).toBe('Bearer anon');
+  });
+  it('fetchRouteById presents the user token when there is one', async () => {
+    const { f, holder } = fetchOf(200, []);
+    await fetchRouteById(CFG, RID, 'tok', f);
+    expect(holder.last.headers['authorization']).toBe('Bearer tok');
   });
   it('fork posts the RPC and validates the uuid', async () => {
     const { f, holder } = fetchOf(200, RID);
@@ -125,5 +135,121 @@ describe('rename + delete (device pass, 2026-09-04)', () => {
     expect(visibilityLabel('private')).toBe('Private');
     expect(visibilityLabel('unlisted')).toBe('Link only');
     expect(visibilityLabel('public')).toBe('Public');
+  });
+});
+
+describe('a saved row as PostgREST really serialises it (device pass, 2026-09-07)', () => {
+  // Captured shape: PostGIS geometry columns come back as GeoJSON WITH a `crs`
+  // member, and `bbox` (st_envelope) as a POLYGON, not the wire tuple. Every
+  // saved drive failed RouteSchema on the phone because of the bbox alone.
+  const POSTGREST_ROW = {
+    id: RID,
+    owner_id: '00000000-0000-4000-8000-00000000000a',
+    name: 'Escarpment sweep',
+    description: '',
+    geometry: {
+      type: 'LineString',
+      crs: { type: 'name', properties: { name: 'EPSG:4326' } },
+      coordinates: [
+        [-79.9, 43.2],
+        [-79.89, 43.21],
+        [-79.88, 43.2],
+      ],
+    },
+    geometry_simplified: {
+      type: 'LineString',
+      crs: { type: 'name', properties: { name: 'EPSG:4326' } },
+      coordinates: [
+        [-79.9, 43.2],
+        [-79.88, 43.2],
+      ],
+    },
+    bbox: {
+      type: 'Polygon',
+      crs: { type: 'name', properties: { name: 'EPSG:4326' } },
+      coordinates: [
+        [
+          [-79.9, 43.2],
+          [-79.9, 43.21],
+          [-79.88, 43.21],
+          [-79.88, 43.2],
+          [-79.9, 43.2],
+        ],
+      ],
+    },
+    is_loop: false,
+    waypoints: [],
+    distance_m: 2000,
+    duration_s: 120,
+    curviness: 0,
+    elevation_profile: null,
+    climb_m: null,
+    character_tags: [],
+    intensity: 'chill',
+    free_tags: [],
+    highway_flag: false,
+    toll_flag: false,
+    ferry_flag: false,
+    unpaved_flag: false,
+    visibility: 'private',
+    origin_type: 'manual',
+    forked_from: null,
+    generation_request_id: null,
+    satisfied_constraints: null,
+    agent_explanation: null,
+    created_at: '2026-09-04T20:51:00+00:00',
+    maneuvers: [
+      { type: 'start', instruction: 'Drive east.', distance_m: 1000 },
+      { type: 'left', instruction: 'Turn left.', distance_m: 1000, street_names: ['Forks Rd'] },
+    ],
+  };
+
+  it('fetchRouteById accepts the real row shape and carries the turns', async () => {
+    const { f } = fetchOf(200, [POSTGREST_ROW]);
+    const route = await fetchRouteById(CFG, RID, 'tok', f);
+    expect(route).not.toBeNull();
+    expect(route!.name).toBe('Escarpment sweep');
+    expect(route!.bbox).toEqual([-79.9, 43.2, -79.88, 43.21]);
+    expect(route!.maneuvers).toHaveLength(2);
+    expect(route!.geometry.coordinates).toHaveLength(3);
+  });
+
+  it('a "Link only" row reopens — the wire schema accepts unlisted (review, 2026-09-07)', async () => {
+    const { f } = fetchOf(200, [{ ...POSTGREST_ROW, visibility: 'unlisted' }]);
+    const route = await fetchRouteById(CFG, RID, 'tok', f);
+    expect(route?.visibility).toBe('unlisted');
+  });
+
+  it('a stored stop with explicit nulls (0032 sanitize_stops) parses', async () => {
+    const { f } = fetchOf(200, [
+      {
+        ...POSTGREST_ROW,
+        stops: [
+          {
+            name: 'Ridge Café',
+            type: 'cafe',
+            requested_type: 'coffee',
+            arrival_s: null,
+            at_fraction: null,
+            location: { lat: 43.21, lng: -79.89 },
+            waypoint_index: 1,
+          },
+        ],
+        legs: null,
+      },
+    ]);
+    const route = await fetchRouteById(CFG, RID, 'tok', f);
+    expect(route?.stops).toHaveLength(1);
+    expect(route?.stops[0]?.name).toBe('Ridge Café');
+  });
+
+  it('normalizeRouteRow leaves a tuple bbox, a null bbox and non-rows alone', () => {
+    expect(normalizeRouteRow({ bbox: [1, 2, 3, 4] })).toEqual({ bbox: [1, 2, 3, 4] });
+    expect(normalizeRouteRow({ bbox: null })).toEqual({ bbox: null });
+    expect(normalizeRouteRow(null)).toBeNull();
+    // an empty/odd polygon degrades to null rather than a throw
+    expect(normalizeRouteRow({ bbox: { type: 'Polygon', coordinates: [] } })).toEqual({
+      bbox: null,
+    });
   });
 });

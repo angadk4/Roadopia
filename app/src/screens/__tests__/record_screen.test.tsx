@@ -143,6 +143,7 @@ describe('RecordScreen keeps the capture (device pass, 2026-09-04)', () => {
   async function recordAKilometre(
     matchFn: unknown,
     clock: { t: number },
+    navigate?: (screen: string, params?: Record<string, unknown>) => void,
   ): Promise<ReactTestRenderer> {
     const w = drivingWatch();
     // the review step hosts the gated Save button, which needs the auth context
@@ -156,7 +157,7 @@ describe('RecordScreen keeps the capture (device pass, 2026-09-04)', () => {
         (
           <AuthProvider engine={engine}>
             <RecordScreen
-              navigation={{ goBack: () => undefined }}
+              navigation={{ goBack: () => undefined, ...(navigate ? { navigate } : {}) }}
               watchFn={w.watchFn as never}
               matchFn={matchFn as never}
               now={() => clock.t}
@@ -197,6 +198,73 @@ describe('RecordScreen keeps the capture (device pass, 2026-09-04)', () => {
     expect(matchFn).toHaveBeenCalledTimes(2);
     text = JSON.stringify(tree.toJSON());
     expect(text).toContain('as driven');
+  });
+
+  it('a snapped drive can be followed straight from the review (device pass, 2026-09-07)', async () => {
+    const navigate = vi.fn();
+    const matched = {
+      ...MATCHED,
+      maneuvers: [
+        { type: 'start', instruction: 'Drive north.', distance_m: 600 },
+        { type: 'right', instruction: 'Turn right.', distance_m: 500 },
+      ],
+    };
+    const tree = await recordAKilometre(
+      vi.fn(async () => matched),
+      { t: 1_000 },
+      navigate,
+    );
+    expect(JSON.stringify(tree.toJSON())).toContain('Follow this drive');
+    tap(tree, 'Follow this drive');
+    expect(navigate).toHaveBeenCalledTimes(1);
+    const [screen, params] = navigate.mock.calls[0] as [string, { route: Record<string, unknown> }];
+    expect(screen).toBe('Follow');
+    expect(params.route['origin_type']).toBe('recorded');
+    expect(params.route['maneuvers']).toHaveLength(2);
+  });
+
+  it('without a navigate adapter the review has no Follow button', async () => {
+    const tree = await recordAKilometre(
+      vi.fn(async () => MATCHED),
+      { t: 1_000 },
+    );
+    const text = JSON.stringify(tree.toJSON());
+    expect(text).toContain('as driven');
+    expect(text).not.toContain('Follow this drive');
+  });
+
+  it('Discard is two-tap on the review AND on the failed-snap panel (review, 2026-09-07)', async () => {
+    const tree = await recordAKilometre(
+      vi.fn(async () => MATCHED),
+      { t: 1_000 },
+    );
+    tap(tree, 'Discard recording');
+    let text = JSON.stringify(tree.toJSON());
+    expect(text).toContain('as driven'); // still the review
+    expect(text).toContain('Tap again to discard');
+    tap(tree, 'Confirm discard recording');
+    await act(async () => {});
+    text = JSON.stringify(tree.toJSON());
+    expect(text).toContain('Start recording');
+    expect(text).not.toContain('as driven');
+
+    let calls = 0;
+    const failing = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('down');
+      return MATCHED;
+    });
+    const failed = await recordAKilometre(failing, { t: 1_000 });
+    tap(failed, 'Discard recording');
+    text = JSON.stringify(failed.toJSON());
+    expect(text).toContain('Try snapping again'); // the capture is still here
+    expect(text).toContain('Tap again to discard');
+    // Try again disarms: a Discard armed here must not carry into the review
+    tap(failed, 'Try snapping again');
+    await act(async () => {});
+    text = JSON.stringify(failed.toJSON());
+    expect(text).toContain('as driven');
+    expect(text).not.toContain('Tap again to discard');
   });
 
   it('Cancel during snapping keeps the recording too', async () => {

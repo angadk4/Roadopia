@@ -284,6 +284,85 @@ describe('FollowScreen lifecycle + camera (device pass, 2026-09-04)', () => {
   });
 });
 
+describe('FollowScreen retry + honest progress (review, 2026-09-07)', () => {
+  it('a denied permission has a Retry that re-asks; a second grant starts the stream', async () => {
+    let calls = 0;
+    const stops: number[] = [];
+    const watchFn = async () => {
+      calls += 1;
+      if (calls === 1) return { status: 'denied' as const };
+      return {
+        status: 'ok' as const,
+        stop: () => {
+          stops.push(1);
+        },
+      };
+    };
+    const tree = await render({ watchFn });
+    let text = textOf(tree);
+    expect(text).toContain('Location permission is off');
+    expect(text).toContain('Retry');
+    const retry = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'Retry location' && !!n.props['onPress'],
+    )[0]!;
+    await act(async () => {
+      (retry.props['onPress'] as () => void)();
+    });
+    await act(async () => {});
+    expect(calls).toBe(2);
+    text = textOf(tree);
+    expect(text).not.toContain('Location permission is off');
+    expect(text).toContain('Getting a GPS fix'); // acquiring until the first fix lands
+    // a third tap while a watcher is installed never starts a second one
+    const again = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'Retry location' && !!n.props['onPress'],
+    );
+    expect(again).toHaveLength(0);
+    act(() => tree.unmount());
+    expect(stops).toHaveLength(1);
+  });
+
+  it('an off-route first fix seeds no progress; the banner does not announce the finish', async () => {
+    const w = fixWatcher();
+    const tree = await render({ watchFn: w.watchFn });
+    // 300 m north of the line's far end — off-route, nearest to the END
+    act(() => {
+      w.fix(43.0027, -79.9);
+    });
+    let text = textOf(tree);
+    expect(text).toContain('off the route');
+    expect(text).not.toContain('That’s the drive');
+    // now genuinely at the start: progress starts at the start
+    act(() => {
+      w.fix(43, -80);
+    });
+    text = textOf(tree);
+    expect(text).not.toContain('That’s the drive');
+    expect(text).toContain('8.1 km to go');
+  });
+
+  it('the turn card carries a composed label for screen readers, and status text has no label', async () => {
+    const w = fixWatcher();
+    const tree = await render({ watchFn: w.watchFn });
+    act(() => {
+      w.fix(43, -79.98);
+    });
+    const labelled = tree.root.findAll(
+      (n) =>
+        typeof n.props['accessibilityLabel'] === 'string' &&
+        (n.props['accessibilityLabel'] as string).startsWith('In '),
+    );
+    expect(labelled.length).toBeGreaterThan(0);
+    expect(labelled[0]!.props['accessibilityLabel']).toContain('Turn left onto Forks Rd.');
+    const bare = tree.root.findAll(
+      (n) =>
+        n.props['accessibilityLabel'] === 'Guidance' ||
+        n.props['accessibilityLabel'] === 'Remaining',
+    );
+    expect(bare).toHaveLength(0);
+  });
+});
+
 describe('FollowScreen camera before a fix (review, 2026-09-04)', () => {
   it('does not follow until a fix exists, so the map opens on the drive, not the world', async () => {
     const w = fixWatcher();

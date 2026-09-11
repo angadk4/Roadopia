@@ -47,6 +47,10 @@ export function buildSavePayload(input: SaveRouteInput): Record<string, unknown>
     agent_explanation: input.agentExplanation ?? null,
     // Device pass 2026-09-04: turn guidance travels with the row (0031).
     maneuvers: r.maneuvers ?? null,
+    // Review 2026-09-07: so do the stops and the three-leg split (0032) — a
+    // planned coffee stop used to reopen as a bare line with no stop on it.
+    stops: r.stops ?? [],
+    legs: r.legs ?? null,
   };
 }
 

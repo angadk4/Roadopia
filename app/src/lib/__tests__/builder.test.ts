@@ -70,7 +70,7 @@ describe('toManualRoute', () => {
     const r = toManualRoute(SNAPPED, [A, B]);
     expect(r.origin_type).toBe('manual');
     expect(r.generation_request_id).toBeNull();
-    expect(r.curviness).toBe(0);
+    expect(r.curviness).toBeNull(); // unmeasured is null, never a claimed 0 (BD-203)
     expect(r.visibility).toBe('private');
     expect(r.ferry_flag).toBe(true); // flags come from the SNAP, not defaults
   });

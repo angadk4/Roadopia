@@ -26,7 +26,16 @@
 import Mapbox, { Camera, CircleLayer, LineLayer, MapView, ShapeSource } from '@rnmapbox/maps';
 import type { LatLng, RouteThroughOutput } from '@shared/types';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  type LayoutChangeEvent,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import '../lib/mapbox';
 import SafetyNote from '../components/SafetyNote';
@@ -52,7 +61,11 @@ import { sessionId } from '../lib/session';
 import { AMBER, font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
 export interface BuilderScreenProps {
-  navigation: { goBack: () => void };
+  navigation: {
+    goBack: () => void;
+    /** Present in CreateStack: opens follow-mode on the built drive. */
+    navigate?: (screen: string, params?: Record<string, unknown>) => void;
+  };
   /** Injectable for tests. */
   routeFn?: typeof postRouteThrough;
 }
@@ -199,8 +212,15 @@ export default function BuilderScreen(props: BuilderScreenProps): ReactElement {
       ? `${state.waypoints.length} points · ${statsLine(snapped)}`
       : statsLine(null);
 
+  const dimWhenEmpty = { opacity: state.waypoints.length === 0 ? 0.45 : 1 };
+
   return (
-    <View style={styles.root}>
+    // the drive-name field is at the bottom of the panel: without this the
+    // iOS keyboard covered it and the Save button (review finding)
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <View
         style={styles.mapWrap}
         onLayout={(e: LayoutChangeEvent) => {
@@ -269,15 +289,17 @@ export default function BuilderScreen(props: BuilderScreenProps): ReactElement {
         </View>
       </View>
 
-      <View
+      {/* a ScrollView, shrinkable: on a small phone the panel plus the keyboard
+          exceed the screen, and the Save at its bottom must stay reachable */}
+      <ScrollView
         style={[
           styles.panel,
           { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
         ]}
+        contentContainerStyle={styles.panelContent}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.stats, { color: colors.text }]} accessibilityLabel="Route stats">
-          {stats}
-        </Text>
+        <Text style={[styles.stats, { color: colors.text }]}>{stats}</Text>
         {problem !== null && (
           <View style={styles.row}>
             <Text style={[styles.problem, { color: colors.danger }]}>{problem}</Text>
@@ -317,7 +339,7 @@ export default function BuilderScreen(props: BuilderScreenProps): ReactElement {
               setState(undoWaypoint);
             }}
             disabled={state.waypoints.length === 0}
-            style={[styles.secondaryBtn, { borderColor: colors.border }]}
+            style={[styles.secondaryBtn, { borderColor: colors.border }, dimWhenEmpty]}
           >
             <Text style={[styles.secondaryLabel, { color: colors.text }]}>Undo</Text>
           </Pressable>
@@ -337,7 +359,7 @@ export default function BuilderScreen(props: BuilderScreenProps): ReactElement {
               setState(clearWaypoints());
             }}
             disabled={state.waypoints.length === 0}
-            style={[styles.secondaryBtn, { borderColor: colors.border }]}
+            style={[styles.secondaryBtn, { borderColor: colors.border }, dimWhenEmpty]}
           >
             <Text style={[styles.secondaryLabel, { color: colors.textMuted }]}>Clear</Text>
           </Pressable>
@@ -345,6 +367,23 @@ export default function BuilderScreen(props: BuilderScreenProps): ReactElement {
         {/* Only offer the save while the shown snap MATCHES the waypoints.
             Mid-debounce they disagree, and saving then persists the previous
             geometry against the new points — including a wrong is_loop. */}
+        {snapped && !busy && props.navigation.navigate && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Follow this drive"
+            onPress={() =>
+              props.navigation.navigate?.('Follow', {
+                route: toManualRoute(snapped, state.waypoints),
+              })
+            }
+            style={({ pressed }) => [
+              styles.followBtn,
+              { backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1 },
+            ]}
+          >
+            <Text style={[styles.primaryLabel, { color: colors.onAccent }]}>Follow this drive</Text>
+          </Pressable>
+        )}
         {snapped && !busy && (
           <SaveDriveButton
             route={toManualRoute(snapped, state.waypoints)}
@@ -352,8 +391,8 @@ export default function BuilderScreen(props: BuilderScreenProps): ReactElement {
           />
         )}
         {snapped && <SafetyNote context="route" />}
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -373,11 +412,8 @@ const styles = StyleSheet.create({
     backgroundColor: AMBER,
     borderWidth: 2,
   },
-  panel: {
-    borderTopWidth: 1,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
+  panel: { borderTopWidth: 1, flexShrink: 1, maxHeight: '60%' },
+  panelContent: { padding: spacing.md, gap: spacing.sm },
   stats: { ...font.heading },
   problem: { ...font.caption, flexShrink: 1 },
   hint: { ...font.caption },
@@ -390,6 +426,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryLabel: { ...font.button },
+  followBtn: {
+    minHeight: HIT_TARGET + 8,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+  },
   secondaryBtn: {
     minHeight: HIT_TARGET,
     paddingHorizontal: spacing.md,

@@ -27,3 +27,18 @@ export const TAB_SPEC: readonly TabSpec[] = [
   { name: 'Map', icon: 'map', iconIdle: 'map-outline' },
   { name: 'Saved', icon: 'bookmark', iconIdle: 'bookmark-outline' },
 ] as const;
+
+/**
+ * Screens that OWN the phone while open — a live GPS stream and a wake-lock
+ * (follow-mode, recording). The tab bar hides under them so the only ways out
+ * (Exit, back) UNMOUNT them and release both. With the bar visible a tab
+ * switch left the stream and the wake-lock running for hours (review finding,
+ * 2026-09-07). Recording in particular must never be paused on blur: points
+ * driven on another tab would be silently missing from the trace.
+ */
+export const OWNS_THE_PHONE: readonly string[] = ['Follow', 'Record'];
+
+/** Whether the bottom tab bar hides for the nested screen currently focused. */
+export function tabBarHiddenFor(nestedRouteName: string | undefined): boolean {
+  return nestedRouteName !== undefined && OWNS_THE_PHONE.includes(nestedRouteName);
+}

@@ -70,6 +70,24 @@ async function main(): Promise<void> {
     verifier,
     valhallaUrl: config.VALHALLA_URL,
     region,
+    // Review 2026-09-07: the two anonymous engine calls had no ceiling at all.
+    // /route fires on every waypoint drop in the builder (up to 30 points, a
+    // slow hand-built loop is dozens of calls), so it is parse-loose; /match
+    // runs once per recording and once per legacy follow, so it is tighter.
+    routeRateLimiter: new RateLimiter({
+      perIp: [
+        { limit: 60, windowMs: 60_000 },
+        { limit: 1_000, windowMs: 3_600_000 },
+      ],
+      perSession: [{ limit: 40, windowMs: 60_000 }],
+    }),
+    matchRateLimiter: new RateLimiter({
+      perIp: [
+        { limit: 20, windowMs: 60_000 },
+        { limit: 200, windowMs: 3_600_000 },
+      ],
+      perSession: [{ limit: 10, windowMs: 60_000 }],
+    }),
     plan: {
       db,
       valhallaUrl: config.VALHALLA_URL,

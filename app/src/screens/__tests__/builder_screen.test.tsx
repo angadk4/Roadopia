@@ -191,6 +191,75 @@ describe('BuilderScreen (device pass, 2026-09-04)', () => {
   });
 });
 
+describe('BuilderScreen follow-in-place (device pass, 2026-09-07)', () => {
+  const originalResolver = MOCK_MAP.coordinateFromView;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    MOCK_MAP.center = [-79.5, 43.9];
+    MOCK_MAP.coordinateFromView = () => MOCK_MAP.center;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    MOCK_MAP.center = [-79.8, 43.6];
+    MOCK_MAP.coordinateFromView = originalResolver;
+  });
+
+  it('a routed drive can be followed right away, carrying the engine turns', async () => {
+    const navigate = vi.fn();
+    const routeFn = vi.fn(async () => ({
+      ...SNAPPED,
+      maneuvers: [
+        { type: 'start', instruction: 'Drive north.', distance_m: 21_000 },
+        { type: 'left', instruction: 'Turn left.', distance_m: 21_000 },
+      ],
+    }));
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = create(
+        withAuth(
+          <BuilderScreen
+            navigation={{ goBack: () => undefined, navigate }}
+            routeFn={routeFn as never}
+          />,
+        ),
+      );
+    });
+    const wrap = tree.root.findAll((n) => typeof n.props['onLayout'] === 'function')[0]!;
+    await act(async () => {
+      (wrap.props['onLayout'] as (e: unknown) => void)({
+        nativeEvent: { layout: { width: 390, height: 600 } },
+      });
+    });
+    expect(textOf(tree)).not.toContain('Follow this drive'); // nothing to follow yet
+    await press(tree, 'Add point');
+    MOCK_MAP.center = [-79.49, 43.91];
+    await press(tree, 'Add point');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(textOf(tree)).toContain('Follow this drive');
+    await press(tree, 'Follow this drive');
+    expect(navigate).toHaveBeenCalledTimes(1);
+    const [screen, params] = navigate.mock.calls[0] as [string, { route: Record<string, unknown> }];
+    expect(screen).toBe('Follow');
+    expect(params.route['origin_type']).toBe('manual');
+    expect(params.route['distance_m']).toBe(42_000);
+    expect(params.route['maneuvers']).toHaveLength(2); // guidance travels with the drive
+  });
+
+  it('without a navigate adapter (bare render) the button is simply absent', async () => {
+    const tree = await render(vi.fn(async () => SNAPPED));
+    await press(tree, 'Add point');
+    MOCK_MAP.center = [-79.49, 43.91];
+    await press(tree, 'Add point');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(textOf(tree)).toContain('42 km');
+    expect(textOf(tree)).not.toContain('Follow this drive');
+  });
+});
+
 describe('BuilderScreen superseded requests (review, 2026-09-04)', () => {
   const originalResolver = MOCK_MAP.coordinateFromView;
   beforeEach(() => {

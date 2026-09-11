@@ -7,13 +7,16 @@
  */
 
 import {
+  cleanLegManeuvers,
   DiscoverResultSchema,
   DiscoverResultV2Schema,
   type CoreDrive,
+  type CoreLeg,
   type DiscoverResult,
   type DiscoverResultV2,
   type LatLng,
   type LineString,
+  type Maneuver,
   type NearbyDrive,
   type Route,
 } from '@shared/types';
@@ -294,12 +297,35 @@ export function coreDrivesBounds(drives: CoreDrive[]): Bounds | null {
 }
 
 /**
+ * BD-203: one drivable maneuver list for the glued three-leg trip, or null
+ * when ANY leg came without guidance (an honest absence — follow-mode then
+ * says so instead of anchoring two legs' turns onto three legs' distance).
+ * Each maneuver's `distance_m` is the length IT covers (not cumulative), so
+ * plain concatenation keeps the running sum spanning the whole line;
+ * cleanLegManeuvers folds the mid-trip arrival/departure pairs at the seams.
+ */
+function tripManeuvers(legs: readonly CoreLeg[]): Maneuver[] | null {
+  const lists: Maneuver[][] = [];
+  for (const leg of legs) {
+    if (!leg.maneuvers) return null;
+    lists.push(leg.maneuvers);
+  }
+  return cleanLegManeuvers(lists.flat());
+}
+
+/**
  * Map a tapped v2 core drive into the shared `Route` the Result screen renders —
  * the three legs concatenated into one geometry, WITH `Route.legs` filled from
  * the three MEASURED legs. RouteDetail's R28 three-leg bar then shows
  * "getting there X · the drive Y · home Z" on the result for free, and the
  * road-class number shown for the drive is the CORE's measured share — not a
  * blob average.
+ *
+ * BD-203: the road flags are the OR of the two ENGINE-routed connectors (the
+ * commute rides the engine-default fastest costing — highways allowed — so a
+ * hard-coded `false` was a lie on every 401/410 commute; the core itself is
+ * highway-free by the definer's pinned bar). `maneuvers` glue the three legs'
+ * guidance; `legs.*_s` carry the measured seconds the card showed.
  */
 export function coreDriveToRoute(d: CoreDrive): Route {
   const coords = [
@@ -310,19 +336,22 @@ export function coreDriveToRoute(d: CoreDrive): Route {
   const totalM = d.connectorOut.distance_m + d.core.distance_m + d.connectorHome.distance_m;
   const totalS = coreTripDurationS(d);
   const pct = (m: number): number => Math.round((m / Math.max(1, totalM)) * 100);
+  const connectors = [d.connectorOut, d.connectorHome];
+  const anyFlag = (pick: (leg: CoreLeg) => boolean | undefined): boolean =>
+    connectors.some((leg) => pick(leg) === true);
   return {
     geometry: { type: 'LineString', coordinates: coords },
     is_loop: d.kind === 'loop',
     waypoints: [d.core.entry, d.core.exit],
     distance_m: totalM,
     duration_s: totalS,
-    curviness: Math.max(0, d.core.curviness),
+    curviness: d.core.curviness,
     elevation_profile: null,
     climb_m: null,
-    highway_flag: false, // cores are highway-free by the index bars; connectors exclude highways
-    toll_flag: false,
-    ferry_flag: false,
-    unpaved_flag: false,
+    highway_flag: anyFlag((leg) => leg.has_highway),
+    toll_flag: anyFlag((leg) => leg.has_toll),
+    ferry_flag: anyFlag((leg) => leg.has_ferry),
+    unpaved_flag: anyFlag((leg) => leg.has_unpaved),
     character_tags: [],
     intensity: 'moderate',
     free_tags: d.barProfile === 'cell_relaxed' ? ['discover', 'best-around-here'] : ['discover'],
@@ -332,6 +361,7 @@ export function coreDriveToRoute(d: CoreDrive): Route {
     forked_from: null,
     name: d.name,
     stops: [],
+    maneuvers: tripManeuvers([d.connectorOut, d.core, d.connectorHome]),
     legs: {
       there_pct: pct(d.connectorOut.distance_m),
       drive_pct: pct(d.core.distance_m),
@@ -339,6 +369,9 @@ export function coreDriveToRoute(d: CoreDrive): Route {
       there_m: Math.round(d.connectorOut.distance_m),
       drive_m: Math.round(d.core.distance_m),
       home_m: Math.round(d.connectorHome.distance_m),
+      there_s: d.connectorOut.duration_s,
+      drive_s: d.core.duration_s,
+      home_s: d.connectorHome.duration_s,
       drive_backroad_pct: Math.round(d.core.backroadShare * 100),
       drive_main_pct: Math.round(d.core.mainShare * 100),
     },

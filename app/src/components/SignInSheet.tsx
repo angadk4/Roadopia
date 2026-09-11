@@ -29,6 +29,7 @@ import {
 } from 'react-native';
 
 import { AuthApiError } from '../lib/auth';
+import { useBottomInset } from '../lib/insets';
 import { useAuth } from '../lib/use_auth';
 import { font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
@@ -40,6 +41,8 @@ export const RESEND_COOLDOWN_S = 30;
 export default function SignInSheet(): ReactElement | null {
   const { colors } = useTheme();
   const { sheetOpen, dismissSheet, sendCode, verifyCode } = useAuth();
+  // above the early return below: hook order must not change with sheetOpen
+  const bottomInset = useBottomInset();
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -161,7 +164,12 @@ export default function SignInSheet(): ReactElement | null {
         <View
           style={[
             styles.sheet,
-            { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+            {
+              backgroundColor: colors.surfaceRaised,
+              borderColor: colors.border,
+              // the button row sat inside the home-indicator strip (review finding)
+              paddingBottom: spacing.lg + bottomInset,
+            },
           ]}
         >
           <Text style={[styles.title, { color: colors.text }]}>

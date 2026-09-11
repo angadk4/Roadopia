@@ -20,7 +20,7 @@
  * remaining distance and SAYS so — wrong turn instructions are worse than none.
  */
 
-import type { LatLng, LineString, Maneuver } from '@shared/types';
+import { cleanLegManeuvers, type LatLng, type LineString, type Maneuver } from '@shared/types';
 
 /** A fix farther than this from the line is off-route (FR-110 honesty). */
 export const OFF_ROUTE_M = 75;
@@ -35,12 +35,49 @@ const DONE_MIN_PROGRESS = 0.8;
 const AMBIGUITY_SLACK_M = 25;
 /** Progress may not jump backwards more than this when resolving ambiguity. */
 const BACKTRACK_TOLERANCE_M = 150;
+/** A turn stays the shown hint until the car is this far PAST its point —
+ *  the instruction for a junction must still be on screen AT the junction
+ *  (it used to hand over 10 m before it; review finding). */
+const PASSED_M = 15;
+/** Below this the car is not moving: its heading is noise, not a course. */
+const MOVING_MPS = 2;
+/** A candidate segment pointing more than this away from the course is the
+ *  OTHER copy of a retraced road. */
+const COURSE_TOLERANCE_DEG = 90;
 
 const LAT_M = 111_320;
 
 function metresBetween(a: LatLng, b: LatLng): number {
   const lngM = LAT_M * Math.cos((a.lat * Math.PI) / 180);
   return Math.hypot((b.lat - a.lat) * LAT_M, (b.lng - a.lng) * lngM);
+}
+
+/** The car's course from the last fix: heading (° clockwise from north) and
+ *  ground rate. Either may be unknown (iOS reports -1 → null upstream). */
+export interface Course {
+  headingDeg: number | null;
+  speedMps: number | null;
+}
+
+function courseUsable(c: Course | undefined): c is Course & { headingDeg: number } {
+  return c !== undefined && c.headingDeg !== null && c.speedMps !== null && c.speedMps > MOVING_MPS;
+}
+
+/** Bearing of a→b in the same cos(lat)-scaled metre frame as the projection;
+ *  null for a zero-length segment. */
+function segmentBearingDeg(a: LatLng, b: LatLng): number | null {
+  const lngM = LAT_M * Math.cos((a.lat * Math.PI) / 180);
+  const dx = (b.lng - a.lng) * lngM;
+  const dy = (b.lat - a.lat) * LAT_M;
+  if (dx === 0 && dy === 0) return null;
+  return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+}
+
+function againstCourse(a: LatLng, b: LatLng, headingDeg: number): boolean {
+  const bearing = segmentBearingDeg(a, b);
+  if (bearing === null) return false;
+  const d = Math.abs(bearing - headingDeg) % 360;
+  return (d > 180 ? 360 - d : d) > COURSE_TOLERANCE_DEG;
 }
 
 export interface ManeuverAnchor {
@@ -70,10 +107,13 @@ export function buildFollowTrack(geometry: LineString, maneuvers: Maneuver[]): F
   // (engine lengths and polyline lengths drift a few %; hints are "in ~800 m",
   // so proportional placement is the honest anchor).
   const anchors: ManeuverAnchor[] = [];
-  const engineTotal = maneuvers.reduce((s, m) => s + (m.distance_m ?? 0), 0);
+  // Rows saved before the serve-time clean-up still carry each waypoint's
+  // "You have arrived" + "Drive on X" pair at one metre; clean them here too.
+  const cues = cleanLegManeuvers(maneuvers);
+  const engineTotal = cues.reduce((s, m) => s + (m.distance_m ?? 0), 0);
   if (engineTotal > 0 && totalM > 0) {
     let runM = 0;
-    for (const m of maneuvers) {
+    for (const m of cues) {
       // 'start'-type instructions at 0 are not turns; skip anchors at the origin
       if (runM > 0 && m.instruction.trim() !== '') {
         anchors.push({ atM: (runM / engineTotal) * totalM, instruction: m.instruction });
@@ -122,11 +162,49 @@ function vertexAt(cumM: number[], d: number): number {
   return lo;
 }
 
+/** The candidates within AMBIGUITY_SLACK_M of the best projection, resolved
+ *  by the floor / earliest-forward rule. With a course, segments pointing the
+ *  other way are skipped first (the other copy of a retraced road). */
+function pick(
+  track: FollowTrack,
+  fix: LatLng,
+  from: number,
+  to: number,
+  bestDist: number,
+  floor: number,
+  headingDeg: number | null,
+): TrackLocation | null {
+  const { points, cumM } = track;
+  let forward: TrackLocation | null = null;
+  let nearest: TrackLocation | null = null;
+  for (let i = from; i < to; i++) {
+    const { distM, frac } = projectOnSegment(fix, points[i]!, points[i + 1]!);
+    if (distM > bestDist + AMBIGUITY_SLACK_M) continue;
+    if (headingDeg !== null && againstCourse(points[i]!, points[i + 1]!, headingDeg)) continue;
+    const alongM = cumM[i]! + frac * (cumM[i + 1]! - cumM[i]!);
+    if (nearest === null || distM < nearest.offTrackM) nearest = { alongM, offTrackM: distM };
+    if (alongM >= floor && (forward === null || alongM < forward.alongM)) {
+      forward = { alongM, offTrackM: distM };
+    }
+  }
+  return forward ?? nearest;
+}
+
 /**
  * Two passes over segments [from, to): the nearest distance first, then the
  * few candidates within AMBIGUITY_SLACK_M of it. No per-segment allocation
  * (the old single pass built one object per segment per GPS fix — GC churn
  * at 1 Hz on a long line).
+ *
+ * Course (review, 2026-09-07): on an out-and-back every fix on the way home
+ * projects equally onto the outbound copy (T−x) and the homebound copy (T+x)
+ * of the same road, and "earliest forward" chose T−x fix after fix — progress
+ * walked BACKWARDS for the whole return leg, the driven line un-greyed and
+ * the U-turn hint reappeared with a growing distance. Position alone cannot
+ * tell the copies apart; the car's heading can: the two copies point opposite
+ * ways, so with a known course exactly one survives. If the filter leaves
+ * nothing within slack (heading noise, a genuinely reversed driver) the
+ * unfiltered set decides — a car sitting on the line is never off-route.
  */
 function scan(
   track: FollowTrack,
@@ -134,8 +212,9 @@ function scan(
   from: number,
   to: number,
   lastAlongM: number | null,
+  course?: Course,
 ): TrackLocation | null {
-  const { points, cumM } = track;
+  const { points } = track;
   let bestDist = Infinity;
   for (let i = from; i < to; i++) {
     const { distM } = projectOnSegment(fix, points[i]!, points[i + 1]!);
@@ -148,18 +227,10 @@ function scan(
   // as no constraint at all) makes the earliest candidate win, so a loop starts
   // at its start instead of announcing itself finished before departure.
   const floor = (lastAlongM ?? 0) - BACKTRACK_TOLERANCE_M;
-  let forward: TrackLocation | null = null;
-  let nearest: TrackLocation | null = null;
-  for (let i = from; i < to; i++) {
-    const { distM, frac } = projectOnSegment(fix, points[i]!, points[i + 1]!);
-    if (distM > bestDist + AMBIGUITY_SLACK_M) continue;
-    const alongM = cumM[i]! + frac * (cumM[i + 1]! - cumM[i]!);
-    if (nearest === null || distM < nearest.offTrackM) nearest = { alongM, offTrackM: distM };
-    if (alongM >= floor && (forward === null || alongM < forward.alongM)) {
-      forward = { alongM, offTrackM: distM };
-    }
-  }
-  return forward ?? nearest;
+  const withCourse = courseUsable(course)
+    ? pick(track, fix, from, to, bestDist, floor, course.headingDeg)
+    : null;
+  return withCourse ?? pick(track, fix, from, to, bestDist, floor, null);
 }
 
 /**
@@ -167,21 +238,23 @@ function scan(
  * (overlapping stem legs) toward continuing forward from known progress, and
  * bounds the search to a window around it — the full line is scanned only
  * when nothing within the window is on-route (a big jump, or a rejoin).
+ * `course` (optional) disambiguates a retraced road by the car's heading.
  */
 export function locateOnTrack(
   track: FollowTrack,
   fix: LatLng,
   lastAlongM: number | null,
+  course?: Course,
 ): TrackLocation {
   const segments = track.points.length - 1;
   if (segments < 1) return { alongM: 0, offTrackM: Infinity }; // <2 points: no track to be on
   if (lastAlongM !== null) {
     const from = vertexAt(track.cumM, lastAlongM - BACKTRACK_TOLERANCE_M);
     const to = Math.min(segments, vertexAt(track.cumM, lastAlongM + WINDOW_AHEAD_M) + 1);
-    const near = scan(track, fix, from, to, lastAlongM);
+    const near = scan(track, fix, from, to, lastAlongM, course);
     if (near !== null && near.offTrackM <= OFF_ROUTE_M) return near;
   }
-  return scan(track, fix, 0, segments, lastAlongM) ?? { alongM: 0, offTrackM: Infinity };
+  return scan(track, fix, 0, segments, lastAlongM, course) ?? { alongM: 0, offTrackM: Infinity };
 }
 
 export interface FollowHint {
@@ -200,24 +273,45 @@ export interface FollowStatus {
   done: boolean;
 }
 
+export interface FollowOptions {
+  /** The car's course from the fix, when known. */
+  course?: Course;
+  /**
+   * The SMALLEST on-route progress seen so far (null = no on-route fix yet).
+   * `done` needs it to have been below the finish stretch: a first fix that
+   * happened to land near a loop's return leg used to be committed as
+   * progress and declared the drive finished at the origin (review finding).
+   * Omitted → the older rule (last progress alone) — for callers that keep
+   * no history.
+   */
+  minAlongM?: number | null;
+}
+
 export function followStatus(
   track: FollowTrack,
   fix: LatLng,
   lastAlongM: number | null,
+  opts: FollowOptions = {},
 ): FollowStatus {
-  const loc = locateOnTrack(track, fix, lastAlongM);
+  const loc = locateOnTrack(track, fix, lastAlongM, opts.course);
   const offRoute = loc.offTrackM > OFF_ROUTE_M;
   // Off-route fixes keep the last known progress — remaining distance must
-  // not swing while the driver is in a parking lot beside the line.
-  const alongM = offRoute && lastAlongM !== null ? lastAlongM : loc.alongM;
+  // not swing while the driver is in a parking lot beside the line. Before
+  // ANY on-route fix there is no progress to keep: report the start, never
+  // the nearest projection of a fix that is not on the line.
+  const alongM = offRoute ? (lastAlongM ?? 0) : loc.alongM;
   const remainingM = Math.max(0, track.totalM - alongM);
-  const nextIdx = track.anchors.findIndex((a) => a.atM > alongM + 10);
+  const nextIdx = track.anchors.findIndex((a) => a.atM > alongM - PASSED_M);
   const next = nextIdx >= 0 ? track.anchors[nextIdx] : undefined;
   const after = nextIdx >= 0 ? track.anchors[nextIdx + 1] : undefined;
+  const startedFromTheStart =
+    opts.minAlongM === undefined ||
+    (opts.minAlongM !== null && opts.minAlongM < track.totalM * DONE_MIN_PROGRESS);
   const done =
     remainingM <= DONE_WITHIN_M &&
     lastAlongM !== null &&
-    lastAlongM >= track.totalM * DONE_MIN_PROGRESS;
+    lastAlongM >= track.totalM * DONE_MIN_PROGRESS &&
+    startedFromTheStart;
   const toHint = (a: ManeuverAnchor | undefined): FollowHint | null =>
     a && !offRoute ? { instruction: a.instruction, inM: a.atM - alongM } : null;
   return {
@@ -392,19 +486,52 @@ export function splitAtAlong(
   return { behind: lineOrNull(behind), ahead: lineOrNull(ahead) };
 }
 
+/** One on-route fix's progress, for the arrival estimate. */
+export interface ProgressSample {
+  /** Epoch ms. */
+  t: number;
+  alongM: number;
+}
+
+/** The trailing window the observed pace is measured over. */
+export const PACE_WINDOW_MS = 180_000;
+/** Below either of these the window says nothing yet — the planned pace is used. */
+const PACE_MIN_S = 60;
+const PACE_MIN_M = 500;
+
+/** Drop samples older than the window. */
+export function trimProgressWindow(window: ProgressSample[], nowMs: number): ProgressSample[] {
+  return window.filter((s) => nowMs - s.t <= PACE_WINDOW_MS);
+}
+
 /**
- * Time left, in seconds: the route's own measured pace, refined by the last
- * few observed ground rates once the car is actually moving. Shown only as a
- * duration ("about 1 h 20 min left") — never as a rate (Hard rule D).
+ * Metres per second over the window, once it holds enough to judge; null
+ * otherwise. Progress over time — not a mean of instantaneous speeds — so a
+ * red light moves the figure a little and recovers, instead of a 4× swing at
+ * every stop and pull-away (review finding, 2026-09-07).
+ */
+export function observedPace(window: ProgressSample[]): number | null {
+  if (window.length < 2) return null;
+  const first = window[0]!;
+  const last = window[window.length - 1]!;
+  const dt = (last.t - first.t) / 1000;
+  const dm = last.alongM - first.alongM;
+  if (dt < PACE_MIN_S || dm < PACE_MIN_M) return null;
+  return dm / dt;
+}
+
+/**
+ * Time left, in seconds: the route's own measured pace until a real window
+ * of progress exists, then the observed pace over that window. Shown only as
+ * a duration ("about 1 h 20 min left") — never as a rate (Hard rule D).
  */
 export function etaSeconds(
   remainingM: number,
-  recentMps: number[],
+  window: ProgressSample[],
   routeDistanceM: number,
   routeDurationS: number,
 ): number | null {
-  const moving = recentMps.filter((v) => v > 1);
-  const observed = moving.length >= 3 ? moving.reduce((a, b) => a + b, 0) / moving.length : null;
+  const observed = observedPace(window);
   const planned = routeDistanceM > 0 && routeDurationS > 0 ? routeDistanceM / routeDurationS : null;
   const v = observed ?? planned;
   if (v === null || !(v > 0)) return null;

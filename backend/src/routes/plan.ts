@@ -184,10 +184,19 @@ function factsOf(
   ];
   return {
     originName: typeof constraints.origin === 'string' ? constraints.origin : null,
+    // BD-203: the narration knows the shape; an A→B carries its destination's
+    // name when the parse kept one (resolved pins carry none — same as origin)
+    ...(constraints.shape === 'a_to_b'
+      ? {
+          shape: 'a_to_b' as const,
+          destinationName:
+            typeof constraints.destination === 'string' ? constraints.destination : null,
+        }
+      : {}),
     durationMin: route.duration_s / 60,
     distanceKm: route.distance_m / 1000,
     targetMin: constraints.duration_target_s !== null ? constraints.duration_target_s / 60 : null,
-    curviness: result.curviness ?? 0,
+    curviness: result.curviness, // null = withheld/unmeasured, never 0 (BD-203)
     roadNames: roadNamesFromManeuvers(route.maneuvers),
     // real stops + MEASURED arrivals (R16-3) — "Ridge Café (coffee, ≈40 min in)"
     stops: result.stops.map((s) => ({
@@ -233,7 +242,7 @@ function routePayload(
     waypoints: result.waypoints,
     distance_m: route.distance_m,
     duration_s: route.duration_s,
-    curviness: result.curviness ?? 0,
+    curviness: result.curviness, // null = withheld/unmeasured, never 0 (BD-203)
     elevation_profile: null,
     climb_m: result.elevation?.climb_m ?? null,
     highway_flag: route.has_highway,
@@ -318,8 +327,15 @@ const FRIENDLY: Record<string, string> = {
     'Roadopia plans enjoyable drives, not fast ones — try describing the kind of roads you want instead.',
   redirect:
     'No good route came together from that start. Roadopia currently covers south-central Ontario — try a different starting point or a looser brief.',
+  // BD-203: an A→B redirect must not blame the start when the destination is the problem
+  redirect_a_to_b:
+    'No route came together between those two points. Roadopia currently covers south-central Ontario — check both places are inside the region, or try a nearby town for either end.',
   unavailable:
     'The planner is temporarily unavailable. Browsing and saved routes still work — please try again shortly.',
+  // BD-203: these two follow the planner's own sentence (see the composition below)
+  no_clean_route: 'Try a nearby start, or a different drive time.',
+  out_of_time:
+    'The planner ran out of time before a clean drive came together from this start — try again, or a slightly different time or start.',
 };
 
 export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDeps): void {
@@ -737,10 +753,24 @@ export function registerPlanEndpoint(app: FastifyInstance, deps: PlanEndpointDep
                     e.type === 'error' && e.message.startsWith("I don't recognize"),
                 )
               : undefined;
-          const message = [
-            unknownPlace?.message ?? FRIENDLY[result.status] ?? FRIENDLY['unavailable']!,
-            ...result.disclosures,
-          ]
+          // BD-203: a structural verdict or a spent clock is stated as itself —
+          // the planner's own sentence first, then what to try; never the
+          // "temporarily unavailable … try again shortly" line for something
+          // a retry cannot change.
+          const verdictFirst =
+            result.status === 'no_clean_route' || result.status === 'out_of_time';
+          const message = (
+            verdictFirst
+              ? [...result.disclosures, FRIENDLY[result.status]!]
+              : [
+                  unknownPlace?.message ??
+                    (result.status === 'redirect' && constraints.shape === 'a_to_b'
+                      ? FRIENDLY['redirect_a_to_b']
+                      : FRIENDLY[result.status]) ??
+                    FRIENDLY['unavailable']!,
+                  ...result.disclosures,
+                ]
+          )
             .join(' ')
             .trim();
           sse({ type: 'error', message });

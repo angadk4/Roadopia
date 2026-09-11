@@ -18,6 +18,7 @@
 
 import type { FetchLike } from './api';
 import {
+  AuthApiError,
   needsRefresh,
   refreshSession,
   sendOtp,
@@ -145,18 +146,64 @@ export class AuthEngine {
     const nowS = this.opts.now ? this.opts.now() : Math.floor(Date.now() / 1000);
     if (!needsRefresh(s, nowS)) return s.accessToken;
     try {
-      const next = await refreshSession(this.opts.cfg, s.refreshToken, {
+      const next = await this.refresh(s.refreshToken);
+      return next.accessToken;
+    } catch (err) {
+      // Terminal ONLY when GoTrue rejected the token itself (revoked, expired,
+      // already used): 400 invalid_grant, 401, 403. A dead cell link, a 5xx or
+      // a 429 keeps the session — signing out on those stranded a driver in
+      // the car and made them redo the email code once signal returned
+      // (review finding, 2026-09-07). Those are RETHROWN, never null: the
+      // re-gate callers (`if (!token) gate(retry)`) would loop forever on a
+      // null from a still-signed-in engine.
+      const status = err instanceof AuthApiError ? err.status : null;
+      if (status === 400 || status === 401 || status === 403) {
+        // a stale loser never clears a session another caller already rotated
+        if (this.state.session?.refreshToken === s.refreshToken) {
+          await this.opts.store.clear();
+          this.set({ status: 'anon', session: null });
+        }
+        return null;
+      }
+      throw new AuthApiError(
+        status === 429
+          ? 'Too many sign-in checks at once — wait a minute and try again.'
+          : status !== null
+            ? 'The sign-in service is having trouble — try again in a moment.'
+            : err instanceof AuthApiError
+              ? err.message
+              : 'Could not reach the sign-in service — check your connection.',
+        status,
+        { cause: err },
+      );
+    }
+  }
+
+  /** In-flight refresh, keyed by the token it rotates. N screens refreshing
+   *  on the same focus used to contend for one single-use refresh token; now
+   *  they await ONE request (review finding). */
+  private refreshing: { token: string; p: Promise<AuthSession> } | null = null;
+
+  private refresh(refreshToken: string): Promise<AuthSession> {
+    if (this.refreshing !== null && this.refreshing.token === refreshToken) {
+      return this.refreshing.p;
+    }
+    const p = (async (): Promise<AuthSession> => {
+      const next = await refreshSession(this.opts.cfg, refreshToken, {
         ...(this.opts.fetchImpl ? { fetchImpl: this.opts.fetchImpl } : {}),
         ...(this.opts.now ? { now: this.opts.now } : {}),
       });
       await this.opts.store.save(next);
       this.set({ session: next });
-      return next.accessToken;
-    } catch {
-      await this.opts.store.clear();
-      this.set({ status: 'anon', session: null });
-      return null;
-    }
+      return next;
+    })();
+    this.refreshing = { token: refreshToken, p };
+    void p
+      .finally(() => {
+        if (this.refreshing?.p === p) this.refreshing = null;
+      })
+      .catch(() => undefined);
+    return p;
   }
 
   async signOut(): Promise<void> {
@@ -168,4 +215,12 @@ export class AuthEngine {
     this.pending = null;
     this.set({ status: 'anon', session: null, sheetOpen: false });
   }
+}
+
+/** The line a screen shows when `freshAccessToken()` THREW (a transient
+ *  refresh failure — the session is still held, a retry is one tap away). */
+export function sessionProblem(err: unknown): string {
+  return err instanceof AuthApiError
+    ? err.message
+    : 'Could not reach the sign-in service — check your connection.';
 }

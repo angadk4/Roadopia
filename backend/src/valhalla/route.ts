@@ -21,7 +21,12 @@
  * break_through middle → 2 legs, each with summary.time.
  */
 
-import { RouteThroughOutputSchema, type Maneuver, type RouteThroughOutput } from '@shared/types';
+import {
+  cleanLegManeuvers,
+  RouteThroughOutputSchema,
+  type Maneuver,
+  type RouteThroughOutput,
+} from '@shared/types';
 import { z } from 'zod';
 
 import { decodePolyline } from './polyline';
@@ -152,6 +157,31 @@ export interface RouteThroughRequest {
    * location type that SPLITS legs, making per-stop arrival times measurable.
    */
   stopIndices?: ReadonlyArray<number>;
+  /**
+   * BD-203 — corridors the engine must NOT use: Valhalla `exclude_polygons`
+   * (rings of [lon, lat]; roads intersecting a ring are avoided). Probed live
+   * on the pinned 3.7.0 (2026-09-07): honoured, ~20-40 ms per call with
+   * ~60 thin rectangles, and the second route shared ≤ 5 % of its edges with
+   * the excluded one. Needs `service_limits.max_exclude_polygons_length`
+   * raised (dev config: 2 000 000 m; the default 10 km errors with code 167).
+   * Omitted = byte-identical request.
+   */
+  excludePolygons?: ReadonlyArray<ReadonlyArray<readonly [number, number]>>;
+  /**
+   * BD-203 — heading (degrees clockwise from north) the FIRST location must
+   * depart along, so a leg glued onto the end of a previous leg continues
+   * forward instead of reversing onto it. Omitted = byte-identical request.
+   */
+  startHeading?: { deg: number; toleranceDeg?: number };
+  /**
+   * BD-203 — per-waypoint headings (index-aligned with `waypoints`; null =
+   * none). A through-sample on a divided road snapped to the carriageway
+   * that runs the OTHER way makes the engine u-turn to touch it and u-turn
+   * back (measured: 7-11 u-turns on a reversed ring piece); the local
+   * bearing of the driven line at each sample picks the right carriageway.
+   * Ignored for index 0 when `startHeading` is set. Omitted = byte-identical.
+   */
+  waypointHeadings?: ReadonlyArray<number | null>;
 }
 
 // --- Valhalla response (subset we consume; external input → validated) ---
@@ -285,14 +315,19 @@ export function mapRouteResponseDetailed(body: unknown): {
   });
   boundaries.push(Math.max(0, coordinates.length - 1));
 
-  const maneuvers: Maneuver[] = legs.flatMap(
-    (leg) =>
-      leg.maneuvers?.map((m) => ({
-        type: MANEUVER_TYPES[m.type] ?? `type_${m.type}`,
-        instruction: m.instruction,
-        ...(m.length !== undefined ? { distance_m: m.length * 1000 } : {}),
-        ...(m.street_names !== undefined ? { street_names: m.street_names } : {}),
-      })) ?? [],
+  // One list across legs, with the per-leg arrival/departure pairs at each
+  // intermediate waypoint cleaned up (a driver mid-drive is never told they
+  // have arrived — device pass 2026-09-07, cleanLegManeuvers).
+  const maneuvers: Maneuver[] = cleanLegManeuvers(
+    legs.flatMap(
+      (leg) =>
+        leg.maneuvers?.map((m) => ({
+          type: MANEUVER_TYPES[m.type] ?? `type_${m.type}`,
+          instruction: m.instruction,
+          ...(m.length !== undefined ? { distance_m: m.length * 1000 } : {}),
+          ...(m.street_names !== undefined ? { street_names: m.street_names } : {}),
+        })) ?? [],
+    ),
   );
 
   const warnings = (parsed.warnings ?? [])
@@ -331,6 +366,16 @@ export function scanConstraintViolations(
   return violations;
 }
 
+/** BD-203: the per-waypoint heading keys for location `i` (none when unset). */
+function headingAt(
+  headings: ReadonlyArray<number | null> | undefined,
+  i: number,
+): { heading: number; heading_tolerance: number } | Record<string, never> {
+  const h = headings?.[i];
+  if (h === undefined || h === null || !Number.isFinite(h)) return {};
+  return { heading: Math.round(((h % 360) + 360) % 360), heading_tolerance: 70 };
+}
+
 /**
  * Call Valhalla `/route` through the typed mapping. Throws `ValhallaRouteError`
  * on engine errors (incl. no-route) and `z.ZodError` on malformed responses.
@@ -358,12 +403,23 @@ export async function routeThrough(
         ...(isEndpoint || middleType === 'break'
           ? {}
           : { search_filter: { min_road_class: 'unclassified' } }),
+        // BD-203: continue forward off the previous leg (glued construction)
+        ...(i === 0 && request.startHeading
+          ? {
+              heading: Math.round(((request.startHeading.deg % 360) + 360) % 360),
+              heading_tolerance: request.startHeading.toleranceDeg ?? 70,
+            }
+          : headingAt(request.waypointHeadings, i)),
       };
     }),
     costing: 'auto',
     // R25-U2: translate avoid INTENT into levers the engine honours
     ...(request.costingOptions
       ? { costing_options: { auto: realizeCostingOptions(request.costingOptions) } }
+      : {}),
+    // BD-203: corridors of earlier legs the engine may not reuse or cross
+    ...(request.excludePolygons && request.excludePolygons.length > 0
+      ? { exclude_polygons: request.excludePolygons.map((ring) => ring.map((p) => [p[0], p[1]])) }
       : {}),
   };
 

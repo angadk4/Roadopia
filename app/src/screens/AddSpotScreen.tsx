@@ -31,6 +31,7 @@ import {
 } from 'react-native';
 
 import '../lib/mapbox';
+import { sessionProblem } from '../lib/auth_state';
 import { DataError, type SpotRow } from '../lib/data';
 import { getSupabaseConfig } from '../lib/runtime';
 import {
@@ -152,7 +153,14 @@ export default function AddSpotScreen(props: AddSpotScreenProps): ReactElement {
   const doSave = (draft: Draft): void => {
     setState({ kind: 'saving' });
     void (async () => {
-      const token = await freshAccessToken();
+      let token: string | null;
+      try {
+        token = await freshAccessToken();
+      } catch (err) {
+        // a transient refresh failure: still signed in, say so, retry is a tap
+        setState({ kind: 'problem', message: sessionProblem(err) });
+        return;
+      }
       if (!token) {
         // session lapsed between the tap and the save — re-gate the SAME save
         setState({ kind: 'idle' });

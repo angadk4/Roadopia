@@ -12,3 +12,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export function useTopInset(): number {
   return useSafeAreaInsets().top;
 }
+
+/** The device's bottom inset (the home-indicator strip on Face ID phones), in
+ *  dp. A control laid out inside it competes with the system home gesture. */
+export function useBottomInset(): number {
+  return useSafeAreaInsets().bottom;
+}

@@ -115,20 +115,21 @@ export default function SavedScreen(props: SavedScreenProps): ReactElement {
       const uid = user.id;
       if (mode === 'pull') setRefreshing(true);
       else if (mode === 'initial') setListPhase('loading');
-      loadProfile(cfg, uid)
-        .then((p) => {
-          if (my !== gen.current) return;
-          setProfile(p);
-          setProblem(null);
-        })
-        .catch((err: unknown) => {
-          if (my !== gen.current) return;
-          setProblem(err instanceof DataError ? err.message : 'Could not load the profile.');
-        });
       void (async () => {
         try {
+          // one token for both reads: the profile is owner-readable now (0032)
           const token = await freshAccessToken();
           if (my !== gen.current || !token) return; // superseded, or anon again
+          loadProfile(cfg, uid, token)
+            .then((p) => {
+              if (my !== gen.current) return;
+              setProfile(p);
+              setProblem(null);
+            })
+            .catch((err: unknown) => {
+              if (my !== gen.current) return;
+              setProblem(err instanceof DataError ? err.message : 'Could not load the profile.');
+            });
           const rows = await loadRoutes(cfg, token, uid);
           if (my !== gen.current) return;
           setDrives(rows);
@@ -288,6 +289,8 @@ export default function SavedScreen(props: SavedScreenProps): ReactElement {
     <ScrollView
       style={[styles.root, { backgroundColor: colors.bg }]}
       contentContainerStyle={[styles.content, { paddingTop: spacing.xl + topInset }]}
+      // the first tap on "Save" used to only dismiss the keyboard (review finding)
+      keyboardShouldPersistTaps="handled"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -308,6 +311,8 @@ export default function SavedScreen(props: SavedScreenProps): ReactElement {
             maxLength={DISPLAY_NAME_MAX}
             editable={!busy}
             accessibilityLabel="Display name"
+            returnKeyType="done"
+            onSubmitEditing={submitName}
           />
           <Pressable
             onPress={submitName}

@@ -26,6 +26,7 @@ import {
 import HandoffSection from '../components/HandoffSection';
 import RouteDetail from '../components/RouteDetail';
 import SafetyNote from '../components/SafetyNote';
+import { sessionProblem } from '../lib/auth_state';
 import { DataError } from '../lib/data';
 import {
   deleteRoute,
@@ -74,7 +75,7 @@ export function visibilityBlurb(v: Vis): string {
 
 export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactElement {
   const { colors } = useTheme();
-  const { freshAccessToken, gate } = useAuth();
+  const { freshAccessToken, gate, status } = useAuth();
   const params = props.route.params;
   const cfg = props.cfg ?? getSupabaseConfig();
   const load = props.fetchRouteFn ?? fetchRouteById;
@@ -84,7 +85,11 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
 
   const [route, setRoute] = useState<Route | null>(null);
   const [visibility, setVisState] = useState<Vis>((params?.visibility as Vis) ?? 'private');
-  const [state, setState] = useState<'loading' | 'ready' | 'gone' | 'error'>('loading');
+  /** 'signed_out': the row came back empty with NO token — the session lapsed,
+   *  the drive was not deleted (review finding: it read "may have been deleted"). */
+  const [state, setState] = useState<'loading' | 'ready' | 'gone' | 'signed_out' | 'error'>(
+    'loading',
+  );
   const [problem, setProblem] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
@@ -99,14 +104,20 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
 
   const refresh = useCallback((): void => {
     if (!params?.id) return;
+    // the session is still being read: a null token now would mean nothing
+    // (and would read as "session expired" to a signed-in user); the status
+    // change re-runs this
+    if (status === 'loading') return;
     const my = ++gen.current;
     void (async () => {
       try {
         const token = await freshAccessToken();
+        // the read still runs without a token: a public / link-only drive of
+        // the owner's opens read-only even when the session has lapsed
         const r = await load(cfg, params.id, token);
         if (my !== gen.current) return; // superseded
         if (r === null) {
-          setState('gone');
+          setState(token === null ? 'signed_out' : 'gone');
           return;
         }
         setRoute(r);
@@ -117,7 +128,7 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
         if (my === gen.current) setState('error');
       }
     })();
-  }, [params?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [params?.id, status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(refresh, [refresh]);
 
@@ -134,7 +145,14 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
     setVisState(next); // optimistic; reverted below if the server disagrees
     setProblem(null);
     void (async () => {
-      const token = await freshAccessToken();
+      let token: string | null;
+      try {
+        token = await freshAccessToken();
+      } catch (err) {
+        setVisState(previous);
+        setProblem(sessionProblem(err));
+        return;
+      }
       if (!token || !params?.id) {
         setVisState(previous);
         gate(() => choose(next), { onDismiss: notChanged });
@@ -159,7 +177,14 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
     setBusy(true);
     setProblem(null);
     void (async () => {
-      const token = await freshAccessToken();
+      let token: string | null;
+      try {
+        token = await freshAccessToken();
+      } catch (err) {
+        setBusy(false);
+        setProblem(sessionProblem(err));
+        return;
+      }
       if (!token || !params?.id) {
         setBusy(false);
         gate(submitRename, { onDismiss: notChanged });
@@ -187,7 +212,15 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
     setBusy(true);
     setProblem(null);
     void (async () => {
-      const token = await freshAccessToken();
+      let token: string | null;
+      try {
+        token = await freshAccessToken();
+      } catch (err) {
+        setBusy(false);
+        setArmed(false);
+        setProblem(sessionProblem(err));
+        return;
+      }
       if (!token || !params?.id) {
         setBusy(false);
         setArmed(false);
@@ -221,8 +254,20 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
         <Text style={[styles.body, { color: colors.textMuted }]}>
           {state === 'gone'
             ? 'That drive isn’t available any more — it may have been deleted.'
-            : 'Could not load that drive right now.'}
+            : state === 'signed_out'
+              ? 'Your session expired — sign in to open this drive.'
+              : 'Could not load that drive right now.'}
         </Text>
+        {state === 'signed_out' && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Sign in"
+            onPress={() => gate(refresh)}
+            style={[styles.secondaryBtn, { borderColor: colors.border }]}
+          >
+            <Text style={[styles.body, { color: colors.text }]}>Sign in</Text>
+          </Pressable>
+        )}
         {state === 'error' && (
           <Pressable
             accessibilityRole="button"
@@ -242,6 +287,9 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
       style={{ backgroundColor: colors.bg }}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
+      // the rename field sits low on the page; without this the keyboard
+      // covers it and the Save name row (review finding — ResultScreen's fix)
+      automaticallyAdjustKeyboardInsets
     >
       <RouteDetail route={route} explanation={null} done={null}>
         {/* M9-T06 (FR-112): saved drives are followable too */}

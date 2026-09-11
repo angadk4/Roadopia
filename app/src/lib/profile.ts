@@ -2,9 +2,10 @@
  * Profile data access (M8-T02; FR-090/091) — PostgREST over the same
  * FetchLike as data.ts, zod-validated (Hard rule K), PURE (node-tested).
  *
- * Reads are anon-capable (profiles front public content); updates carry the
- * user's Bearer token — RLS owner-update policies enforce identity server-side
- * (migration 0023), the client just presents credentials.
+ * Reads AND updates carry the user's Bearer token: since 0032 a profile is
+ * readable by its owner only (the open read let anyone page every account's
+ * uuid + email-derived display name — review finding, 2026-09-07). RLS
+ * enforces identity server-side; the client just presents credentials.
  */
 
 import { z } from 'zod';
@@ -19,7 +20,8 @@ const ProfileSchema = z.object({
 });
 export type Profile = z.infer<typeof ProfileSchema>;
 
-/** Display-name cap — mirrors the DB check in migration 0023 (server wins). */
+/** Display-name cap — mirrors the DB check (migration 0032; 0023's never
+ *  took effect). The server wins. */
 export const DISPLAY_NAME_MAX = 40;
 
 async function rest(
@@ -51,16 +53,18 @@ async function rest(
   return { status: res.status, text: await res.text() };
 }
 
-/** Fetch one profile (anon-readable). Null when it does not exist. */
+/** Fetch the signed-in user's own profile (owner-readable). Null when it does
+ *  not exist — or is not theirs. */
 export async function fetchProfile(
   cfg: SupabaseConfig,
   userId: string,
+  accessToken: string,
   fetchImpl?: FetchLike,
 ): Promise<Profile | null> {
   const { status, text } = await rest(
     cfg,
     `/profiles?id=eq.${encodeURIComponent(userId)}&select=id,display_name,avatar_url`,
-    { method: 'GET' },
+    { method: 'GET', accessToken },
     fetchImpl,
   );
   if (status < 200 || status >= 300) {

@@ -15,6 +15,8 @@
 
 import type { ParsedConstraints } from '@shared/types';
 
+import { DURATION_TOLERANCE_DEFAULT } from './validate';
+
 export const TAU_WIDEN_FACTOR = 1.3;
 export const THETA_LOWER_FACTOR = 0.67;
 export const THETA_FLOOR = 0.3;
@@ -40,19 +42,26 @@ export interface SearchParams {
   /** R25-U3: avoid.highways was IMPOSED by the fun profile, not asked by the
    *  user — rung 4's disclosure wording differs (product rule vs user ask). */
   imposedHighways?: boolean;
+  /** BD-203: the request shape — rung 5's disclosure must not call a
+   *  point-to-point drive a "loop". Absent = loop wording (legacy callers). */
+  shape?: 'loop' | 'a_to_b';
 }
 
 export function initialParams(constraints: ParsedConstraints, thetaCurvy = 0.6): SearchParams {
   return {
     tauMultiplier: 1,
     thetaCurvy,
-    durationTolerance: 0.1,
+    // BD-203: the M4-frozen ±20 % (validate.ts DURATION_TOLERANCE_DEFAULT) —
+    // rung 1 had validated at 0.1 for the whole life of the frozen config
+    // while the exact/alternate tiers disclose anything past 15 % anyway.
+    durationTolerance: DURATION_TOLERANCE_DEFAULT,
     avoid: { ...constraints.avoid },
     relaxedConstraints: [],
     disclosures: [],
     rung: 1,
     dropNiceToHaveStops: false,
     assemblyRelax: false,
+    shape: constraints.shape,
   };
 }
 
@@ -154,8 +163,11 @@ export function nextRelaxation(params: SearchParams, telemetry?: LadderTelemetry
         p.rung = 6;
         if (!p.assemblyRelax) {
           p.assemblyRelax = true;
+          // BD-203 (I): shape-aware wording — an A→B is never a loop.
           p.disclosures.push(
-            'loosened loop-quality limits — the roads here force some repeated pavement',
+            p.shape === 'a_to_b'
+              ? 'loosened the route-quality limits — the roads between these points force some repeated pavement'
+              : 'loosened loop-quality limits — the roads here force some repeated pavement',
           );
           return { kind: 'retry', params: p };
         }

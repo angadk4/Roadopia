@@ -2,6 +2,7 @@ import type {
   DiscoverResult,
   LatLng,
   LineString,
+  Maneuver,
   NearbyDrive,
   RouteThroughOutput,
   CoreDrive,
@@ -19,6 +20,7 @@ import {
   nearbyDriveToRoute,
   buildRemixRequest,
   coreDrivesToFeatureCollection,
+  coreDriveToRoute,
   coreTripDurationS,
   coreTripLabel,
 } from '../discover';
@@ -269,5 +271,91 @@ describe('R25-U15 three-leg helpers', () => {
     ]);
     expect(req.duration_target_s).toBe(4860); // inside the tap window
     expect(req.out_and_back).toBeUndefined(); // a REAL planner run, not a rebuild
+  });
+});
+
+// --- BD-203: the tapped drive as ONE honest Route -------------------------------
+
+const OUT_CUES: Maneuver[] = [
+  {
+    type: 'start',
+    instruction: 'Drive north on Main Street.',
+    distance_m: 500,
+    street_names: ['Main Street'],
+  },
+  { type: 'destination', instruction: 'You have arrived.', distance_m: 0 },
+];
+const CORE_CUES: Maneuver[] = [
+  {
+    type: 'start',
+    instruction: 'Drive east on River Road.',
+    distance_m: 300,
+    street_names: ['River Road'],
+  },
+  {
+    type: 'left',
+    instruction: 'Turn left onto Creek Road.',
+    distance_m: 400,
+    street_names: ['Creek Road'],
+  },
+  { type: 'destination', instruction: 'You have arrived.', distance_m: 0 },
+];
+const HOME_CUES: Maneuver[] = [
+  {
+    type: 'start',
+    instruction: 'Drive south on Creek Road.',
+    distance_m: 200,
+    street_names: ['Creek Road'],
+  },
+  { type: 'destination', instruction: 'You have arrived at your destination.', distance_m: 0 },
+];
+
+describe('coreDriveToRoute (BD-203)', () => {
+  it('road flags are the OR of the ENGINE-routed connectors — never a hard-coded false', () => {
+    const r = coreDriveToRoute({
+      ...CORE,
+      connectorOut: { ...CORE.connectorOut, has_highway: true, has_toll: false },
+      connectorHome: { ...CORE.connectorHome, has_toll: true, has_ferry: false },
+    });
+    expect(r.highway_flag).toBe(true); // a 401/410 commute says so
+    expect(r.toll_flag).toBe(true);
+    expect(r.ferry_flag).toBe(false);
+    expect(r.unpaved_flag).toBe(false); // absent on both = not flagged
+    expect(coreDriveToRoute(CORE).highway_flag).toBe(false);
+  });
+
+  it('carries the three legs’ maneuvers as one cleaned list with every length kept', () => {
+    const r = coreDriveToRoute({
+      ...CORE,
+      core: { ...CORE.core, maneuvers: CORE_CUES },
+      connectorOut: { ...CORE.connectorOut, maneuvers: OUT_CUES },
+      connectorHome: { ...CORE.connectorHome, maneuvers: HOME_CUES },
+    });
+    const m = r.maneuvers!;
+    // out's mid-trip arrival dropped; the core's departure becomes a plain
+    // continuation (a new road); home's departure on the SAME road folds
+    // into the previous cue; the final arrival stays.
+    expect(m.map((x) => x.type)).toEqual(['start', 'continue', 'left', 'destination']);
+    expect(m.reduce((s, x) => s + (x.distance_m ?? 0), 0)).toBe(1400); // lengths folded, never lost
+    expect(m[2]!.distance_m).toBe(600); // Creek Road: 400 core + 200 home
+  });
+
+  it('guidance is null when ANY leg lacks maneuvers (an honest absence)', () => {
+    const r = coreDriveToRoute({
+      ...CORE,
+      core: { ...CORE.core, maneuvers: null },
+      connectorOut: { ...CORE.connectorOut, maneuvers: OUT_CUES },
+      connectorHome: { ...CORE.connectorHome, maneuvers: HOME_CUES },
+    });
+    expect(r.maneuvers).toBeNull();
+    expect(coreDriveToRoute(CORE).maneuvers).toBeNull(); // pre-BD-203 payloads
+  });
+
+  it('legs carry the MEASURED seconds next to the distance shares', () => {
+    const r = coreDriveToRoute(CORE);
+    expect(r.legs).toMatchObject({ there_s: 1080, drive_s: 2520, home_s: 1260 });
+    expect(r.duration_s).toBe(4860);
+    expect(r.curviness).toBe(2.1); // the core's measured number, passed through
+    expect(r.is_loop).toBe(true);
   });
 });

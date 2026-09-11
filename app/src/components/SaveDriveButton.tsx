@@ -15,6 +15,7 @@ import type { Route } from '@shared/types';
 import { useState, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { sessionProblem } from '../lib/auth_state';
 import { DataError } from '../lib/data';
 import { ROUTE_NAME_MAX } from '../lib/library';
 import { getSupabaseConfig } from '../lib/runtime';
@@ -62,7 +63,15 @@ export default function SaveDriveButton(props: SaveDriveButtonProps): ReactEleme
   const doSave = (): void => {
     setState({ kind: 'saving' });
     void (async () => {
-      const token = await freshAccessToken();
+      let token: string | null;
+      try {
+        token = await freshAccessToken();
+      } catch (err) {
+        // the refresh could not be reached or answered: the session is still
+        // held, so say what happened and leave a retry one tap away
+        setState({ kind: 'problem', message: sessionProblem(err) });
+        return;
+      }
       if (!token) {
         // The session lapsed between the tap and the save (refresh refused):
         // the engine is anonymous again, so re-gating re-opens the sheet with

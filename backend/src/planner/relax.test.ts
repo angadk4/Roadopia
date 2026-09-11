@@ -203,3 +203,35 @@ describe('nextRelaxation ladder (M3-T12)', () => {
     expect(JSON.stringify(params)).toBe(snapshot);
   });
 });
+
+describe('BD-203 (I) — rung-5 wording is shape-aware', () => {
+  const climbToRung5 = (c: ParsedConstraints): string[] => {
+    let p = initialParams(c);
+    for (let i = 0; i < 12; i++) {
+      const o = nextRelaxation(p);
+      if (o.kind === 'redirect') break;
+      p = o.params;
+      if (p.assemblyRelax) break;
+    }
+    return p.disclosures;
+  };
+
+  it('an A→B never hears "loop-quality" — it loosens the route-quality limits', () => {
+    const c = constraints({
+      shape: 'a_to_b',
+      destination: { lat: 43.5448, lng: -80.2482 },
+      avoid: { highways: false, tolls: false, ferries: false, unpaved: false },
+    });
+    expect(initialParams(c).shape).toBe('a_to_b');
+    const rung5 = climbToRung5(c).find((d) => d.startsWith('loosened'));
+    expect(rung5).toMatch(/route-quality limits/);
+    expect(rung5).not.toMatch(/loop/);
+  });
+
+  it('a loop keeps the loop wording, byte-identical', () => {
+    const rung5 = climbToRung5(constraints()).find((d) => d.startsWith('loosened'));
+    expect(rung5).toBe(
+      'loosened loop-quality limits — the roads here force some repeated pavement',
+    );
+  });
+});

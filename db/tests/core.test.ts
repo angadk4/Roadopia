@@ -118,8 +118,8 @@ describe('core schema (M2-T07)', () => {
       [userId],
     );
     const s = await db.query<{ id: string }>(
-      `insert into spots (owner_id, type, location)
-       values ($1, 'coffee', st_geomfromtext('POINT(-79.85 43.22)', 4326)) returning id`,
+      `insert into spots (owner_id, type, name, location)
+       values ($1, 'coffee', 'Cascade cafe', st_geomfromtext('POINT(-79.85 43.22)', 4326)) returning id`,
       [userId],
     );
     await db.query('insert into route_spots (route_id, spot_id) values ($1, $2)', [

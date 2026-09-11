@@ -28,6 +28,16 @@ import type { Client } from 'pg';
 import { travelMatrix } from '../valhalla/matrix';
 import { routeThrough } from '../valhalla/route';
 
+import {
+  arrivalBearing,
+  defaultCorridorRouteFn,
+  departureBearing,
+  glueLegs,
+  routeCorridorLeg,
+  trimLineEnd,
+  trimLineStart,
+  type XY,
+} from './corridor';
 import { LEGACY } from './costing';
 import { selfIntersections, summarizeCrossings, segIntersect } from './crossings';
 import { DRIVE_CORES_VERSION, readDriveCores, type CoreRowRead } from './discover_cores';
@@ -38,9 +48,22 @@ import {
   judgeTrip,
   TRIP_DURATION_TOL,
   TRIP_EXACT_BAND,
+  TRIP_OAB_ORIGIN_GRACE_M,
   tripShapeMetrics,
   type TripMetrics,
 } from './trip_gates';
+
+/** BD-203: rebuild a one-shot trip as corridor-excluded legs when it failed
+ *  ONLY on defects that exclusions remove. Off = one-shot only, byte-identical. */
+export const CORRIDOR_REBUILD_ON = (process.env['CORRIDOR_REBUILD'] ?? 'on') !== 'off';
+const CORRIDOR_FIXABLE: ReadonlySet<string> = new Set([
+  'doubling',
+  'same_way_home',
+  'self_crossing',
+  'spurs',
+  'microloops',
+  'uturn',
+]);
 
 /** Crow-flies → road factor for the commute predictor (pre-filter only; the
  *  real routes are measured before any gate decides). */
@@ -104,6 +127,14 @@ export interface DriveFirstTrip {
   /** R34-U9: routed-vs-measured arc fidelity; core stats are advertised only
    *  at ≥ STATS_PROVENANCE_MIN. */
   fidelity: number;
+  /** BD-203: how the trip was built — a stored RING with two spokes, or a
+   *  SWEEP of measured pieces glued by corridor-excluded legs. Absent = ring. */
+  source?: 'ring' | 'ring_corridor' | 'sweep';
+  /** BD-203 sweep: the measured pieces driven, in order (for the words). */
+  pieceNames?: string[];
+  /** BD-203: the holes each glued leg needed (start hole / stem hole, m) —
+   *  a widened hole is where the network forced a repeat. Absent = one-shot. */
+  holes?: Array<{ startHoleM: number; stemHoleM: number }>;
 }
 
 export interface DriveFirstOutcome {
@@ -559,7 +590,12 @@ export async function driveFirstTrip(
   const rejected: Array<{ id: string; failures: string[] }> = [];
   const candidatesFullRing: CoreRowRead[] = [];
 
-  /** Route + judge one (core, arc): the bounded home-via ladder inside. */
+  /** Route + judge one (core, arc). The ONE-SHOT request first (seam-free
+   *  geometry, the rq30c lesson); when it fails only on what construction
+   *  removes — doubling, same way home, a crossing spoke, a stub at a join —
+   *  the trip is REBUILT as three corridor-excluded legs (BD-203): out to J1,
+   *  the arc through its samples, home from J2 forbidden from reusing or
+   *  crossing what was driven. Same judge either way. */
   const buildAndJudge = async (
     row: CoreRowRead,
     arc: RingArc,
@@ -579,34 +615,18 @@ export async function driveFirstTrip(
         // street, u-turn, back out" (rq30b).
         middleType: 'through',
       });
+    const stemM = opts.oabGraceM ?? TRIP_OAB_ORIGIN_GRACE_M;
 
-    let bestFailures: string[] = ['build_error'];
-    // R35-U10: with pair optimization on, a different legitimate ring exit
-    // replaces artificial perpendicular vias — the ladder survives only for
-    // the heuristic fallback path (Recovery §7.4).
-    const viaLadder: Array<[number, number] | null> = J1J2_MATRIX_OPT_ON
-      ? [null]
-      : [
-          null,
-          offsetVia(arc.exit, origin, 4000),
-          offsetVia(arc.exit, origin, -4000),
-          offsetVia(arc.exit, origin, 7000),
-          offsetVia(arc.exit, origin, -7000),
-        ];
-    for (const via of viaLadder) {
-      let route: RouteThroughOutput;
-      try {
-        route = await build(via);
-      } catch {
-        continue;
-      }
+    /** Judge a routed trip split at vertex indices j1i (J1) and j2i (J2). */
+    const assess = (
+      route: RouteThroughOutput,
+      j1i: number,
+      j2i: number,
+      source: NonNullable<DriveFirstTrip['source']>,
+      holes?: DriveFirstTrip['holes'],
+    ): { trip: DriveFirstTrip | null; failures: string[] } => {
       const coords = route.geometry.coordinates as Array<[number, number]>;
-      if (coords.length < 8) continue;
-
-      // split the routed geometry at the arc joins
-      const j1i = nearestIdx(coords, arc.entry, 0, coords.length);
-      const j2i = nearestIdx(coords, arc.exit, Math.min(j1i + 1, coords.length - 1), coords.length);
-      if (j2i <= j1i) continue;
+      if (coords.length < 8 || j2i <= j1i) return { trip: null, failures: ['degenerate'] };
       const latM = 111_320;
       const cum: number[] = [0];
       for (let i = 1; i < coords.length; i++) {
@@ -640,9 +660,20 @@ export async function driveFirstTrip(
         driveS,
         homeS: Math.round((spokeS * homeM) / spokeM),
       };
-      const outGeo: LineString = { type: 'LineString', coordinates: coords.slice(0, j1i + 1) };
+      const outCoords = coords.slice(0, j1i + 1);
+      const homeCoords = coords.slice(j2i);
       const driveGeo: LineString = { type: 'LineString', coordinates: coords.slice(j1i, j2i + 1) };
-      const homeGeo: LineString = { type: 'LineString', coordinates: coords.slice(j2i) };
+      // BD-203 one ruler: out↔home overlap is measured OUTSIDE the stem —
+      // the shared subdivision exit is the necessity the doubling gate
+      // already exempts; the same_way_home gate must not re-count it.
+      const outGeo: LineString = {
+        type: 'LineString',
+        coordinates: trimLineStart(outCoords, stemM),
+      };
+      const homeGeo: LineString = {
+        type: 'LineString',
+        coordinates: trimLineEnd(homeCoords, stemM),
+      };
 
       // the routed drive must actually FOLLOW the measured ring
       const fidelity = edgeOverlapRatio(arc.geometry, driveGeo);
@@ -666,7 +697,10 @@ export async function driveFirstTrip(
         ...summarizeCrossings(selfIntersections(route.geometry, origin)),
         uturns: uturnCount(route),
         commuteShare: (legs.thereS + legs.homeS) / Math.max(1, route.duration_s),
-        outHomeOverlap: edgeOverlapRatio(homeGeo, outGeo),
+        outHomeOverlap:
+          outGeo.coordinates.length >= 2 && homeGeo.coordinates.length >= 2
+            ? edgeOverlapRatio(homeGeo, outGeo)
+            : 0,
         outCoreOverlap: 0, // seam-free by construction (one routed request)
         homeCoreOverlap: 0,
       };
@@ -675,25 +709,124 @@ export async function driveFirstTrip(
       const verdict = judgeTrip(metrics, { durationTol: Number.POSITIVE_INFINITY });
       const failures = [...verdict.failures];
       if (fidelity < ARC_FIDELITY_MIN) failures.push('arc_deviation');
-      if (failures.length === 0) {
-        const err = Math.abs(route.duration_s - durationTargetS) / durationTargetS;
-        return {
-          trip: {
-            core: row,
-            route,
-            drive: { entry: arc.entry, mid: arc.mid, exit: arc.exit, frac: arc.frac },
-            legs,
-            geometry: route.geometry,
-            distanceM: route.distance_m,
-            durationS: route.duration_s,
-            metrics,
-            tier: err <= TRIP_EXACT_BAND ? 'exact' : 'alternate',
-            fidelity,
-          },
-          failures: [],
-        };
+      if (failures.length > 0) return { trip: null, failures };
+      const err = Math.abs(route.duration_s - durationTargetS) / durationTargetS;
+      return {
+        trip: {
+          core: row,
+          route,
+          drive: { entry: arc.entry, mid: arc.mid, exit: arc.exit, frac: arc.frac },
+          legs,
+          geometry: route.geometry,
+          distanceM: route.distance_m,
+          durationS: route.duration_s,
+          metrics,
+          tier: err <= TRIP_EXACT_BAND ? 'exact' : 'alternate',
+          fidelity,
+          source,
+          ...(holes ? { holes } : {}),
+        },
+        failures: [],
+      };
+    };
+
+    /** BD-203: the same trip as three corridor-excluded legs. */
+    const buildCorridorTrip = async (): Promise<{
+      route: RouteThroughOutput;
+      j1i: number;
+      j2i: number;
+      holes: NonNullable<DriveFirstTrip['holes']>;
+    } | null> => {
+      const o: XY = [origin.lng, origin.lat];
+      const arcCoords = arc.geometry.coordinates as XY[];
+      const out = await routeCorridorLeg(defaultCorridorRouteFn, valhallaUrl, {
+        waypoints: [o, samples[0]!],
+        costingOptions,
+        middleType: 'break',
+        heading: null,
+        previous: [],
+        stemM,
+      });
+      // the spoke may have arrived along the ring's approach — keep its tail
+      // open so the arc drive is not fenced by it
+      out.openTailM = 1_500;
+      const j1: XY = out.coords[out.coords.length - 1]!;
+      const arcLeg = await routeCorridorLeg(defaultCorridorRouteFn, valhallaUrl, {
+        waypoints: [j1, ...samples.slice(1)],
+        costingOptions,
+        middleType: 'through',
+        heading: departureBearing(arcCoords),
+        previous: [out],
+        stemM,
+      });
+      const j2: XY = arcLeg.coords[arcLeg.coords.length - 1]!;
+      const home = await routeCorridorLeg(defaultCorridorRouteFn, valhallaUrl, {
+        waypoints: [j2, o],
+        costingOptions,
+        middleType: 'break',
+        heading: arrivalBearing(arcLeg.coords),
+        previous: [out, arcLeg],
+        stemM,
+      });
+      const glued = glueLegs([out.route, arcLeg.route, home.route]);
+      const j1i = out.coords.length - 1;
+      const j2i = j1i + (arcLeg.coords.length - 1);
+      return { route: glued, j1i, j2i, holes: [out.holes, arcLeg.holes, home.holes] };
+    };
+
+    let bestFailures: string[] = ['build_error'];
+    // R35-U10: with pair optimization on, a different legitimate ring exit
+    // replaces artificial perpendicular vias — the ladder survives only for
+    // the heuristic fallback path (Recovery §7.4).
+    const viaLadder: Array<[number, number] | null> = J1J2_MATRIX_OPT_ON
+      ? [null]
+      : [
+          null,
+          offsetVia(arc.exit, origin, 4000),
+          offsetVia(arc.exit, origin, -4000),
+          offsetVia(arc.exit, origin, 7000),
+          offsetVia(arc.exit, origin, -7000),
+        ];
+    for (const via of viaLadder) {
+      let route: RouteThroughOutput;
+      try {
+        route = await build(via);
+      } catch {
+        continue;
       }
-      bestFailures = failures;
+      const coords = route.geometry.coordinates as Array<[number, number]>;
+      if (coords.length < 8) continue;
+      // split the routed geometry at the arc joins
+      const j1i = nearestIdx(coords, arc.entry, 0, coords.length);
+      const j2i = nearestIdx(coords, arc.exit, Math.min(j1i + 1, coords.length - 1), coords.length);
+      if (j2i <= j1i) continue;
+      const first = assess(route, j1i, j2i, 'ring');
+      if (first.trip !== null) return first;
+      bestFailures = first.failures;
+      // BD-203: only what exclusions remove is worth a rebuild — a shortcut
+      // ring (arc_deviation), a non-ring, or a commute-heavy pair is not.
+      if (
+        CORRIDOR_REBUILD_ON &&
+        !outOfTime() &&
+        first.failures.every((f) => CORRIDOR_FIXABLE.has(f))
+      ) {
+        try {
+          const rebuilt = await buildCorridorTrip();
+          if (rebuilt !== null) {
+            const second = assess(
+              rebuilt.route,
+              rebuilt.j1i,
+              rebuilt.j2i,
+              'ring_corridor',
+              rebuilt.holes,
+            );
+            if (second.trip !== null) return second;
+            bestFailures = [...first.failures, ...second.failures.map((f) => `rebuilt:${f}`)];
+          }
+        } catch {
+          bestFailures = [...first.failures, 'rebuilt:unroutable'];
+        }
+      }
     }
     return { trip: null, failures: bestFailures };
   };

@@ -128,6 +128,48 @@ describe('SavedRouteScreen', () => {
   });
 });
 
+describe('SavedRouteScreen lapsed session (review, 2026-09-07)', () => {
+  it('an empty answer with NO token says the session expired — not "deleted" — and offers sign-in', async () => {
+    // the access token is inside the refresh window and GoTrue refuses the
+    // refresh token (revoked elsewhere): the engine drops to anonymous
+    const refused = (async () => ({
+      ok: false,
+      status: 401,
+      headers: { get: () => null },
+      text: async () => '{}',
+    })) as never;
+    const engine = new AuthEngine({
+      cfg: CFG,
+      store: memorySessionStore({
+        accessToken: 'at',
+        refreshToken: 'rt-revoked',
+        expiresAt: 1000,
+        user: { id: 'u1', email: 'a@b.co' },
+      }),
+      fetchImpl: refused,
+      now: () => 1000,
+    });
+    const tokensSeen: Array<string | null> = [];
+    const fetchRouteFn = async (_cfg: unknown, _id: unknown, token: string | null) => {
+      tokensSeen.push(token);
+      return null;
+    };
+    const { tree } = await render(engine, fetchRouteFn as never);
+    await act(async () => {});
+    const text = JSON.stringify(tree.toJSON());
+    expect(text).toContain('session expired');
+    expect(text).not.toContain('isn’t available any more');
+    expect(tokensSeen[0]).toBeNull(); // the read still ran, anonymously
+    const signIn = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'Sign in' && !!n.props['onPress'],
+    )[0]!;
+    await act(async () => {
+      (signIn.props['onPress'] as () => void)();
+    });
+    expect(engine.getState().sheetOpen).toBe(true); // the reload is parked behind the sheet
+  });
+});
+
 describe('SavedRouteScreen rename + delete (device pass, 2026-09-04)', () => {
   async function renderOwner(over: { renameFn?: unknown; deleteFn?: unknown } = {}): Promise<{
     tree: ReactTestRenderer;

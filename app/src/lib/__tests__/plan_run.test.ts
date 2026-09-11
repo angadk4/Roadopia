@@ -112,6 +112,25 @@ describe('runReducer — terminal phases', () => {
     expect(s.phase).toBe('cancelled');
     expect(s.wentToBackground).toBe(true);
   });
+
+  it('backgrounding or cancelling AFTER a failure never rewrites it (review, 2026-09-07)', () => {
+    const noRoute = runReducer(INITIAL_RUN, {
+      type: 'stream_end',
+      done: 'unavailable',
+      aborted: false,
+    });
+    const guarded = runReducer(INITIAL_RUN, {
+      type: 'guard_rejected',
+      error: { code: 'rate_limited', message: 'Too many — try again in 9s.', retryAfterS: 9 },
+    });
+    const dropped = runReducer(INITIAL_RUN, { type: 'network_failed' });
+    for (const settled of [noRoute, guarded, dropped]) {
+      expect(runReducer(settled, { type: 'backgrounded' })).toBe(settled);
+      expect(runReducer(settled, { type: 'cancelled' })).toBe(settled);
+    }
+    expect(runReducer(guarded, { type: 'backgrounded' }).guard?.message).toContain('9s');
+    expect(runReducer(guarded, { type: 'backgrounded' }).wentToBackground).toBe(false);
+  });
 });
 
 describe('labels', () => {

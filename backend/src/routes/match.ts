@@ -7,16 +7,20 @@
 import type { LatLng, LineString, RouteThroughOutput } from '@shared/types';
 import type { FastifyInstance } from 'fastify';
 
+import type { RateLimiter } from '../lib/rate_limit';
 import type { RegionBoundary } from '../lib/region';
 import { traceRoute } from '../valhalla/match';
 
-import { assertInRegion, toEngineError } from './route';
+import { assertInRegion, rejectIfLimited, toEngineError } from './route';
 
 export const MAX_TRACE_POINTS = 5000;
 
 export interface MatchEndpointDeps {
   valhallaUrl: string;
   region: RegionBoundary;
+  /** Review 2026-09-07: a 5,000-point match is the heaviest single Valhalla
+   *  call a client can make, anonymously — it needs a ceiling like /plan. */
+  rateLimiter?: RateLimiter;
   /** DI for tests. */
   matchFn?: typeof traceRoute;
 }
@@ -57,7 +61,8 @@ export function registerMatchEndpoint(app: FastifyInstance, deps: MatchEndpointD
         },
       },
     },
-    async (request): Promise<RouteThroughOutput> => {
+    async (request, reply): Promise<RouteThroughOutput | undefined> => {
+      if (rejectIfLimited(deps.rateLimiter, request, reply)) return undefined;
       const { trace, shape_match } = request.body;
       assertInRegion(trace, deps.region);
 

@@ -97,7 +97,7 @@ async function cancelRun(): Promise<void> {
 async function refineRun(): Promise<void> {
   let constraints: unknown = null;
   let firstDuration = 0;
-  let firstCurv = 0;
+  let firstCurv = null as number | null;
   await streamPlan(
     { brief: '60 minute twisty loop', origin: { lat: 43.2557, lng: -79.8711 } },
     {
@@ -115,7 +115,7 @@ async function refineRun(): Promise<void> {
   );
   if (!constraints) throw new Error('no constraints event arrived');
   let secondDuration = 0;
-  let secondCurv = 0;
+  let secondCurv = null as number | null;
   let preset = '';
   let parseDetail = '';
   const result = await streamPlan(
@@ -143,9 +143,9 @@ async function refineRun(): Promise<void> {
     Math.round(firstDuration / 60) + ' min →',
     Math.round(secondDuration / 60) + ' min',
     '| twistiness:',
-    firstCurv.toFixed(2),
+    firstCurv?.toFixed(2) ?? 'n/a',
     '→',
-    secondCurv.toFixed(2),
+    secondCurv?.toFixed(2) ?? 'n/a',
   );
 }
 

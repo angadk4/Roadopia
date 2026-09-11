@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { AiClient, type Transport } from './client';
 import { CostGuard } from './cost_guard';
-import { explainRoute, titleSummaryTags, type RouteFacts } from './explain';
+import {
+  explainRoute,
+  templateExplanation,
+  templateTitleSummaryTags,
+  titleSummaryTags,
+  type RouteFacts,
+} from './explain';
 import { MemoryLedger } from './ledger';
 
 /** M5-T04 + M5-T05 — factuality: 0 invented places on the fixture (AC verbatim). */
@@ -98,5 +104,44 @@ describe('titleSummaryTags (M5-T05)', () => {
     const t = await titleSummaryTags(FACTS, { client });
     expect(t.source).toBe('template');
     expect(t.title.length).toBeLessThanOrEqual(60);
+  });
+});
+
+describe('BD-203 (I) — the template narrates a DRIVE for A→B, a loop for loops', () => {
+  it('a_to_b: "drive from X to Y", never "loop"', () => {
+    const e = templateExplanation({
+      ...FACTS,
+      shape: 'a_to_b',
+      destinationName: 'Guelph',
+      stops: [],
+      viewpointCount: 0,
+    });
+    expect(e.text).toMatch(/^A 87 minute, 94 km drive from Belfountain to Guelph/);
+    expect(e.text).not.toMatch(/loop/);
+    const t = templateTitleSummaryTags({ ...FACTS, shape: 'a_to_b', roadNames: [] });
+    expect(t.title).toBe('Belfountain 87 min drive');
+  });
+
+  it('loops are byte-identical with and without the shape field', () => {
+    const before = templateExplanation(FACTS).text;
+    expect(before).toMatch(/km loop from Belfountain/);
+    expect(templateExplanation({ ...FACTS, shape: 'loop' }).text).toBe(before);
+    expect(templateTitleSummaryTags({ ...FACTS, roadNames: [] }).title).toBe(
+      'Belfountain 87 min loop',
+    );
+  });
+
+  it('the destination name is a grounded entity for an A→B narration', async () => {
+    const text =
+      'An 87 minute, 94 km drive from Belfountain to Guelph along Forks of the Credit Road.';
+    const reply = JSON.stringify({ text, satisfied: ['duration'], relaxed: [] });
+    const withDest = await explainRoute(
+      { ...FACTS, shape: 'a_to_b', destinationName: 'Guelph' },
+      { client: clientOf([reply, reply]).client },
+    );
+    expect(withDest.source).toBe('llm');
+    // without the destination fact, "Guelph" is a novel entity → template fallback
+    const without = await explainRoute(FACTS, { client: clientOf([reply, reply]).client });
+    expect(without.source).toBe('template');
   });
 });

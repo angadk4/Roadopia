@@ -18,7 +18,13 @@
 
 import Mapbox, { Camera, LineLayer, MapView, ShapeSource } from '@rnmapbox/maps';
 import type { FeatureCollection } from 'geojson';
-import { useCallback, type ReactElement, type ReactNode } from 'react';
+import {
+  useCallback,
+  useMemo,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import '../lib/mapbox'; // side-effect: pk. token set before MapView mounts
@@ -33,6 +39,32 @@ export type LineFeatureCollection = FeatureCollection;
 /** Connector legs (get-there / get-home) — readable on both styles, and clearly
  *  subordinate to the amber drive. */
 const CONNECTOR_GREY = '#8a93a6';
+
+// Hoisted so the memoised ShapeSource element below sees stable props:
+// rnmapbox's ShapeSource JSON.stringifies its shape on every render it is
+// asked to do, and fresh style/hitbox objects asked for one each time (review).
+type LineStyle = NonNullable<ComponentProps<typeof LineLayer>['style']>;
+const HITBOX = { width: 24, height: 24 };
+const CASING_STYLE: LineStyle = {
+  lineColor: '#11151a',
+  lineWidth: 6,
+  lineOpacity: 0.35,
+  lineCap: 'round',
+  lineJoin: 'round',
+};
+// The drive is the product; the commute is context. Amber on the core, grey
+// on the connectors, so the map says the same thing the card says ("the
+// drive 42 min · getting there 18 · home 21").
+const LINE_STYLE: LineStyle = {
+  lineColor: AMBER,
+  lineWidth: 3.5,
+  lineCap: 'round',
+  lineJoin: 'round',
+};
+const LINE_STYLE_PER_LEG: LineStyle = {
+  ...LINE_STYLE,
+  lineColor: ['match', ['get', 'leg'], 'core', AMBER, CONNECTOR_GREY],
+};
 
 export interface DriveLinesMapProps {
   /** R29: color lines by their `leg` property (core amber, connectors grey). */
@@ -74,6 +106,20 @@ export default function DriveLinesMap(props: DriveLinesMapProps): ReactElement {
     [onSelectLine],
   );
 
+  // one element identity per (collection, id, style, handler): a banner or
+  // sheet re-render must not re-serialise every line geometry
+  const lines = useMemo(
+    () =>
+      featureCollection && featureCollection.features.length > 0 ? (
+        <ShapeSource id={sourceId} shape={featureCollection} onPress={onPress} hitbox={HITBOX}>
+          {/* dark casing keeps the amber legible on the light style too (§663) */}
+          <LineLayer id={`${sourceId}-casing`} style={CASING_STYLE} />
+          <LineLayer id={`${sourceId}-line`} style={perLeg ? LINE_STYLE_PER_LEG : LINE_STYLE} />
+        </ShapeSource>
+      ) : null,
+    [featureCollection, sourceId, perLeg, onPress],
+  );
+
   return (
     <View style={styles.root}>
       <MapView
@@ -105,40 +151,7 @@ export default function DriveLinesMap(props: DriveLinesMapProps): ReactElement {
           />
         )}
 
-        {featureCollection && featureCollection.features.length > 0 && (
-          <ShapeSource
-            id={sourceId}
-            shape={featureCollection}
-            onPress={onPress}
-            hitbox={{ width: 24, height: 24 }}
-          >
-            {/* dark casing keeps the amber legible on the light style too (§663) */}
-            <LineLayer
-              id={`${sourceId}-casing`}
-              style={{
-                lineColor: '#11151a',
-                lineWidth: 6,
-                lineOpacity: 0.35,
-                lineCap: 'round',
-                lineJoin: 'round',
-              }}
-            />
-            <LineLayer
-              id={`${sourceId}-line`}
-              style={{
-                // The drive is the product; the commute is context. Amber on the
-                // core, grey on the connectors, so the map says the same thing the
-                // card says ("the drive 42 min · getting there 18 · home 21").
-                lineColor: perLeg
-                  ? ['match', ['get', 'leg'], 'core', AMBER, CONNECTOR_GREY]
-                  : AMBER,
-                lineWidth: 3.5,
-                lineCap: 'round',
-                lineJoin: 'round',
-              }}
-            />
-          </ShapeSource>
-        )}
+        {lines}
 
         {children}
       </MapView>

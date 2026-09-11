@@ -74,6 +74,34 @@ describe('buildSavePayload', () => {
   it('an empty name falls back honestly', () => {
     expect(buildSavePayload({ route: ROUTE, name: '   ' })['name']).toBe('Untitled drive');
   });
+  it('carries the stops and the three-leg split (review, 2026-09-07)', () => {
+    const stop = {
+      name: 'Ridge Café',
+      type: 'cafe',
+      requested_type: 'coffee' as const,
+      arrival_s: 2400,
+      at_fraction: 0.5 as const,
+      location: { lat: 43.21, lng: -79.89 },
+      waypoint_index: 1,
+    };
+    const legs = {
+      there_pct: 28,
+      drive_pct: 49,
+      home_pct: 23,
+      there_m: 12000,
+      drive_m: 21000,
+      home_m: 9800,
+      drive_backroad_pct: null,
+      drive_main_pct: 12,
+    };
+    const p = buildSavePayload({ route: { ...ROUTE, stops: [stop], legs }, name: 'x' });
+    expect(p['stops']).toEqual([stop]);
+    expect(p['legs']).toEqual(legs);
+    // absent → the honest empties the DB expects, never undefined
+    const bare = buildSavePayload({ route: ROUTE, name: 'x' });
+    expect(bare['stops']).toEqual([]);
+    expect(bare['legs']).toBeNull();
+  });
 });
 
 describe('saveRoute / listMyRoutes', () => {

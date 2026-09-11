@@ -109,7 +109,9 @@ export async function streamPlan(
     });
   } catch (err) {
     if (isAbort(err)) return { done: null, aborted: true, malformedFrames: 0 };
-    throw new NetworkError(`Could not reach the server at ${opts.baseUrl}.`, { cause: err });
+    throw new NetworkError('Could not reach the server — check your connection.', {
+      cause: err,
+    });
   }
 
   // Guard rejections arrive as plain JSON before any stream exists.

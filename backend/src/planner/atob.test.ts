@@ -1,17 +1,28 @@
 import type { LatLng } from '@shared/types';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { assembleAtoB, DETOUR_MAX_DEFAULT } from './atob';
+import {
+  assembleAtoB,
+  ATOB_DURATION_RATIO_MAX,
+  atobCrossingCount,
+  atobDefectCount,
+  atobStructuralDefects,
+  DETOUR_MAX_DEFAULT,
+  routeDirectBaseline,
+} from './atob';
 import type { WaypointCandidate } from './candidates';
 
 /**
  * M3-T08 — A→B assembly against the LIVE local Valhalla. Self-skips when the
  * engine is down; `pnpm -C backend test atob` locally is the Verify gate.
+ * BD-203 adds the shared direct baseline, the duration guard and the
+ * assembly-measured structural defects (pure contracts live in atob_law.test.ts).
  */
 
 const VALHALLA = process.env['VALHALLA_URL'] ?? 'http://127.0.0.1:8002';
 const HAMILTON: LatLng = { lat: 43.2557, lng: -79.8711 };
 const STC: LatLng = { lat: 43.1594, lng: -79.2469 };
+const NO_AVOID = { highways: false, tolls: false, ferries: false, unpaved: false };
 
 let engineUp = false;
 
@@ -97,5 +108,67 @@ describe('assembleAtoB (M3-T08, live engine)', () => {
     );
     expect(out.detourRatio).toBeGreaterThan(0.9);
     expect(out.detourRatio).toBeLessThan(1.5);
+    expect(out.durationRatio).toBeNull(); // no baseline duration → guard not armed
+  });
+});
+
+describe('BD-203 — duration guard, assembly-measured defects, the direct baseline (live)', () => {
+  it('the duration guard rejects with a "duration" reason against the shared baseline', async (ctx) => {
+    if (!engineUp) return ctx.skip();
+    const cand = candidate('dur', [{ lat: 43.2, lng: -79.562 }]);
+    // a 10-minute "direct" makes any real Hamilton→STC drive > 1.5× — rejected
+    const tight = await assembleAtoB(VALHALLA, HAMILTON, STC, cand, {
+      directDistanceM: 56_543,
+      directDurationS: 600,
+    });
+    expect(tight.durationRatio).not.toBeNull();
+    expect(tight.durationRatio!).toBeGreaterThan(ATOB_DURATION_RATIO_MAX);
+    expect(tight.accepted).toBe(false);
+    expect(tight.rejectReasons.some((r) => r.startsWith('duration'))).toBe(true);
+    // a generous baseline duration arms the guard without tripping it
+    const loose = await assembleAtoB(VALHALLA, HAMILTON, STC, cand, {
+      directDistanceM: 56_543,
+      directDurationS: 100_000,
+    });
+    expect(loose.durationRatio!).toBeLessThan(ATOB_DURATION_RATIO_MAX);
+    expect(loose.rejectReasons.some((r) => r.startsWith('duration'))).toBe(false);
+  });
+
+  it('defects are measured at assembly with the judge’s detectors and grace — one measurement', async (ctx) => {
+    if (!engineUp) return ctx.skip();
+    const out = await assembleAtoB(
+      VALHALLA,
+      HAMILTON,
+      STC,
+      candidate('defects', [{ lat: 43.2, lng: -79.562 }]),
+      { directDistanceM: 56_543 },
+    );
+    expect(out.spursWide).toBe(out.defects.spurs.length);
+    expect(out.microloops).toBe(out.defects.crescents.length);
+    expect(out.crossings).toBe(atobCrossingCount(out.defects));
+    expect(out.retraceRunM).toBeGreaterThanOrEqual(0);
+    // what the judge would see on this exact route is what assembly saw
+    const judge = atobStructuralDefects(out.route, HAMILTON, STC);
+    expect(atobDefectCount(judge)).toBe(atobDefectCount(out.defects));
+  });
+
+  it('routeDirectBaseline: engine-fastest once, traced, avoid set honoured', async (ctx) => {
+    if (!engineUp) return ctx.skip();
+    const b = await routeDirectBaseline(VALHALLA, HAMILTON, STC, NO_AVOID);
+    expect(b.distanceM).toBeGreaterThan(40_000);
+    expect(b.durationS).toBeGreaterThan(0);
+    expect(b.avoidHonoured).toBe(true);
+    expect(b.route.distance_m).toBe(b.distanceM);
+    if (b.classMix !== null) {
+      expect(b.classMix.backroadShare).toBeGreaterThanOrEqual(0);
+      expect(b.classMix.backroadShare).toBeLessThanOrEqual(1);
+    }
+    // a toll avoid the engine can honour on this corridor: no toll on the line
+    const tollFree = await routeDirectBaseline(VALHALLA, HAMILTON, STC, {
+      ...NO_AVOID,
+      tolls: true,
+    });
+    expect(tollFree.avoidHonoured).toBe(true);
+    expect(tollFree.route.has_toll).toBe(false);
   });
 });

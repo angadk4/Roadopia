@@ -10,9 +10,10 @@
  */
 
 import type { LatLng, RouteThroughOutput } from '@shared/types';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { AppError } from '../lib/errors';
+import { AppError, errorBody } from '../lib/errors';
+import type { RateLimiter } from '../lib/rate_limit';
 import type { RegionBoundary } from '../lib/region';
 import { routeThrough, ValhallaRouteError, type AutoCostingOptions } from '../valhalla/route';
 
@@ -21,8 +22,35 @@ export const MAX_ROUTE_WAYPOINTS = 30;
 export interface RouteEndpointDeps {
   valhallaUrl: string;
   region: RegionBoundary;
+  /** Review 2026-09-07: /route and /match were the two most CPU-expensive
+   *  anonymous endpoints with no limiter at all (Valhalla has no cost cap). */
+  rateLimiter?: RateLimiter;
   /** DI for tests. */
   routeFn?: typeof routeThrough;
+}
+
+/** The shared 429 gate (same shape as /plan, /discover, /parse, photos).
+ *  True = the reply was sent; the handler must return. */
+export function rejectIfLimited(
+  limiter: RateLimiter | undefined,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): boolean {
+  if (!limiter) return false;
+  const session = request.headers['x-session-id'];
+  const decision = limiter.check(request.ip, typeof session === 'string' ? session : null);
+  if (decision.allowed) return false;
+  void reply
+    .status(429)
+    .header('retry-after', String(decision.retryAfterS))
+    .send(
+      errorBody(
+        'rate_limited',
+        `Too many requests at once — try again in ${decision.retryAfterS}s.`,
+        request.id,
+      ),
+    );
+  return true;
 }
 
 interface RouteBody {
@@ -97,7 +125,8 @@ export function registerRouteEndpoint(app: FastifyInstance, deps: RouteEndpointD
         },
       },
     },
-    async (request): Promise<RouteThroughOutput> => {
+    async (request, reply): Promise<RouteThroughOutput | undefined> => {
+      if (rejectIfLimited(deps.rateLimiter, request, reply)) return undefined;
       const { waypoints, avoid } = request.body;
       assertInRegion(waypoints, deps.region);
 

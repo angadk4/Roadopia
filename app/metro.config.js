@@ -16,5 +16,17 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),
 ];
+// Agent worktrees live under <root>/.claude/worktrees and carry their own
+// node_modules; Metro's watcher crawling them died on a transient install dir
+// (ENOENT on a *_tmp_* folder, 2026-09-07). Keep the whole .claude tree out.
+const previousBlockList = config.resolver.blockList;
+config.resolver.blockList = [
+  ...(Array.isArray(previousBlockList)
+    ? previousBlockList
+    : previousBlockList
+      ? [previousBlockList]
+      : []),
+  /[\\/]\.claude[\\/]/,
+];
 
 module.exports = config;

@@ -9,6 +9,7 @@ import { act } from 'react';
 import { create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 
+import { ApiError, NetworkError } from '../../lib/api';
 import { EMPTY_DRAFT, PlanDraftContext, type PlanDraft } from '../../lib/plan_draft';
 import { AMBER } from '../../theme';
 import DiscoverHome from '../DiscoverHome';
@@ -76,6 +77,51 @@ async function renderWith(draft: Partial<PlanDraft>, fetchDrives: () => Promise<
   });
   return tree;
 }
+
+describe('DiscoverHome failure honesty (review, 2026-09-07)', () => {
+  it('a server rejection shows the server’s own reason — never "check your connection"', async () => {
+    const text = textOf(
+      await renderWith({ origin: ORIGIN }, async () => {
+        throw new ApiError({
+          status: 400,
+          code: 'out_of_region',
+          message: 'Roadopia currently covers south-central Ontario; pick points inside it.',
+        });
+      }),
+    );
+    expect(text).toContain('Outside the covered region');
+    expect(text).toContain('south-central Ontario');
+    expect(text).not.toContain('check your connection');
+    expect(text).not.toContain('Retry scanning'); // the same pin can never succeed
+  });
+
+  it('a rate limit says "One moment" with the server’s wait, and CAN be retried', async () => {
+    const text = textOf(
+      await renderWith({ origin: ORIGIN }, async () => {
+        throw new ApiError({
+          status: 429,
+          code: 'rate_limited',
+          message: 'Too many requests at once — try again in 12s.',
+          retryAfterS: 12,
+        });
+      }),
+    );
+    expect(text).toContain('One moment');
+    expect(text).toContain('12s');
+    expect(text).not.toContain('check your connection');
+    expect(text).toContain('Retry scanning');
+  });
+
+  it('only a transport failure blames the connection', async () => {
+    const text = textOf(
+      await renderWith({ origin: ORIGIN }, async () => {
+        throw new NetworkError('Could not reach the server — check your connection.');
+      }),
+    );
+    expect(text).toContain('check your connection');
+    expect(text).toContain('Retry scanning');
+  });
+});
 
 describe('DiscoverHome (R24 map-first)', () => {
   it('needs an origin before scanning; the map still renders (showpiece)', async () => {
@@ -297,6 +343,36 @@ describe('DiscoverHome v2 (R29 Unit A — the drive + get-there + get-home)', ()
       })),
     );
     expect(text).toContain('best around here');
+  });
+
+  it('BD-203: same-way-back says what was measured, never that no second road exists', async () => {
+    const text = textOf(
+      await renderV2(async () => ({ ...V2_OK, drives: [coreDrive({ sameWayHome: true })] })),
+    );
+    expect(text).toContain('same way there and back (fastest route)');
+    expect(text).not.toContain('second road');
+  });
+
+  it('BD-203: EVERY disclosure of a non-empty menu is rendered under the rail', async () => {
+    const disclosures = [
+      '2 more were mostly getting-there from here — not shown.',
+      "on some of these you'll take the same fastest road there and back.",
+    ];
+    const text = textOf(await renderV2(async () => ({ ...V2_OK, disclosures })));
+    expect(text).toContain('Forks of the Credit'); // the menu is there …
+    for (const line of disclosures) expect(text).toContain(line); // … and so are its notes
+  });
+
+  it('BD-203: an empty menu shows ALL its disclosures, the empty-state line first', async () => {
+    const disclosures = [
+      'No measured drives fit from here — try a different start point.',
+      '1 would be more than 3 hours door to door — not shown.',
+    ];
+    const text = textOf(
+      await renderV2(async () => ({ v: 2, reachMinutes: 60, disclosures, drives: [] })),
+    );
+    for (const line of disclosures) expect(text).toContain(line);
+    expect(text.indexOf(disclosures[0]!)).toBeLessThan(text.indexOf(disclosures[1]!));
   });
 
   // The card said "the drive 42 min · getting there 18 · home 21" while the map

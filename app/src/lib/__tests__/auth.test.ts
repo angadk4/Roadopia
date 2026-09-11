@@ -239,6 +239,76 @@ describe('AuthEngine — gate honesty (device pass, 2026-09-04)', () => {
     });
   }
 
+  it('a transport failure during refresh keeps the session and rethrows (review, 2026-09-07)', async () => {
+    const stale: AuthSession = {
+      accessToken: 'at-old',
+      refreshToken: 'rt-old',
+      expiresAt: 1000, // now=1000 → inside skew → refresh
+      user: { id: 'u1', email: '' },
+    };
+    const engine = engineWith({}, stale); // the token endpoint is unrouted → fetch throws
+    await engine.init();
+    await expect(engine.freshAccessToken()).rejects.toBeInstanceOf(AuthApiError);
+    expect(engine.getState().status).toBe('signedIn');
+    expect(engine.getState().session?.refreshToken).toBe('rt-old');
+  });
+
+  it('a 503 or a 429 keeps the session with a plain line; a 400 signs out', async () => {
+    const stale: AuthSession = {
+      accessToken: 'at-old',
+      refreshToken: 'rt-old',
+      expiresAt: 1000,
+      user: { id: 'u1', email: '' },
+    };
+    for (const status of [503, 429]) {
+      const engine = engineWith(
+        { '/auth/v1/token?grant_type=refresh_token': { status, body: {} } },
+        stale,
+      );
+      await engine.init();
+      const err = await engine.freshAccessToken().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(AuthApiError);
+      expect((err as AuthApiError).message).not.toMatch(/expired/);
+      expect(engine.getState().status).toBe('signedIn');
+    }
+    const revoked = engineWith(
+      { '/auth/v1/token?grant_type=refresh_token': { status: 400, body: {} } },
+      stale,
+    );
+    await revoked.init();
+    expect(await revoked.freshAccessToken()).toBeNull();
+    expect(revoked.getState().status).toBe('anon');
+  });
+
+  it('concurrent callers share ONE refresh request', async () => {
+    const stale: AuthSession = {
+      accessToken: 'at-old',
+      refreshToken: 'rt-old',
+      expiresAt: 1000,
+      user: { id: 'u1', email: '' },
+    };
+    const f = fakeFetch({
+      '/auth/v1/token?grant_type=refresh_token': {
+        status: 200,
+        body: { ...TOKENS, access_token: 'at-new', refresh_token: 'rt-new' },
+      },
+    });
+    const engine = new AuthEngine({
+      cfg: CFG,
+      store: memorySessionStore(stale),
+      fetchImpl: f,
+      now: () => 1000,
+    });
+    await engine.init();
+    const [a, b, c] = await Promise.all([
+      engine.freshAccessToken(),
+      engine.freshAccessToken(),
+      engine.freshAccessToken(),
+    ]);
+    expect([a, b, c]).toEqual(['at-new', 'at-new', 'at-new']);
+    expect(f.calls.filter((call) => call.url.includes('refresh_token'))).toHaveLength(1);
+  });
+
   it('a tap during the initial session read never shows the sheet to a signed-in user', async () => {
     const engine = engineWith(
       {},

@@ -3,7 +3,7 @@ import type { z } from 'zod';
 
 import { ParsedConstraintsSchema, type ParsedConstraints } from './constraints';
 import { GenerationEventSchema, type GenerationEvent } from './events';
-import { RouteSchema, type Route } from './route';
+import { cleanLegManeuvers, RouteSchema, type Maneuver, type Route } from './route';
 import { SpotSchema, type Spot } from './spot';
 import {
   CandidateSelectionSchema,
@@ -42,6 +42,99 @@ const geometry = {
   ] as [number, number][],
 };
 
+describe('cleanLegManeuvers (device pass, 2026-09-07)', () => {
+  // Two legs as the engine returns a hand-built drive with one waypoint on
+  // Kennedy Road: leg 1 "arrives" at the waypoint, leg 2 "starts" again there.
+  const TWO_LEGS: Maneuver[] = [
+    {
+      type: 'start',
+      instruction: 'Drive east on Main Street.',
+      distance_m: 400,
+      street_names: ['Main Street'],
+    },
+    {
+      type: 'right',
+      instruction: 'Turn right onto Kennedy Road.',
+      distance_m: 64,
+      street_names: ['Kennedy Road'],
+    },
+    { type: 'destination_left', instruction: 'Your destination is on the left.', distance_m: 0 },
+    {
+      type: 'start',
+      instruction: 'Drive northwest on Kennedy Road.',
+      distance_m: 1578,
+      street_names: ['Kennedy Road'],
+    },
+    {
+      type: 'left',
+      instruction: 'Turn left onto Old School Road.',
+      distance_m: 5300,
+      street_names: ['Old School Road'],
+    },
+    { type: 'destination', instruction: 'You have arrived at your destination.', distance_m: 0 },
+  ];
+
+  it('drops the mid-drive arrival and folds a same-road departure into the turn before it', () => {
+    const out = cleanLegManeuvers(TWO_LEGS);
+    expect(out.map((m) => m.instruction)).toEqual([
+      'Drive east on Main Street.',
+      'Turn right onto Kennedy Road.',
+      'Turn left onto Old School Road.',
+      'You have arrived at your destination.',
+    ]);
+    // the turn onto Kennedy now spans its own 64 m plus the folded leg: the
+    // running sum still reaches the end of the drive
+    expect(out[1]!.distance_m).toBe(64 + 1578);
+    expect(out.reduce((s, m) => s + (m.distance_m ?? 0), 0)).toBe(
+      TWO_LEGS.reduce((s, m) => s + (m.distance_m ?? 0), 0),
+    );
+    expect(out.some((m) => m.type.startsWith('destination') && m !== out[out.length - 1])).toBe(
+      false,
+    );
+  });
+
+  it('a departure onto a DIFFERENT road at the waypoint stays as a continuation cue', () => {
+    const out = cleanLegManeuvers([
+      TWO_LEGS[0]!,
+      TWO_LEGS[1]!,
+      TWO_LEGS[2]!,
+      {
+        type: 'start_right',
+        instruction: 'Drive north on Side Road 5.',
+        distance_m: 900,
+        street_names: ['Side Road 5'],
+      },
+      TWO_LEGS[5]!,
+    ]);
+    expect(out.map((m) => [m.type, m.instruction])).toEqual([
+      ['start', 'Drive east on Main Street.'],
+      ['right', 'Turn right onto Kennedy Road.'],
+      ['continue', 'Drive north on Side Road 5.'],
+      ['destination', 'You have arrived at your destination.'],
+    ]);
+    expect(out[2]!.distance_m).toBe(900);
+  });
+
+  it('a single-leg list is returned as-is (copied), and the input is never mutated', () => {
+    const single = TWO_LEGS.slice(0, 2).concat(TWO_LEGS[5]!);
+    const before = JSON.stringify(single);
+    const out = cleanLegManeuvers(single);
+    expect(out).toEqual(single);
+    expect(out[0]).not.toBe(single[0]);
+    cleanLegManeuvers(TWO_LEGS);
+    expect(JSON.stringify(single)).toBe(before);
+    expect(TWO_LEGS[1]!.distance_m).toBe(64);
+  });
+
+  it('an empty list and a lone arrival are left alone', () => {
+    expect(cleanLegManeuvers([])).toEqual([]);
+    const lone: Maneuver[] = [
+      { type: 'destination', instruction: 'You have arrived.', distance_m: 0 },
+    ];
+    expect(cleanLegManeuvers(lone)).toEqual(lone);
+  });
+});
+
 describe('domain schemas round-trip parse/serialize', () => {
   it('Route', () => {
     const route: Route = {
@@ -67,6 +160,31 @@ describe('domain schemas round-trip parse/serialize', () => {
       stops: [],
     };
     expectRoundTrip(RouteSchema, route);
+  });
+
+  it('Route accepts the "Link only" visibility the DB stores (review, 2026-09-07)', () => {
+    const base = {
+      geometry,
+      is_loop: true,
+      waypoints: [],
+      distance_m: 1000,
+      duration_s: 60,
+      curviness: 0,
+      elevation_profile: null,
+      climb_m: null,
+      highway_flag: false,
+      toll_flag: false,
+      ferry_flag: false,
+      unpaved_flag: false,
+      character_tags: [],
+      intensity: 'chill',
+      free_tags: [],
+      owner_id: null,
+      origin_type: 'manual',
+      forked_from: null,
+    };
+    expect(RouteSchema.safeParse({ ...base, visibility: 'unlisted' }).success).toBe(true);
+    expect(RouteSchema.safeParse({ ...base, visibility: 'secret' }).success).toBe(false);
   });
 
   it('Route carries the R28 three-leg split, and stays valid WITHOUT it', () => {

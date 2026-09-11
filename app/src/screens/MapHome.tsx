@@ -16,7 +16,7 @@
 import { CircleLayer, ShapeSource, SymbolLayer } from '@rnmapbox/maps';
 import type { Route } from '@shared/types';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import DriveLinesMap from '../components/DriveLinesMap';
 import {
@@ -30,7 +30,9 @@ import {
   type SupabaseConfig,
 } from '../lib/data';
 import { useTopInset } from '../lib/insets';
-import { getSupabaseConfig } from '../lib/runtime';
+import { fetchRouteById } from '../lib/library';
+import { listSpotPhotos, type PhotoRef } from '../lib/photos';
+import { getApiBaseUrl, getSupabaseConfig } from '../lib/runtime';
 import { useAuth } from '../lib/use_auth';
 import { AMBER, font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
@@ -55,6 +57,8 @@ interface Selected {
   tags: string[];
   /** Spot id — present on spot selections (M10: opens the detail screen). */
   spotId?: string;
+  /** 'user' for a pin someone added — the only kind that can carry photos. */
+  spotSource?: string;
   /** The seed route row — present on route selections (device pass: the
    *  route sheet had no action; now it can be followed in place). */
   route?: MapRouteRow;
@@ -115,12 +119,21 @@ export interface MapHomeProps {
     fetchImpl?: undefined,
     accessToken?: string | null,
   ) => Promise<SpotRow[]>;
+  /** Photo list for a tapped user pin (device pass 2026-09-07: the sheet
+   *  shows the attached pictures, not just the name). Injectable for tests. */
+  listPhotosFn?: typeof listSpotPhotos;
+  /** The FULL row for "Follow this drive" — the map carries only the
+   *  simplified line (§44 egress), which follows short of the real road. */
+  fetchRouteFn?: typeof fetchRouteById;
   /** Present when mounted in MapStack (M10) — absent in bare test renders. */
   navigation?: {
     navigate: (screen: string, params?: Record<string, unknown>) => void;
     addFocusListener?: (cb: () => void) => () => void;
   };
 }
+
+/** Thumbnail edge in the sheet's photo strip. */
+const THUMB = 72;
 
 export default function MapHome(props: MapHomeProps): ReactElement {
   const { name: themeName, colors } = useTheme();
@@ -132,9 +145,23 @@ export default function MapHome(props: MapHomeProps): ReactElement {
   const center = useRef<[number, number] | null>(null);
   const [spots, setSpots] = useState<SpotRow[]>([]);
   const [selected, setSelected] = useState<Selected | null>(null);
+  /** Photos of the selected user pin; [] while loading or when there are none
+   *  (the strip simply stays hidden — a photo failure never blocks the sheet). */
+  const [sheetPhotos, setSheetPhotos] = useState<PhotoRef[]>([]);
 
   const loadRoutes = props.loadRoutes ?? fetchMapRoutes;
   const loadSpots = props.loadSpots ?? fetchMapSpots;
+  const listPhotos = props.listPhotosFn ?? listSpotPhotos;
+  const loadRoute = props.fetchRouteFn ?? fetchRouteById;
+  /** "Follow this drive" fetches the full row first; true while it does. */
+  const [opening, setOpening] = useState(false);
+  const alive = useRef(true);
+  useEffect(
+    () => () => {
+      alive.current = false;
+    },
+    [],
+  );
 
   const pullSpots = useCallback(() => {
     void (async () => {
@@ -188,6 +215,38 @@ export default function MapHome(props: MapHomeProps): ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pullSpots]);
 
+  // The selected pin's photos. Only a USER pin can have any, and the photo
+  // list is owner-readable, so it is asked for only with a signed-in token;
+  // a signed-out tap on someone's pin shows the sheet without a strip. The
+  // selection is re-keyed by id so a stale list never sits under a new name.
+  const selectedSpotId = selected?.kind === 'spot' ? selected.spotId : undefined;
+  const selectedSpotSource = selected?.kind === 'spot' ? selected.spotSource : undefined;
+  useEffect(() => {
+    setSheetPhotos((p) => (p.length === 0 ? p : [])); // same reference → no extra render
+    if (selectedSpotId === undefined || selectedSpotSource !== 'user') return;
+    if (status !== 'signedIn') return;
+    let alive = true;
+    void (async () => {
+      try {
+        const token = await freshAccessToken();
+        if (!token || !alive) return;
+        const photos = await listPhotos(
+          { baseUrl: getApiBaseUrl(), accessToken: token },
+          selectedSpotId,
+        );
+        if (alive) setSheetPhotos(photos);
+      } catch {
+        // enrichment-only: the sheet stays useful without its pictures (§18)
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // freshAccessToken is re-created on every auth change; `status` is the
+    // meaningful trigger (same reasoning as pullSpots).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSpotId, selectedSpotSource, status, listPhotos]);
+
   const routeShape = useMemo(
     () => (routes.phase === 'loaded' ? routesToFeatureCollection(routes.rows) : null),
     [routes],
@@ -219,7 +278,7 @@ export default function MapHome(props: MapHomeProps): ReactElement {
 
   const onSpotPress = useCallback((e: { features: Array<{ properties?: unknown }> }) => {
     const p = e.features[0]?.properties as
-      | { id?: string; name?: string; type?: string; point_count?: number }
+      | { id?: string; name?: string; type?: string; source?: string; point_count?: number }
       | undefined;
     if (!p || p.point_count !== undefined) return; // cluster taps: zoom gesture instead
     setSelected({
@@ -228,59 +287,90 @@ export default function MapHome(props: MapHomeProps): ReactElement {
       line: (p.type ?? '').replace('_', ' '),
       tags: [],
       ...(typeof p.id === 'string' ? { spotId: p.id } : {}),
+      ...(typeof p.source === 'string' ? { spotSource: p.source } : {}),
     });
   }, []);
 
-  const spotLayers = spotShape.features.length > 0 && (
-    <ShapeSource
-      id="spots"
-      shape={spotShape}
-      cluster
-      clusterRadius={45}
-      clusterMaxZoomLevel={14}
-      onPress={onSpotPress}
-    >
-      <CircleLayer
-        id="spot-clusters"
-        filter={['has', 'point_count']}
-        style={{
-          circleColor: themeName === 'dark' ? '#2b3138' : '#e6eaef',
-          circleRadius: 16,
-          circleStrokeColor: AMBER,
-          circleStrokeWidth: 2,
-        }}
-      />
-      <SymbolLayer
-        id="spot-cluster-count"
-        filter={['has', 'point_count']}
-        style={{
-          textField: ['get', 'point_count_abbreviated'],
-          textSize: 12,
-          textColor: themeName === 'dark' ? '#ffffff' : '#171c22',
-        }}
-      />
-      <CircleLayer
-        id="spot-pin"
-        filter={['!', ['has', 'point_count']]}
-        style={{
-          circleColor: ['match', ['get', 'type'], ...SPOT_COLORS, '#8a93a6'],
-          circleRadius: 9,
-          circleStrokeColor: themeName === 'dark' ? '#11151a' : '#ffffff',
-          circleStrokeWidth: 2,
-        }}
-      />
-      <SymbolLayer
-        id="spot-pin-label"
-        filter={['!', ['has', 'point_count']]}
-        style={{
-          textField: ['get', 'label'],
-          textSize: 10,
-          textColor: '#ffffff',
-          textAllowOverlap: true,
-        }}
-      />
-    </ShapeSource>
+  // Memoised as an ELEMENT: rnmapbox's ShapeSource is a PureComponent that
+  // JSON.stringifies its `shape` on every render, and a fresh children array
+  // defeats its shallow compare — so every sheet open/close re-serialised the
+  // ~21k-feature collection on the JS thread (review finding). With the same
+  // element identity React skips the subtree entirely.
+  const spotLayers = useMemo(
+    () =>
+      spotShape.features.length > 0 ? (
+        <ShapeSource
+          id="spots"
+          shape={spotShape}
+          cluster
+          clusterRadius={45}
+          clusterMaxZoomLevel={14}
+          onPress={onSpotPress}
+        >
+          <CircleLayer
+            id="spot-clusters"
+            filter={['has', 'point_count']}
+            style={{
+              circleColor: themeName === 'dark' ? '#2b3138' : '#e6eaef',
+              circleRadius: 16,
+              circleStrokeColor: AMBER,
+              circleStrokeWidth: 2,
+            }}
+          />
+          <SymbolLayer
+            id="spot-cluster-count"
+            filter={['has', 'point_count']}
+            style={{
+              textField: ['get', 'point_count_abbreviated'],
+              textSize: 12,
+              textColor: themeName === 'dark' ? '#ffffff' : '#171c22',
+            }}
+          />
+          <CircleLayer
+            id="spot-pin"
+            filter={['!', ['has', 'point_count']]}
+            style={{
+              circleColor: ['match', ['get', 'type'], ...SPOT_COLORS, '#8a93a6'],
+              circleRadius: 9,
+              circleStrokeColor: themeName === 'dark' ? '#11151a' : '#ffffff',
+              circleStrokeWidth: 2,
+            }}
+          />
+          <SymbolLayer
+            id="spot-pin-label"
+            filter={['!', ['has', 'point_count']]}
+            style={{
+              textField: ['get', 'label'],
+              textSize: 10,
+              textColor: '#ffffff',
+              textAllowOverlap: true,
+            }}
+          />
+        </ShapeSource>
+      ) : null,
+    [spotShape, themeName, onSpotPress],
   );
+
+  /** Follow a seed drive: with its FULL geometry + turns when the row can be
+   *  read (the map line is the simplified copy), else the map line as before —
+   *  an enrichment that fails must not dead-end the button. */
+  const openFollow = (row: MapRouteRow): void => {
+    if (opening) return;
+    setOpening(true);
+    void (async () => {
+      let route: Route = routeFromMapRow(row);
+      try {
+        const token = await freshAccessToken().catch(() => null);
+        const full = await loadRoute(getSupabaseConfig(), row.id, token);
+        if (full) route = { ...full, name: full.name ?? row.name };
+      } catch {
+        // the simplified line still follows
+      }
+      if (!alive.current) return;
+      setOpening(false);
+      props.navigation?.navigate('Follow', { route });
+    })();
+  };
 
   const banner = (
     <>
@@ -345,6 +435,25 @@ export default function MapHome(props: MapHomeProps): ReactElement {
         </Pressable>
       </View>
       <Text style={[styles.sheetLine, { color: colors.textMuted }]}>{selected.line}</Text>
+      {selected.kind === 'spot' && sheetPhotos.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.photoStrip}
+          accessibilityLabel={`${sheetPhotos.length} ${sheetPhotos.length === 1 ? 'photo' : 'photos'}`}
+        >
+          {sheetPhotos.map((ph) => (
+            <Image
+              key={ph.id}
+              // thumb_url is a signed URL to the PROCESSED (EXIF-stripped)
+              // artifact — the only kind the app ever renders (Hard rule E)
+              source={{ uri: ph.thumb_url }}
+              style={[styles.photoThumb, { backgroundColor: colors.surface }]}
+              accessibilityIgnoresInvertColors
+            />
+          ))}
+        </ScrollView>
+      )}
       {selected.tags.length > 0 && (
         <View style={styles.tagRow}>
           {selected.tags.map((t) => (
@@ -358,15 +467,17 @@ export default function MapHome(props: MapHomeProps): ReactElement {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Follow this drive"
-          onPress={() =>
-            props.navigation!.navigate('Follow', { route: routeFromMapRow(selected.route!) })
-          }
+          accessibilityState={{ busy: opening }}
+          disabled={opening}
+          onPress={() => openFollow(selected.route!)}
           style={({ pressed }) => [
             styles.sheetAction,
-            { borderColor: colors.accent, opacity: pressed ? 0.7 : 1 },
+            { borderColor: colors.accent, opacity: pressed || opening ? 0.7 : 1 },
           ]}
         >
-          <Text style={[styles.sheetActionLabel, { color: colors.accent }]}>Follow this drive</Text>
+          <Text style={[styles.sheetActionLabel, { color: colors.accent }]}>
+            {opening ? 'Opening…' : 'Follow this drive'}
+          </Text>
         </Pressable>
       )}
       {selected.kind === 'spot' && selected.spotId !== undefined && props.navigation && (
@@ -472,6 +583,8 @@ const styles = StyleSheet.create({
   },
   sheetCloseLabel: { fontSize: 18, fontWeight: '600' },
   sheetLine: { ...font.body },
+  photoStrip: { flexDirection: 'row', gap: spacing.sm },
+  photoThumb: { width: THUMB, height: THUMB, borderRadius: radius.md },
   sheetAction: {
     minHeight: HIT_TARGET,
     borderWidth: 1,

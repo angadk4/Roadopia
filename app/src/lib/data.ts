@@ -215,6 +215,8 @@ export interface SpotFeatureProps {
   type: string;
   /** One-letter marker label (type distinction pre-iconography). */
   label: string;
+  /** 'osm' | 'user' — a user pin can carry photos; an OSM one never does. */
+  source: string;
 }
 
 /** Explicit marker letters — fuel reads 'G' (gas) so food can own 'F' (R16-1). */
@@ -247,6 +249,7 @@ export function spotsToFeatureCollection(rows: SpotRow[]): {
         name: s.name,
         type: s.type,
         label: SPOT_LETTERS[s.type] ?? (s.type[0] ?? '?').toUpperCase(),
+        source: s.source,
       },
       geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
     })),

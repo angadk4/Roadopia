@@ -5,7 +5,7 @@
  */
 import { act, type ReactElement } from 'react';
 import { create, type ReactTestRenderer } from 'react-test-renderer';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { AuthEngine } from '../../lib/auth_state';
 import { EMPTY_DRAFT, PlanDraftContext, type PlanDraft } from '../../lib/plan_draft';
@@ -188,5 +188,245 @@ describe('screen smoke', () => {
     expect(text).toContain("Couldn't load routes");
     expect(text).toContain('Retry');
     expect(text).not.toContain('down'); // never the raw error
+  });
+});
+
+/** Device pass (2026-09-07): "when someone presses a custom added spot make
+ *  the attached images show up in the little pop up". */
+describe('MapHome spot sheet photos', () => {
+  function signedIn(node: ReactElement): ReactElement {
+    return (
+      <AuthProvider
+        engine={
+          new AuthEngine({
+            cfg: { url: 'http://sb.local', anonKey: 'anon' },
+            store: memorySessionStore({
+              accessToken: 'at',
+              refreshToken: 'rt',
+              expiresAt: 9_999_999_999,
+              user: { id: 'u1', email: 'a@b.co' },
+            }),
+          })
+        }
+      >
+        {node}
+      </AuthProvider>
+    ) as ReactElement;
+  }
+  const USER_PIN = {
+    id: 's-user',
+    name: 'My lookout',
+    type: 'viewpoint',
+    lat: 43.24,
+    lng: -79.94,
+    source: 'user',
+  };
+  const OSM_PIN = {
+    id: 's-osm',
+    name: 'Cafe',
+    type: 'coffee',
+    lat: 43.25,
+    lng: -79.95,
+    source: 'osm',
+  };
+  const PHOTOS = [
+    { id: 'p1', url: 'https://cdn.local/p1.jpg', thumb_url: 'https://cdn.local/p1-thumb.jpg' },
+    { id: 'p2', url: 'https://cdn.local/p2.jpg', thumb_url: 'https://cdn.local/p2-thumb.jpg' },
+  ];
+
+  async function tapSpot(tree: ReactTestRenderer, pin: typeof USER_PIN): Promise<void> {
+    const src = tree.root
+      .findAll((n) => String(n.type) === 'mapbox-shapesource')
+      .find((n) => n.props['id'] === 'spots')!;
+    const fc = src.props['shape'] as { features: Array<{ properties: Record<string, unknown> }> };
+    const feature = fc.features.find((f) => f.properties['id'] === pin.id)!;
+    await act(async () => {
+      (src.props['onPress'] as (e: unknown) => void)({ features: [feature] });
+    });
+    await act(async () => {});
+  }
+
+  async function render(wrap: (n: ReactElement) => ReactElement, listPhotosFn: unknown) {
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = create(
+        wrap(
+          <MapHome
+            loadRoutes={() => Promise.resolve([])}
+            loadSpots={() => Promise.resolve([USER_PIN, OSM_PIN])}
+            listPhotosFn={listPhotosFn as never}
+          />,
+        ),
+      );
+    });
+    return tree;
+  }
+
+  it('tapping your own pin shows its photo thumbnails in the sheet', async () => {
+    const listPhotosFn = vi.fn(async (_opts: unknown, spotId: string) =>
+      spotId === 's-user' ? PHOTOS : [],
+    );
+    const tree = await render(signedIn, listPhotosFn);
+    await tapSpot(tree, USER_PIN);
+    expect(listPhotosFn).toHaveBeenCalledTimes(1);
+    expect(listPhotosFn.mock.calls[0]?.[1]).toBe('s-user');
+    const text = textOf(tree);
+    expect(text).toContain('My lookout');
+    expect(text).toContain('p1-thumb.jpg'); // the processed thumbnail, never the raw upload
+    expect(text).toContain('p2-thumb.jpg');
+    expect(text).toContain('2 photos');
+  });
+
+  it('an OSM pin never asks for photos, and a switch to it clears the strip', async () => {
+    const listPhotosFn = vi.fn(async () => PHOTOS);
+    const tree = await render(signedIn, listPhotosFn);
+    await tapSpot(tree, USER_PIN);
+    expect(textOf(tree)).toContain('p1-thumb.jpg');
+    await tapSpot(tree, OSM_PIN);
+    expect(listPhotosFn).toHaveBeenCalledTimes(1); // no call for the OSM pin
+    const text = textOf(tree);
+    expect(text).toContain('Cafe');
+    expect(text).not.toContain('p1-thumb.jpg'); // the previous pin's photos do not linger
+  });
+
+  it('signed out, the sheet still opens and no photo request is made', async () => {
+    const listPhotosFn = vi.fn(async () => PHOTOS);
+    const tree = await render(withAuth, listPhotosFn);
+    await tapSpot(tree, USER_PIN);
+    expect(listPhotosFn).not.toHaveBeenCalled();
+    expect(textOf(tree)).toContain('My lookout');
+  });
+
+  it('a photo failure leaves the sheet intact and says nothing raw', async () => {
+    const listPhotosFn = vi.fn(async () => {
+      throw new Error('boom');
+    });
+    const tree = await render(signedIn, listPhotosFn);
+    await tapSpot(tree, USER_PIN);
+    const text = textOf(tree);
+    expect(text).toContain('My lookout');
+    expect(text).not.toContain('boom');
+  });
+});
+
+/** Review (2026-09-07): following a seed drive from the map tracked the
+ *  SIMPLIFIED line; the full row is fetched first, with the map line as the
+ *  fallback so the button never dead-ends. */
+describe('MapHome follow from the map', () => {
+  const ROW = {
+    id: '9f0403ea-65db-4f11-938c-d567a8033c2b',
+    name: 'Snake Road Sweep',
+    description: '',
+    geometry: {
+      type: 'LineString' as const,
+      coordinates: [
+        [-79.98, 43.22],
+        [-79.9, 43.26],
+      ] as Array<[number, number]>,
+    },
+    bbox: null,
+    is_loop: false,
+    distance_m: 8000,
+    duration_s: 540,
+    curviness: 1.2,
+    climb_m: null,
+    character_tags: ['twisty'],
+    intensity: 'moderate',
+    free_tags: ['seed'],
+    origin_type: 'manual',
+    visibility: 'public',
+  };
+  const FULL = {
+    geometry: {
+      type: 'LineString' as const,
+      coordinates: [
+        [-79.98, 43.22],
+        [-79.95, 43.25],
+        [-79.9, 43.26],
+      ],
+    },
+    is_loop: false,
+    waypoints: [],
+    distance_m: 8000,
+    duration_s: 540,
+    curviness: 1.2,
+    elevation_profile: null,
+    climb_m: null,
+    highway_flag: false,
+    toll_flag: false,
+    ferry_flag: false,
+    unpaved_flag: false,
+    character_tags: ['twisty'],
+    intensity: 'moderate',
+    free_tags: ['seed'],
+    visibility: 'public',
+    owner_id: null,
+    origin_type: 'manual',
+    forked_from: null,
+    stops: [],
+    maneuvers: [{ type: 'start', instruction: 'Drive northeast.', distance_m: 8000 }],
+  };
+
+  async function tapLineAndFollow(fetchRouteFn: unknown) {
+    const navigate = vi.fn();
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = create(
+        withAuth(
+          <MapHome
+            loadRoutes={() => Promise.resolve([ROW])}
+            loadSpots={() => Promise.resolve([])}
+            fetchRouteFn={fetchRouteFn as never}
+            navigation={{ navigate }}
+          />,
+        ),
+      );
+    });
+    const src = tree.root
+      .findAll((n) => String(n.type) === 'mapbox-shapesource')
+      .find((n) => n.props['id'] === 'seed-routes')!;
+    await act(async () => {
+      (src.props['onPress'] as (e: unknown) => void)({
+        features: [{ properties: { id: ROW.id, name: ROW.name, distance_m: 8000 } }],
+      });
+    });
+    const follow = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'Follow this drive' && !!n.props['onPress'],
+    )[0]!;
+    await act(async () => {
+      (follow.props['onPress'] as () => void)();
+    });
+    await act(async () => {});
+    return navigate;
+  }
+
+  it('follows the FULL row (geometry + turns) when it can be read', async () => {
+    const asked: string[] = [];
+    const fetchRouteFn = async (_cfg: unknown, id: string) => {
+      asked.push(id);
+      return FULL;
+    };
+    const navigate = await tapLineAndFollow(fetchRouteFn);
+    expect(asked).toEqual([ROW.id]);
+    const [screen, params] = navigate.mock.calls[0] as [
+      string,
+      { route: typeof FULL & { name?: string } },
+    ];
+    expect(screen).toBe('Follow');
+    expect(params.route.geometry.coordinates).toHaveLength(3);
+    expect(params.route.maneuvers).toHaveLength(1);
+    expect(params.route.name).toBe('Snake Road Sweep');
+  });
+
+  it('falls back to the map line when the row cannot be read — never a dead end', async () => {
+    const navigate = await tapLineAndFollow(async () => {
+      throw new Error('offline');
+    });
+    const [screen, params] = navigate.mock.calls[0] as [
+      string,
+      { route: { geometry: { coordinates: unknown[] } } },
+    ];
+    expect(screen).toBe('Follow');
+    expect(params.route.geometry.coordinates).toHaveLength(2);
   });
 });

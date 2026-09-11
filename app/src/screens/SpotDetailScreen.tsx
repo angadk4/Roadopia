@@ -23,6 +23,7 @@ import {
 
 import PhotoUpload from '../components/PhotoUpload';
 import ReportButton from '../components/ReportButton';
+import { sessionProblem } from '../lib/auth_state';
 import { DataError } from '../lib/data';
 import { getApiBaseUrl, getSupabaseConfig } from '../lib/runtime';
 import {
@@ -151,7 +152,14 @@ export default function SpotDetailScreen(props: SpotDetailScreenProps): ReactEle
     setBusy(true);
     setProblem(null);
     void (async () => {
-      const token = await freshAccessToken();
+      let token: string | null;
+      try {
+        token = await freshAccessToken();
+      } catch (err) {
+        setBusy(false);
+        setProblem(sessionProblem(err));
+        return;
+      }
       if (!token) {
         setBusy(false);
         gate(saveEdits, { onDismiss: () => setProblem('Not saved — sign in to edit this spot.') });
@@ -178,7 +186,15 @@ export default function SpotDetailScreen(props: SpotDetailScreenProps): ReactEle
     setBusy(true);
     setProblem(null);
     void (async () => {
-      const token = await freshAccessToken();
+      let token: string | null;
+      try {
+        token = await freshAccessToken();
+      } catch (err) {
+        setBusy(false);
+        setArmed(false);
+        setProblem(sessionProblem(err));
+        return;
+      }
       if (!token) {
         setBusy(false);
         setArmed(false);

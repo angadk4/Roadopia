@@ -9,7 +9,7 @@
  * (§20.4) — recorded, not invented early.
  */
 
-import { RouteSchema, type Route } from '@shared/types';
+import { RouteSchema, type Route, type Visibility as SharedVisibility } from '@shared/types';
 import { z } from 'zod';
 
 import { boundedFetch, transportMessage, type FetchLike } from './api';
@@ -117,7 +117,43 @@ export async function listFavouriteRouteIds(
 
 // ---------- T05/T07/T08/T09: route ops ----------
 
-/** Fetch one route by id — the shared-link path (public/unlisted/own via RLS). */
+/**
+ * A saved row as PostgREST serialises it → the shape RouteSchema expects.
+ * `bbox` is stored as a PostGIS envelope (0025: `st_envelope`), which comes
+ * back as a GeoJSON POLYGON, while the wire schema carries a four-number
+ * tuple — the mismatch made EVERY saved drive "come back malformed" on the
+ * phone (device pass, 2026-09-07). Geometry columns also carry a `crs` key
+ * the LineString schema ignores. Anything unexpected is left for zod to judge.
+ */
+export function normalizeRouteRow(row: unknown): unknown {
+  if (row === null || typeof row !== 'object') return row;
+  const r = row as Record<string, unknown>;
+  const bbox = r['bbox'];
+  if (bbox !== null && typeof bbox === 'object' && !Array.isArray(bbox)) {
+    const coords = (bbox as { coordinates?: unknown }).coordinates;
+    const ring = Array.isArray(coords) && Array.isArray(coords[0]) ? coords[0] : null;
+    const pts = (ring ?? []).filter(
+      (p): p is [number, number] =>
+        Array.isArray(p) && typeof p[0] === 'number' && typeof p[1] === 'number',
+    );
+    if (pts.length === 0) return { ...r, bbox: null };
+    const lngs = pts.map((p) => p[0]);
+    const lats = pts.map((p) => p[1]);
+    return {
+      ...r,
+      bbox: [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
+    };
+  }
+  return row;
+}
+
+/**
+ * Fetch one route by id — the shared-link path. Goes through `route_by_id`
+ * (0032): a least-privilege SECURITY DEFINER read that returns the row only
+ * when it is public, unlisted, or the caller's own. A bare table read could
+ * not serve "Link only" without making every such row LISTABLE by anyone
+ * holding the anon key (review finding, 2026-09-07).
+ */
 export async function fetchRouteById(
   cfg: SupabaseConfig,
   routeId: string,
@@ -126,15 +162,15 @@ export async function fetchRouteById(
 ): Promise<Route | null> {
   const { status, text } = await rest(
     cfg,
-    `/routes?id=eq.${encodeURIComponent(routeId)}&select=*`,
-    { method: 'GET', ...(accessToken ? { accessToken } : {}) },
+    '/rpc/route_by_id',
+    { method: 'POST', body: { p_id: routeId }, ...(accessToken ? { accessToken } : {}) },
     fetchImpl,
   );
   guard(status, 'Could not load that drive.');
   const raw: unknown = JSON.parse(text);
   const rows = z.array(z.unknown()).safeParse(raw);
   if (!rows.success || rows.data.length === 0) return null;
-  const parsed = RouteSchema.safeParse(rows.data[0]);
+  const parsed = RouteSchema.safeParse(normalizeRouteRow(rows.data[0]));
   if (!parsed.success) throw new DataError('That drive came back malformed.', status);
   return parsed.data;
 }
@@ -158,7 +194,9 @@ export async function forkRoute(
   return id.data;
 }
 
-export type Visibility = 'public' | 'private' | 'unlisted';
+/** One definition: the wire schema's (shared/route.ts) — it had drifted apart
+ *  from this local copy, which is how "Link only" became unopenable. */
+export type Visibility = SharedVisibility;
 
 /** Plain words for a visibility value — the raw enum used to reach the list
  *  and the chips as "private"/"unlisted" (device pass copy audit). */
@@ -227,7 +265,7 @@ export async function updateVisibility(
   cfg: SupabaseConfig,
   accessToken: string,
   routeId: string,
-  visibility: 'public' | 'private' | 'unlisted',
+  visibility: Visibility,
   fetchImpl?: FetchLike,
 ): Promise<void> {
   const { status, text } = await rest(

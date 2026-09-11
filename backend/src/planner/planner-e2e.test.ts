@@ -1,6 +1,13 @@
+import type { LatLng } from '@shared/types';
 import { Client } from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import {
+  ATOB_DURATION_RATIO_MAX,
+  ATOB_WORTH_IT_MIN_GAIN,
+  atobDefectCount,
+  atobStructuralDefects,
+} from './atob';
 import { parseRules } from './parse_rules';
 import { runPlanner, WALL_CLOCK_BUDGET_MS } from './run';
 
@@ -125,7 +132,45 @@ describe('runPlanner e2e (M3-T13)', () => {
     // ends near Niagara Falls (gazetteer coords)
     expect(Math.abs(end[1] - 43.0896)).toBeLessThan(0.05);
     expect(Math.abs(end[0] - -79.0849)).toBeLessThan(0.05);
-  }, 60_000);
+
+    // BD-203: every A→B serve is judged against ONE measured direct baseline,
+    // and the result says what it actually served
+    const origin = constraints.origin as LatLng;
+    const dest = constraints.destination as LatLng;
+    expect(result.atobBaseline).not.toBeNull();
+    const direct = result.atobBaseline!;
+    expect(direct.durationS).toBeGreaterThan(0);
+    expect(['planned', 'direct_law', 'direct_worth_it', 'direct_no_route']).toContain(
+      result.atobServe,
+    );
+    if (result.atobServe === 'planned') {
+      // the worth-it gate: meaningfully more backroad than the direct, inside
+      // the duration guard, and nothing the structural judge refuses
+      if (direct.backroadShare !== null && result.classMix) {
+        expect(result.classMix.backroadShare).toBeGreaterThanOrEqual(
+          direct.backroadShare + ATOB_WORTH_IT_MIN_GAIN - 1e-9,
+        );
+      }
+      expect(result.route!.duration_s / direct.durationS).toBeLessThanOrEqual(
+        ATOB_DURATION_RATIO_MAX + 1e-9,
+      );
+      expect(atobDefectCount(atobStructuralDefects(result.route!, origin, dest))).toBe(0);
+    } else {
+      // the honest direct: the payload describes the SERVED line, never the
+      // rejected attempt (BD-203 E)
+      expect(result.stops).toEqual([]);
+      expect(result.alternates).toEqual([]);
+      expect(result.score).toBeNull();
+      expect(result.curviness).toBeNull();
+      expect(result.characterApplied).toEqual([]);
+      expect(result.validation).not.toBeNull();
+      expect(result.disclosures[0]).toMatch(/routed you the direct way instead/i);
+    }
+    // alternates meet the judge too (BD-203 F)
+    for (const alt of result.alternates) {
+      expect(atobDefectCount(atobStructuralDefects(alt.route, origin, dest))).toBe(0);
+    }
+  }, 90_000);
 
   it('unsafe and out-of-region briefs terminate honestly without routes', async (ctx) => {
     if (!ready()) return ctx.skip();
@@ -155,4 +200,68 @@ describe('runPlanner e2e (M3-T13)', () => {
     expect(result.elevation).not.toBeNull();
     expect(result.elevation!.climb_m).toBeGreaterThanOrEqual(0);
   }, 60_000);
+});
+
+describe('BD-203 — measured paths serve honestly, or hand over honestly', () => {
+  it(
+    'a loop with a stop is planned live (stops honoured) and says so',
+    { timeout: 60_000 },
+    async (ctx) => {
+      if (!ready()) return ctx.skip();
+      const constraints = parseRules('60 minute backroads loop from Hamilton with a coffee stop');
+      const result = await runPlanner(constraints, { db: db!, valhallaUrl: VALHALLA });
+      // the measured paths step aside for a stop ask — the trace shows no
+      // measured serve; a served route says so in its words; a judge verdict
+      // keeps only its own line
+      const measuredServe = result.events.some(
+        (e) =>
+          e.type === 'step' &&
+          e.step === 'drive_first_trip' &&
+          (e.detail ?? '').startsWith('served'),
+      );
+      expect(measuredServe).toBe(false);
+      if (result.route !== null) {
+        expect(
+          result.disclosures.some((d) => d.includes('Planned live to honour your stops')),
+        ).toBe(true);
+        expect(result.validation).not.toBeNull();
+      } else {
+        expect(['no_clean_route', 'out_of_time', 'redirect']).toContain(result.status);
+      }
+    },
+  );
+
+  it(
+    'a served loop always carries validation rows; a measured serve carries road-class truth',
+    { timeout: 60_000 },
+    async (ctx) => {
+      if (!ready()) return ctx.skip();
+      // a known place keeps the parse complete; the pin then moves it to the owner's area
+      const constraints = parseRules('90 minute backroads loop from Hamilton');
+      constraints.origin = { lat: 43.7565, lng: -79.8335 };
+      const t0 = performance.now();
+      const result = await runPlanner(constraints, { db: db!, valhallaUrl: VALHALLA });
+      expect(performance.now() - t0).toBeLessThan(WALL_CLOCK_BUDGET_MS + 3_000);
+      if (result.route === null) {
+        // an honest verdict, never an outage
+        expect(['no_clean_route', 'out_of_time', 'redirect']).toContain(result.status);
+        return;
+      }
+      expect(result.validation).not.toBeNull();
+      expect(result.curviness).not.toBeNull();
+      const served = result.events.find(
+        (e) =>
+          e.type === 'step' &&
+          e.step === 'drive_first_trip' &&
+          (e.detail ?? '').startsWith('served'),
+      );
+      if (served) {
+        // BD-203: the served trip is traced once — class mix and validation on the wire
+        expect(result.classMix).not.toBeNull();
+        expect(result.validation!.results.some((r) => r.constraint === 'avoid_highway')).toBe(true);
+        for (const alt of result.alternates)
+          expect(alt.validation.results.length).toBeGreaterThan(0);
+      }
+    },
+  );
 });

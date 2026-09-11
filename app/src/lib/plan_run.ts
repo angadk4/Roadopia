@@ -177,9 +177,14 @@ export function runReducer(state: PlanRunState, action: RunAction): PlanRunState
     case 'network_failed':
       if (state.phase !== 'streaming') return state; // late settlement never overrides
       return { ...state, phase: 'network_failed' };
+    // Both only settle a run that is still streaming: backgrounding the app
+    // after a plan had already failed used to rewrite the failure as "Paused in
+    // the background" and lose the clarify question / retry-after (review).
     case 'cancelled':
+      if (state.phase !== 'streaming') return state;
       return { ...state, phase: 'cancelled' };
     case 'backgrounded':
+      if (state.phase !== 'streaming') return state;
       return { ...state, phase: 'cancelled', wentToBackground: true };
   }
 }

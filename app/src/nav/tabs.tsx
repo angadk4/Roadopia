@@ -13,6 +13,7 @@
 
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import type { ComponentType, ReactElement } from 'react';
 
 import { HIT_TARGET, useTheme } from '../theme';
@@ -22,7 +23,7 @@ import DiscoverStack from './DiscoverStack';
 import MapStack from './MapStack';
 import PlanStack from './PlanStack';
 import SavedStack from './SavedStack';
-import { TAB_SPEC, type TabSpec } from './tab_spec';
+import { TAB_SPEC, tabBarHiddenFor, type TabSpec } from './tab_spec';
 
 export type RootTabParamList = Record<TabSpec['name'], undefined>;
 
@@ -42,6 +43,9 @@ export default function RootTabs(): ReactElement {
     <Tab.Navigator
       screenOptions={({ route }) => {
         const spec = TAB_SPEC.find((t) => t.name === route.name);
+        // Follow / Record own the phone (GPS + wake-lock): no tab bar under
+        // them, so leaving means Exit/back, which unmounts and releases both.
+        const nested = getFocusedRouteNameFromRoute(route);
         return {
           headerShown: false,
           tabBarActiveTintColor: colors.accent,
@@ -49,6 +53,7 @@ export default function RootTabs(): ReactElement {
           tabBarStyle: {
             backgroundColor: colors.surfaceRaised,
             borderTopColor: colors.border,
+            display: tabBarHiddenFor(nested) ? 'none' : 'flex',
           },
           tabBarItemStyle: { minHeight: HIT_TARGET },
           tabBarIcon: ({ focused, color, size }) => (

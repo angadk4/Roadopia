@@ -1,6 +1,7 @@
 import type { RouteThroughOutput } from '@shared/types';
 import { describe, expect, it } from 'vitest';
 
+import { RateLimiter } from '../lib/rate_limit';
 import { parsePoly } from '../lib/region';
 import { buildServer } from '../server';
 import { ValhallaRouteError } from '../valhalla/route';
@@ -142,6 +143,81 @@ describe('POST /match (M6-T03)', () => {
     });
     expect(out.statusCode).toBe(400);
     expect((out.json() as { error: { code: string } }).error.code).toBe('out_of_region');
+  });
+});
+
+describe('rate limits on the engine calls (review, 2026-09-07)', () => {
+  it('/route: the third call in a minute per IP is 429 with Retry-After; the engine is not called', async () => {
+    let now = 1_000_000;
+    let engineCalls = 0;
+    const app = buildServer({
+      valhallaUrl: VALHALLA_URL,
+      region,
+      routeFn: async () => {
+        engineCalls += 1;
+        return FIXTURE;
+      },
+      routeRateLimiter: new RateLimiter({
+        perIp: [{ limit: 2, windowMs: 60_000 }],
+        now: () => now,
+      }),
+    });
+    const post = () =>
+      app.inject({ method: 'POST', url: '/route', payload: { waypoints: [HAMILTON, DUNDAS] } });
+    now += 1000;
+    expect((await post()).statusCode).toBe(200);
+    now += 1000;
+    expect((await post()).statusCode).toBe(200);
+    now += 1000;
+    const third = await post();
+    expect(third.statusCode).toBe(429);
+    expect(Number(third.headers['retry-after'])).toBeGreaterThan(0);
+    const body = third.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('rate_limited');
+    expect(body.error.message).toMatch(/try again in \d+s/);
+    expect(engineCalls).toBe(2);
+  });
+
+  it('/match: per-session limit binds by x-session-id; another session still flows', async () => {
+    let now = 1_000_000;
+    const app = buildServer({
+      valhallaUrl: VALHALLA_URL,
+      region,
+      matchFn: async () => FIXTURE,
+      matchRateLimiter: new RateLimiter({
+        perIp: [{ limit: 100, windowMs: 60_000 }],
+        perSession: [{ limit: 1, windowMs: 60_000 }],
+        now: () => now,
+      }),
+    });
+    const post = (session: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/match',
+        payload: { trace: [HAMILTON, DUNDAS] },
+        headers: { 'x-session-id': session },
+      });
+    now += 1000;
+    expect((await post('sess-a')).statusCode).toBe(200);
+    now += 1000;
+    expect((await post('sess-a')).statusCode).toBe(429);
+    now += 1000;
+    expect((await post('sess-b')).statusCode).toBe(200);
+  });
+
+  it('without a limiter (tests, dev shells) both endpoints stay open', async () => {
+    const app = appWith(
+      async () => FIXTURE,
+      async () => FIXTURE,
+    );
+    for (let i = 0; i < 5; i++) {
+      const r = await app.inject({
+        method: 'POST',
+        url: '/route',
+        payload: { waypoints: [HAMILTON, DUNDAS] },
+      });
+      expect(r.statusCode).toBe(200);
+    }
   });
 });
 

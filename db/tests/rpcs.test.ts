@@ -39,7 +39,11 @@ beforeAll(async () => {
      on conflict (id) do nothing`,
     [userId, `m2t08-${userId.slice(0, 8)}@test.local`],
   );
-  await db.query(`insert into profiles (id) values ($1) on conflict (id) do nothing`, [userId]);
+  // 0032 finally enforces the 1..40 display-name check (and drops the '' default)
+  await db.query(
+    `insert into profiles (id, display_name) values ($1, 'M2-T08 Tester') on conflict (id) do nothing`,
+    [userId],
+  );
   await db.query(
     `insert into spots (owner_id, type, name, location, source) values
      ($1, 'viewpoint', 'RPC Test Lookout', st_geomfromtext('POINT(-79.95 43.24)', 4326), 'user'),

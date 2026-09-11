@@ -290,7 +290,12 @@ async function request<T>(
       if (init.signal?.aborted) throw err;
       throw new NetworkError(TIMEOUT_MESSAGE, { cause: err });
     }
-    throw new NetworkError(`Could not reach the server at ${opts.baseUrl}.`, { cause: err });
+    // Plain words, no host: the base URL used to be baked into this line and
+    // showed up on the Builder panel and the Record HUD (review finding). It
+    // stays on `cause` for logs.
+    throw new NetworkError('Could not reach the server — check your connection.', {
+      cause: err,
+    });
   } finally {
     guard.clear();
   }

@@ -22,6 +22,7 @@ const DB_URL =
 let db: Client | null = null;
 const userId = randomUUID();
 let privateRouteId = '';
+let unlistedRouteId = '';
 let userSpotId = '';
 
 beforeAll(async () => {
@@ -39,7 +40,12 @@ beforeAll(async () => {
      on conflict (id) do nothing`,
     [userId, `m7t02-${userId.slice(0, 8)}@test.local`],
   );
-  await db.query(`insert into profiles (id, display_name) values ($1, 'M7-T02 Tester')`, [userId]);
+  // 0023's trigger already created the profile row from the email
+  await db.query(
+    `insert into profiles (id, display_name) values ($1, 'M7-T02 Tester')
+     on conflict (id) do update set display_name = excluded.display_name`,
+    [userId],
+  );
   const route = await db.query<{ id: string }>(
     `insert into routes (owner_id, name, geometry, geometry_simplified, is_loop,
                          distance_m, duration_s, origin_type, visibility)
@@ -51,6 +57,17 @@ beforeAll(async () => {
     [userId],
   );
   privateRouteId = route.rows[0]!.id;
+  const unlisted = await db.query<{ id: string }>(
+    `insert into routes (owner_id, name, geometry, geometry_simplified, is_loop,
+                         distance_m, duration_s, origin_type, visibility)
+     values ($1, 'UNLISTED m7t02 route',
+             st_geomfromtext('LINESTRING(-79.90 43.30, -79.89 43.31)', 4326),
+             st_geomfromtext('LINESTRING(-79.90 43.30, -79.89 43.31)', 4326),
+             false, 1500, 120, 'manual', 'unlisted')
+     returning id`,
+    [userId],
+  );
+  unlistedRouteId = unlisted.rows[0]!.id;
   const spot = await db.query<{ id: string }>(
     `insert into spots (owner_id, type, name, location, source)
      values ($1, 'coffee', 'PRIVATE m7t02 cafe', st_setsrid(st_makepoint(-79.9, 43.3), 4326), 'user')
@@ -139,6 +156,34 @@ describe('0007 public read floor (M7-T02)', () => {
     expect(Math.max(...lngs)).toBeGreaterThan(-78); // Kawarthas side
     expect(spots.every((s) => s.source === 'osm')).toBe(true); // RLS binds (invoker)
     expect(spots.some((s) => s.id === userSpotId)).toBe(false); // zero private leakage
+  });
+
+  it('an UNLISTED route is by-link only: absent from every list, opened by route_by_id (0032)', async (ctx) => {
+    if (!db) return ctx.skip();
+    const onMap = await asAnon<{ id: string }>(`select id from map_routes(p_limit := 500)`);
+    expect(onMap.some((r) => r.id === unlistedRouteId)).toBe(false);
+    const searched = await asAnon<{ id: string }>(
+      `select id from search_routes(p_page_size := 500)`,
+    );
+    expect(searched.some((r) => r.id === unlistedRouteId)).toBe(false);
+    const bare = await asAnon<{ id: string }>(`select id from routes where id = $1`, [
+      unlistedRouteId,
+    ]);
+    expect(bare).toHaveLength(0);
+    const byLink = await asAnon<{ id: string; visibility: string }>(
+      `select id, visibility from route_by_id($1)`,
+      [unlistedRouteId],
+    );
+    expect(byLink).toHaveLength(1);
+    expect(byLink[0]!.visibility).toBe('unlisted');
+    // the by-id read is least-privilege: a private row stays private
+    const priv = await asAnon<{ id: string }>(`select id from route_by_id($1)`, [privateRouteId]);
+    expect(priv).toHaveLength(0);
+  });
+
+  it('anon cannot read profiles at all (0032: no public-profile surface exists)', async (ctx) => {
+    if (!db) return ctx.skip();
+    await expect(asAnon(`select id from profiles`)).rejects.toThrow(/permission denied/i);
   });
 
   it('anon still cannot write routes (no insert policy)', async (ctx) => {

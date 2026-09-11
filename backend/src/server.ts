@@ -36,6 +36,9 @@ export interface BuildServerOptions {
   /** DI for tests. */
   routeFn?: RouteEndpointDeps['routeFn'];
   matchFn?: MatchEndpointDeps['matchFn'];
+  /** Per-endpoint limiters for the two anonymous engine calls (review, 2026-09-07). */
+  routeRateLimiter?: RouteEndpointDeps['rateLimiter'];
+  matchRateLimiter?: MatchEndpointDeps['rateLimiter'];
   /** /plan wiring (M6-T04/T05) — registers only when present. */
   plan?: PlanEndpointDeps;
   /** /discover wiring (R23) — registers only when present; absent ⇒ 404. */
@@ -109,8 +112,16 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
 
   if (opts.valhallaUrl && opts.region) {
     const base = { valhallaUrl: opts.valhallaUrl, region: opts.region };
-    registerRouteEndpoint(app, { ...base, ...(opts.routeFn ? { routeFn: opts.routeFn } : {}) });
-    registerMatchEndpoint(app, { ...base, ...(opts.matchFn ? { matchFn: opts.matchFn } : {}) });
+    registerRouteEndpoint(app, {
+      ...base,
+      ...(opts.routeFn ? { routeFn: opts.routeFn } : {}),
+      ...(opts.routeRateLimiter ? { rateLimiter: opts.routeRateLimiter } : {}),
+    });
+    registerMatchEndpoint(app, {
+      ...base,
+      ...(opts.matchFn ? { matchFn: opts.matchFn } : {}),
+      ...(opts.matchRateLimiter ? { rateLimiter: opts.matchRateLimiter } : {}),
+    });
   }
 
   if (opts.plan) {

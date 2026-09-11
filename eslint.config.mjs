@@ -32,6 +32,9 @@ export default tseslint.config(
       // via db/supabase/.gitignore). Same reasoning as scratchpad above: it is
       // generated vendor code, and 189 errors from it hid the real ones.
       '**/.temp/**',
+      // Agent worktrees (git worktrees under .claude/) carry a full copy of the
+      // tree plus their own node_modules; linting them doubles every error.
+      '.claude/**',
     ],
   },
   js.configs.recommended,
@@ -81,6 +84,29 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
+    // BD-203: the planner's device-like instruments (HTTP probe, scripted
+    // drives, trace dump, probe comparison) are plain Node ESM scripts run
+    // from the repo root; they use Node's globals and swallow probe errors
+    // on purpose (a failed request is a data point, not a crash).
+    files: ['eval/experiments/*.mjs'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        fetch: 'readonly',
+        performance: 'readonly',
+        setTimeout: 'readonly',
+        URL: 'readonly',
+        AbortSignal: 'readonly',
+        Buffer: 'readonly',
+      },
+    },
+    rules: {
+      'no-empty': ['error', { allowEmptyCatch: true }],
     },
   },
   prettier,

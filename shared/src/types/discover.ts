@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { LatLngSchema, LineStringSchema } from './route';
+import { LatLngSchema, LineStringSchema, ManeuverSchema, MAX_ROUTE_MANEUVERS } from './route';
 import { RouteThroughOutputSchema } from './tools';
 
 /**
@@ -98,6 +98,19 @@ export const CoreLegSchema = z.object({
   geometry: LineStringSchema,
   distance_m: z.number().nonnegative(),
   duration_s: z.number().int().nonnegative(),
+  /** BD-203: the ENGINE's flags for a routed leg (the connectors ride the
+   *  engine-default fastest costing, so a 401/410 commute is a real highway
+   *  and must say so). Optional: absent = not routed here / unknown, never a
+   *  claimed `false`. */
+  has_highway: z.boolean().optional(),
+  has_toll: z.boolean().optional(),
+  has_ferry: z.boolean().optional(),
+  has_unpaved: z.boolean().optional(),
+  /** BD-203: turn-by-turn maneuvers for THIS leg's geometry, so a followed
+   *  Discover drive carries guidance instead of re-matching a closed loop
+   *  (which the matcher shortcuts — guidance was refused on every ring).
+   *  null/absent = honestly no guidance for this leg. */
+  maneuvers: z.array(ManeuverSchema).max(MAX_ROUTE_MANEUVERS).nullable().optional(),
 });
 export type CoreLeg = z.infer<typeof CoreLegSchema>;
 
@@ -108,7 +121,10 @@ export const CoreDriveSchema = z.object({
   /** 'strict' = full bar; 'cell_relaxed' = best-around-here, stated on the
    *  card ("44 % backroad, not the 60 % we aim for"). */
   barProfile: z.enum(['strict', 'cell_relaxed']),
-  /** THE DRIVE — measured offline, served as stored (amber on the map). */
+  /** THE DRIVE — measured offline; distance/duration/road-class are ALWAYS
+   *  the stored measurement. BD-203: the geometry is the engine's routed ring
+   *  (with `maneuvers`) only when it reproduces the stored ring at >= 0.95
+   *  cell overlap; otherwise the stored line with `maneuvers: null`. */
   core: CoreLegSchema.extend({
     entry: LatLngSchema,
     exit: LatLngSchema,
@@ -123,7 +139,10 @@ export const CoreDriveSchema = z.object({
   /** Getting there / getting home — fresh per request (grey on the map). */
   connectorOut: CoreLegSchema,
   connectorHome: CoreLegSchema,
-  /** True when no good second road home exists (disclosed, one retry max). */
+  /** True when the home leg rides the out leg (edge overlap >= 0.5). Both
+   *  legs are simply the fastest route to/from the same join vertex (BD-149:
+   *  the commute is never engineered) — this is a LABEL, and nothing here
+   *  measured whether a second road exists (BD-203 copy fix). */
   sameWayHome: z.boolean(),
 });
 export type CoreDrive = z.infer<typeof CoreDriveSchema>;

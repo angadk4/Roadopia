@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TAB_SPEC } from '../tab_spec';
+import { TAB_SPEC, tabBarHiddenFor } from '../tab_spec';
 
 describe('bottom-tab spec (Master Spec §16; R24 Discover-primary)', () => {
   it('has exactly the five tabs, in order (M9 adds Create — Master Spec §16)', () => {
@@ -11,6 +11,14 @@ describe('bottom-tab spec (Master Spec §16; R24 Discover-primary)', () => {
     for (const t of TAB_SPEC) {
       expect(t.icon.length).toBeGreaterThan(0);
       expect(t.iconIdle).toContain('outline');
+    }
+  });
+
+  it('the tab bar hides only under the screens that own the phone (review, 2026-09-07)', () => {
+    expect(tabBarHiddenFor('Follow')).toBe(true);
+    expect(tabBarHiddenFor('Record')).toBe(true);
+    for (const visible of ['Builder', 'Result', 'MapHome', 'SavedHome', 'Spot', undefined]) {
+      expect(tabBarHiddenFor(visible)).toBe(false);
     }
   });
 

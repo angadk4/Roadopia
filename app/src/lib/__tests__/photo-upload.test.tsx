@@ -77,6 +77,59 @@ describe('uploadSpotPhoto (lib)', () => {
     expect(post.init!['body']).toBe('BYTES');
   });
 
+  it('the backend’s own reason reaches the user, with its code (review, 2026-09-07)', async () => {
+    const fetchMock = (async (url: string) => {
+      if (url.startsWith('file://')) {
+        return { ok: true, status: 200, text: async () => '', blob: async () => 'BYTES' };
+      }
+      return {
+        ok: false,
+        status: 400,
+        text: async () =>
+          JSON.stringify({
+            error: { code: 'photo_limit', message: 'A spot holds up to 6 photos.', trace_id: 't' },
+          }),
+      };
+    }) as never;
+    await expect(
+      uploadSpotPhoto(
+        { baseUrl: 'http://api.local', accessToken: 'tok', fetchImpl: fetchMock },
+        'spot-1',
+        'file://photo.jpg',
+      ),
+    ).rejects.toMatchObject({ message: 'A spot holds up to 6 photos.', code: 'photo_limit' });
+  });
+
+  it('a non-JSON failure keeps the upload-specific line; 401 reads as a sign-in problem', async () => {
+    const withBody = (status: number, text: string) =>
+      (async (url: string) =>
+        url.startsWith('file://')
+          ? { ok: true, status: 200, text: async () => '', blob: async () => 'BYTES' }
+          : { ok: false, status, text: async () => text }) as never;
+    const opts = (f: never) => ({ baseUrl: 'http://api.local', accessToken: 'tok', fetchImpl: f });
+    await expect(
+      uploadSpotPhoto(opts(withBody(502, '<html>bad gateway</html>')), 'spot-1', 'file://p.jpg'),
+    ).rejects.toMatchObject({ message: 'Could not upload the photo.' });
+    await expect(
+      uploadSpotPhoto(
+        opts(withBody(401, JSON.stringify({ error: { code: 'auth', message: 'nope' } }))),
+        'spot-1',
+        'file://p.jpg',
+      ),
+    ).rejects.toMatchObject({ message: 'Sign in to use this.' });
+    // delete: the 429's retry wording survives too
+    const limited = (async () => ({
+      ok: false,
+      status: 429,
+      text: async () =>
+        JSON.stringify({ error: { code: 'rate_limited', message: 'Too many — try again in 9s.' } }),
+    })) as never;
+    await expect(deletePhoto(opts(limited), 'p1')).rejects.toMatchObject({
+      message: 'Too many — try again in 9s.',
+      code: 'rate_limited',
+    });
+  });
+
   it('listSpotPhotos and deletePhoto hit the backend, never Storage', async () => {
     const urls: string[] = [];
     const fetchMock = (async (url: string) => {

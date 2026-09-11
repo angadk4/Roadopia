@@ -9,6 +9,7 @@ import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import BuilderScreen from '../screens/BuilderScreen';
+import FollowScreen, { type FollowScreenParams } from '../screens/FollowScreen';
 import RecordScreen from '../screens/RecordScreen';
 import { font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
 
@@ -16,6 +17,9 @@ export type CreateStackParamList = {
   CreateHome: undefined;
   Builder: undefined;
   Record: undefined;
+  /** Device pass 2026-09-07: a drive you just built or recorded can be
+   *  followed right away, before (or instead of) saving it. */
+  Follow: FollowScreenParams;
 };
 
 const Stack = createNativeStackNavigator<CreateStackParamList>();
@@ -79,10 +83,32 @@ export default function CreateStack(): ReactElement {
         {(p) => <CreateHome navigate={(screen) => p.navigation.navigate(screen as never)} />}
       </Stack.Screen>
       <Stack.Screen name="Builder" options={{ title: 'Build a route' }}>
-        {(p) => <BuilderScreen navigation={{ goBack: () => p.navigation.goBack() }} />}
+        {(p) => (
+          <BuilderScreen
+            navigation={{
+              goBack: () => p.navigation.goBack(),
+              navigate: (screen, params) => p.navigation.navigate(screen as never, params as never),
+            }}
+          />
+        )}
       </Stack.Screen>
       <Stack.Screen name="Record" options={{ title: 'Record a drive' }}>
-        {(p) => <RecordScreen navigation={{ goBack: () => p.navigation.goBack() }} />}
+        {(p) => (
+          <RecordScreen
+            navigation={{
+              goBack: () => p.navigation.goBack(),
+              navigate: (screen, params) => p.navigation.navigate(screen as never, params as never),
+            }}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="Follow" options={{ headerShown: false }}>
+        {(p) => (
+          <FollowScreen
+            navigation={{ goBack: () => p.navigation.goBack() }}
+            route={{ params: p.route.params }}
+          />
+        )}
       </Stack.Screen>
     </Stack.Navigator>
   );

@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import DriveLinesMap from '../components/DriveLinesMap';
+import { ApiError, NetworkError, transportMessage } from '../lib/api';
 import {
   buildDiscoverPlanRequest,
   coreDrivesBounds,
@@ -72,7 +73,11 @@ type Phase =
   | { kind: 'loaded_v2'; result: DiscoverResultV2 }
   | { kind: 'empty'; disclosures: string[] }
   | { kind: 'unavailable' }
-  | { kind: 'error' };
+  /** The server REJECTED the scan and said why (out of region, rate limit,
+   *  engine down) — its own words, never "check your connection" (review). */
+  | { kind: 'rejected'; headline: string; body: string; retryable: boolean }
+  /** A transport failure — the one case where the connection IS the cause. */
+  | { kind: 'error'; body: string };
 
 type LocState = 'idle' | 'fetching' | 'denied' | 'error';
 
@@ -90,6 +95,49 @@ function fmtDur(s: number): string {
   const h = Math.floor(m / 60);
   const rem = m % 60;
   return rem === 0 ? `${h} h` : `${h} h ${rem} min`;
+}
+
+/**
+ * A failed scan → the honest phase. The server's rejections carry their own
+ * plain-words reason (backend errorBody) and a code the panel can name; only a
+ * transport failure may blame the connection. Before this every non-404
+ * rejection read "check your connection" with a Try again that could never
+ * succeed for an out-of-region pin (review finding, 2026-09-07).
+ */
+export function classifyFailure(err: unknown): Phase {
+  if (err instanceof DiscoverUnavailableError) return { kind: 'unavailable' };
+  if (err instanceof ApiError) {
+    const headline =
+      err.code === 'rate_limited'
+        ? 'One moment'
+        : err.code === 'out_of_region'
+          ? 'Outside the covered region'
+          : err.status >= 500
+            ? 'Couldn’t scan right now'
+            : 'That scan didn’t start';
+    return {
+      kind: 'rejected',
+      headline,
+      body: err.message,
+      retryable: err.code === 'rate_limited' || err.status >= 500,
+    };
+  }
+  if (err instanceof NetworkError) {
+    return {
+      kind: 'error',
+      body: transportMessage(
+        err,
+        'Couldn’t scan for drives — check your connection and try again.',
+      ),
+    };
+  }
+  // a shape the app could not read (schema skew): not the connection's fault
+  return {
+    kind: 'rejected',
+    headline: 'Couldn’t read the scan',
+    body: 'Discover returned something unexpected — try again.',
+    retryable: true,
+  };
 }
 
 /** Curviness → an engagement WORD (Hard rule D — never speed/velocity). */
@@ -178,23 +226,26 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
       : loadV1();
     load.catch((err: unknown) => {
       if (!live) return;
-      setPhase(
-        err instanceof DiscoverUnavailableError ? { kind: 'unavailable' } : { kind: 'error' },
-      );
+      setPhase(classifyFailure(err));
     });
     return () => {
       live = false;
     };
   }, [origin?.lat, origin?.lng, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Coming back to the tab after a failed scan retries it.
+  // Coming back to the tab after a failed scan retries it — unless the server
+  // said the request itself can never succeed (out of region).
+  const retryable =
+    phase.kind === 'error' ||
+    phase.kind === 'unavailable' ||
+    (phase.kind === 'rejected' && phase.retryable);
   useEffect(() => {
     const off = props.navigation.addFocusListener?.(() => {
-      if (phase.kind === 'error' || phase.kind === 'unavailable') setAttempt((a) => a + 1);
+      if (retryable) setAttempt((a) => a + 1);
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase.kind]);
+  }, [retryable]);
 
   // Memoized on `phase` so the two lists keep a stable identity between renders:
   // a fresh `[]` each render re-ran the map's FeatureCollection/bounds memos and
@@ -297,19 +348,21 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
         )}
         {phase.kind === 'empty' && (
           <Text style={styles.note}>
-            {phase.disclosures[0] ??
-              'No standout drives within reach of here — try a start closer to the hills.'}
+            {/* BD-203: EVERY disclosure, not just the first — the server leads
+                with the empty-state line and follows with the honest counts. */}
+            {phase.disclosures.length > 0
+              ? phase.disclosures.join(' ')
+              : 'No standout drives within reach of here — try a start closer to the hills.'}
           </Text>
         )}
         {phase.kind === 'unavailable' && (
           <Text style={styles.note}>Discover isn’t available right now. Planning still works.</Text>
         )}
-        {phase.kind === 'error' && (
-          <Text style={styles.note}>
-            Couldn’t scan for drives — check your connection and try again.
-          </Text>
+        {phase.kind === 'rejected' && (
+          <Text style={styles.note}>{`${phase.headline} — ${phase.body}`}</Text>
         )}
-        {(phase.kind === 'unavailable' || phase.kind === 'error') && (
+        {phase.kind === 'error' && <Text style={styles.note}>{phase.body}</Text>}
+        {retryable && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Retry scanning"
@@ -323,6 +376,12 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
     </View>
   );
 
+  // BD-203: a non-empty menu's disclosures ("2 more were mostly getting-there
+  // — not shown", the same-way-back note) were never rendered; they sit
+  // under the rail, all of them.
+  const menuDisclosures =
+    phase.kind === 'loaded_v2' || phase.kind === 'loaded' ? phase.result.disclosures : [];
+
   // Bottom rail: one card per drive — the per-drive detail + "Let's go" CTA.
   const rail = (drives.length > 0 || coreDrives.length > 0) && (
     <View style={styles.railWrap}>
@@ -335,11 +394,14 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
       >
         {coreDrives.map((d) => {
           const selected = d.id === selectedId;
+          // BD-203: both commute legs are simply the fastest route to/from the
+          // join — nothing measured whether a second road exists, so the card
+          // must not claim there is none.
           const honesty =
             d.barProfile === 'cell_relaxed'
               ? `best around here · ${Math.round(d.core.backroadShare * 100)}% backroad`
               : d.sameWayHome
-                ? 'same way home — no good second road from here'
+                ? 'same way there and back (fastest route)'
                 : 'different way home';
           return (
             <Pressable
@@ -406,6 +468,13 @@ export default function DiscoverHome(props: DiscoverHomeProps): ReactElement {
           );
         })}
       </ScrollView>
+      {menuDisclosures.length > 0 && (
+        <View style={styles.railNoteWrap}>
+          <Text style={[styles.railNote, { backgroundColor: colors.surfaceRaised + 'F2' }]}>
+            {menuDisclosures.join(' ')}
+          </Text>
+        </View>
+      )}
     </View>
   );
 
@@ -446,6 +515,15 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     railWrap: { position: 'absolute', left: 0, right: 0, bottom: 44 },
     rail: { paddingHorizontal: spacing.md, gap: spacing.sm },
+    railNoteWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.xs },
+    railNote: {
+      ...font.caption,
+      color: colors.textMuted,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      overflow: 'hidden',
+    },
     card: {
       width: CARD_WIDTH,
       padding: spacing.md,

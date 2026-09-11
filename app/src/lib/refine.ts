@@ -16,7 +16,7 @@ import type { PlanRequest } from './api';
 export interface RouteSummary {
   distance_m: number;
   duration_s: number;
-  curviness: number;
+  curviness: number | null;
   climb_m: number | null;
 }
 
@@ -85,7 +85,12 @@ export function compareSummaries(previous: RouteSummary, next: RouteSummary): Co
         1,
       ),
     },
-    {
+  ];
+  // Twistiness is compared only when BOTH lines were measured (null = the
+  // planner withheld or never made the measurement — a row of "0.0 → 0.0"
+  // would claim a change nobody measured).
+  if (previous.curviness !== null && next.curviness !== null) {
+    rows.push({
       label: 'twistiness',
       before: previous.curviness.toFixed(1),
       after: next.curviness.toFixed(1),
@@ -94,8 +99,8 @@ export function compareSummaries(previous: RouteSummary, next: RouteSummary): Co
         '',
         1,
       ),
-    },
-  ];
+    });
+  }
   if (previous.climb_m !== null && next.climb_m !== null) {
     rows.push({
       label: 'climb',

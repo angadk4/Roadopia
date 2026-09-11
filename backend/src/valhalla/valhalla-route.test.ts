@@ -232,6 +232,73 @@ describe('R16-2 — legs, break_through, unpaved', () => {
   });
 });
 
+describe('multi-leg maneuvers (device pass, 2026-09-07)', () => {
+  it('drops each intermediate arrival and folds a same-road departure, keeping the total length', () => {
+    const body = {
+      trip: {
+        legs: [
+          {
+            shape: encodeTest([
+              [0, 0],
+              [0.01, 0],
+            ]),
+            summary: { time: 60, length: 1.0 },
+            maneuvers: [
+              {
+                type: 1,
+                instruction: 'Drive east on Main Street.',
+                length: 0.9,
+                street_names: ['Main Street'],
+              },
+              {
+                type: 10,
+                instruction: 'Turn right onto Kennedy Road.',
+                length: 0.1,
+                street_names: ['Kennedy Road'],
+              },
+              { type: 6, instruction: 'Your destination is on the left.', length: 0 },
+            ],
+          },
+          {
+            shape: encodeTest([
+              [0.01, 0],
+              [0.02, 0],
+            ]),
+            summary: { time: 60, length: 1.0 },
+            maneuvers: [
+              {
+                type: 1,
+                instruction: 'Drive north on Kennedy Road.',
+                length: 0.4,
+                street_names: ['Kennedy Road'],
+              },
+              {
+                type: 15,
+                instruction: 'Turn left onto Old School Road.',
+                length: 0.6,
+                street_names: ['Old School Road'],
+              },
+              { type: 4, instruction: 'You have arrived at your destination.', length: 0 },
+            ],
+          },
+        ],
+        summary: { time: 120, length: 2.0 },
+      },
+    };
+    const out = mapRouteResponse(body);
+    expect(out.maneuvers.map((m) => m.instruction)).toEqual([
+      'Drive east on Main Street.',
+      'Turn right onto Kennedy Road.',
+      'Turn left onto Old School Road.',
+      'You have arrived at your destination.',
+    ]);
+    expect(out.maneuvers[1]!.distance_m).toBeCloseTo(500, 6); // 100 m + the folded 400 m leg
+    const sum = out.maneuvers.reduce((s, m) => s + (m.distance_m ?? 0), 0);
+    expect(sum).toBeCloseTo(2000, 6);
+    expect(out.legs).toHaveLength(2); // per-leg summaries are untouched
+  });
+});
+
 describe('snapped waypoint locations (device pass, 2026-09-04)', () => {
   it('leg boundaries are the first vertex of each leg plus the last vertex', () => {
     const { output, boundaries } = mapRouteResponseDetailed(DEFAULT);
@@ -320,5 +387,77 @@ describe('snapped waypoint locations (device pass, 2026-09-04)', () => {
     } finally {
       globalThis.fetch = realFetch;
     }
+  });
+});
+
+describe('BD-203 — corridor exclusions and a departure heading', () => {
+  it('sends exclude_polygons and a heading on the first location only when asked; omitted otherwise', async () => {
+    const sent: Array<{
+      locations: Array<{ heading?: number; heading_tolerance?: number }>;
+      exclude_polygons?: number[][][];
+    }> = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: unknown, init: { body: string }) => {
+      sent.push(JSON.parse(init.body) as (typeof sent)[number]);
+      return {
+        ok: true,
+        json: async () => ({
+          trip: {
+            legs: [
+              {
+                shape: encodeTest([
+                  [0, 0],
+                  [0.01, 0],
+                ]),
+                summary: { time: 1, length: 1 },
+              },
+            ],
+            summary: { time: 1, length: 1 },
+          },
+        }),
+      };
+    }) as never;
+    try {
+      const ring: Array<[number, number]> = [
+        [0.004, -0.001],
+        [0.006, -0.001],
+        [0.006, 0.001],
+        [0.004, 0.001],
+        [0.004, -0.001],
+      ];
+      await routeThrough('http://x', {
+        waypoints: [
+          [0, 0],
+          [0.005, 0],
+          [0.01, 0],
+        ],
+        middleType: 'through',
+        excludePolygons: [ring],
+        startHeading: { deg: 450 }, // normalised to 90
+      });
+      await routeThrough('http://x', {
+        waypoints: [
+          [0, 0],
+          [0.01, 0],
+        ],
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(sent[0]!.exclude_polygons).toEqual([
+      [
+        [0.004, -0.001],
+        [0.006, -0.001],
+        [0.006, 0.001],
+        [0.004, 0.001],
+        [0.004, -0.001],
+      ],
+    ]);
+    expect(sent[0]!.locations[0]).toMatchObject({ heading: 90, heading_tolerance: 70 });
+    expect(sent[0]!.locations[1]!.heading).toBeUndefined();
+    expect(sent[0]!.locations[2]!.heading).toBeUndefined();
+    // the plain request carries neither key (byte-identical contract)
+    expect('exclude_polygons' in sent[1]!).toBe(false);
+    expect(sent[1]!.locations[0]!.heading).toBeUndefined();
   });
 });

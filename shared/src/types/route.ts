@@ -54,7 +54,10 @@ export type CharacterTag = z.infer<typeof CharacterTagSchema>;
 export const IntensitySchema = z.enum(['chill', 'moderate', 'spirited']);
 export type Intensity = z.infer<typeof IntensitySchema>;
 
-export const VisibilitySchema = z.enum(['public', 'private']);
+/** 'unlisted' = "Link only": opened by id, listed nowhere (0026/0032). The wire
+ *  schema rejected it until 2026-09-07, so a drive set to Link only could not
+ *  be reopened at all (review finding). */
+export const VisibilitySchema = z.enum(['public', 'private', 'unlisted']);
 export type Visibility = z.infer<typeof VisibilitySchema>;
 
 export const OriginTypeSchema = z.enum(['ai', 'manual', 'recorded']);
@@ -138,6 +141,55 @@ export type Maneuver = z.infer<typeof ManeuverSchema>;
 /** Upper bound on maneuvers per route (a 3-hour loop is ~40–80). */
 export const MAX_ROUTE_MANEUVERS = 2000;
 
+function sharesAStreet(a: string[] | undefined, b: string[] | undefined): boolean {
+  if (!a || !b) return false;
+  const names = new Set(a.map((s) => s.trim().toLowerCase()));
+  return b.some((s) => names.has(s.trim().toLowerCase()));
+}
+
+/**
+ * One drivable maneuver list out of a multi-leg trip (device pass 2026-09-07).
+ *
+ * The engine routes a drive with waypoints — a hand-built drive, a planned
+ * drive with a stop — as one leg per waypoint pair, and every leg carries its
+ * own arrival ("Your destination is on the left.", length 0) and departure
+ * ("Drive northwest on Kennedy Road."). Mid-drive those are wrong: 464 m into
+ * a 28 km loop the turn card read "then: You have arrived at your destination".
+ *
+ *   - an arrival that is not the LAST maneuver is dropped (a driver mid-drive
+ *     is never told they have arrived);
+ *   - a departure that is not the FIRST maneuver folds into the previous cue
+ *     when it names the same road (nothing to announce — you are already on
+ *     it), and otherwise becomes a plain continuation cue, never a "start".
+ *
+ * Lengths are folded, never lost, so the running sum still spans the drive
+ * (follow-mode anchors turns by that sum). Pure; the input is not mutated.
+ */
+export function cleanLegManeuvers(maneuvers: Maneuver[]): Maneuver[] {
+  const out: Maneuver[] = [];
+  const foldInto = (prev: Maneuver, m: Maneuver): void => {
+    if (m.distance_m !== undefined) prev.distance_m = (prev.distance_m ?? 0) + m.distance_m;
+  };
+  maneuvers.forEach((m, i) => {
+    const prev = out[out.length - 1];
+    const isLast = i === maneuvers.length - 1;
+    if (m.type.startsWith('destination') && !isLast && prev) {
+      foldInto(prev, m);
+      return;
+    }
+    if (m.type.startsWith('start') && prev) {
+      if (sharesAStreet(prev.street_names, m.street_names)) {
+        foldInto(prev, m);
+        return;
+      }
+      out.push({ ...m, type: 'continue' });
+      return;
+    }
+    out.push({ ...m });
+  });
+  return out;
+}
+
 // --- Route ---
 
 /**
@@ -155,7 +207,10 @@ export const RouteSchema = z.object({
   waypoints: z.array(LatLngSchema),
   distance_m: z.number().nonnegative(),
   duration_s: z.number().nonnegative(),
-  curviness: z.number().nonnegative(),
+  /** Measured twistiness; null = not measured for THIS line (a hand-built or
+   *  recorded drive, or a served trip whose measured provenance was withheld).
+   *  Never 0-as-unknown — 0 claims a measurement nobody made (BD-203). */
+  curviness: z.number().nonnegative().nullable(),
   elevation_profile: ElevationProfileSchema.nullable(),
   climb_m: z.number().nonnegative().nullable(),
   highway_flag: z.boolean(),
@@ -222,6 +277,14 @@ export const RouteSchema = z.object({
       there_m: z.number().nonnegative(),
       drive_m: z.number().nonnegative(),
       home_m: z.number().nonnegative(),
+      /** BD-203: MEASURED seconds per leg when they are known (a Discover
+       *  trip's two engine-priced connectors + its stored core). Absent/null =
+       *  not measured for this line; the UI then scales the pct instead of
+       *  claiming a number. Minutes derived from distance shares contradicted
+       *  the card's measured seconds on every Discover result. */
+      there_s: z.number().nonnegative().nullable().optional(),
+      drive_s: z.number().nonnegative().nullable().optional(),
+      home_s: z.number().nonnegative().nullable().optional(),
       drive_backroad_pct: z.number().min(0).max(100).nullable(),
       drive_main_pct: z.number().min(0).max(100).nullable(),
     })

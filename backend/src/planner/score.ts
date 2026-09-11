@@ -173,6 +173,16 @@ export interface OffenceInput {
    * Optional → no contribution (byte-identical for callers that don't measure).
    */
   revisitPlaces?: number | null;
+  /**
+   * BD-203 — transversal SELF-CROSSINGS (knots + pierces, crossings.ts) the
+   * route carries outside its endpoint grace. A crossing encloses a sub-loop
+   * the driver cannot read in order, and the A→B structural law refuses it
+   * exactly as it refuses a u-turn — so it costs the same 1.0 unit, making the
+   * never-empty fallback prefer an uncrossed row. Optional → no contribution
+   * (byte-identical for loop rows, whose zero-tolerance veto lives at the
+   * loop final judge and was never a ranking term).
+   */
+  crossings?: number | null;
 }
 
 /** R27: below this a reversal is junction furniture, not a drive defect
@@ -255,6 +265,8 @@ export function fallbackOffenceUnits(d: OffenceInput): number {
   // experience. One unit each, so a route that wanders back to the same village
   // three times cannot win the never-empty fallback over one that doesn't.
   if (d.revisitPlaces != null) units += d.revisitPlaces * REVISIT_UNIT;
+  // BD-203: a self-crossing costs a u-turn's unit (the law refuses both).
+  if (d.crossings != null) units += d.crossings * 1.0;
   if (d.traceNull) units += TRACE_NULL_STRICT_ON ? TRACE_NULL_UNITS_STRICT : 0.5;
   return Math.round(units * 100) / 100;
 }
