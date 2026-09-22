@@ -10,14 +10,32 @@
  * caption now SAYS Apple Maps cannot take a loop, so its absence reads as
  * intended rather than broken; the Apple button exists only on iOS; and a
  * refused open is shown instead of swallowed.
+ *
+ * BD-204 presentation. The row was `label + two 44pt buttons` with no
+ * `flexWrap` and `numberOfLines={1}` on the label, so at large Dynamic Type
+ * the buttons alone overflowed the row and the label collapsed to "This
+ * drive…" — losing exactly the meaning the caption above had just set up. The
+ * destination now gets its own full-width line with the buttons beneath it,
+ * which costs one line at default type and stops being broken at AX sizes.
+ *
+ * Redesign (SPEC "Shared pieces > HandoffSection"): the inset panel with a
+ * `headline` became the chapter OPEN IN ANOTHER APP — a `Legend` kicker on an
+ * index rule, the same atlas device every long page uses now, so the hand-off
+ * reads as a section of the page rather than as one more card. Each button
+ * carries `arrow.up.forward.app` (the "leaves this app" glyph); the
+ * accessibilityLabels ("Open This drive (A→B) in Apple Maps") and every
+ * sentence are unchanged. No motion: a section the reader scrolls to should
+ * already be there.
  */
 
 import type { Route } from '@shared/types';
 import { useState, type ReactElement } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, StyleSheet, View } from 'react-native';
 
 import { buildHandoffOptions } from '../lib/handoff';
-import { font, HIT_TARGET, radius, spacing, useTheme } from '../theme';
+import { spacing } from '../theme';
+
+import { Button, Chapter, Rule, Symbol, Text } from './ui';
 
 export interface HandoffSectionProps {
   route: Route;
@@ -28,7 +46,6 @@ export interface HandoffSectionProps {
 }
 
 export default function HandoffSection(props: HandoffSectionProps): ReactElement | null {
-  const { colors } = useTheme();
   const open = props.openFn ?? ((url: string) => Linking.openURL(url));
   const isIos = (props.platform ?? Platform.OS) === 'ios';
   const options = buildHandoffOptions(props.route);
@@ -45,31 +62,36 @@ export default function HandoffSection(props: HandoffSectionProps): ReactElement
     open(url).catch(() => setProblem('Couldn’t open that app on this phone.'));
   };
 
-  const pair = (label: string, apple: string | null, google: string | null): ReactElement => (
-    <View style={styles.row} key={label}>
-      <Text style={[styles.rowLabel, { color: colors.text }]} numberOfLines={1}>
-        {label}
-      </Text>
-      {isIos && apple !== null && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Open ${label} in Apple Maps`}
-          onPress={() => launch(apple)}
-          style={[styles.btn, { borderColor: colors.border }]}
-        >
-          <Text style={[styles.btnLabel, { color: colors.text }]}>Apple</Text>
-        </Pressable>
-      )}
-      {google !== null && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Open ${label} in Google Maps`}
-          onPress={() => launch(google)}
-          style={[styles.btn, { borderColor: colors.border }]}
-        >
-          <Text style={[styles.btnLabel, { color: colors.text }]}>Google</Text>
-        </Pressable>
-      )}
+  const pair = (
+    label: string,
+    apple: string | null,
+    google: string | null,
+    index: number,
+  ): ReactElement => (
+    <View style={styles.destination} key={label}>
+      {index > 0 && <Rule weight="contour" style={styles.rule} />}
+      {/* full width, no truncation: the destination IS the meaning here */}
+      <Text variant="bodyStrong">{label}</Text>
+      <View style={styles.buttons}>
+        {isIos && apple !== null && (
+          <Button
+            title="Apple"
+            variant="secondary"
+            icon={<Symbol name="arrowUpForwardApp" size="sm" tone="default" />}
+            accessibilityLabel={`Open ${label} in Apple Maps`}
+            onPress={() => launch(apple)}
+          />
+        )}
+        {google !== null && (
+          <Button
+            title="Google"
+            variant="secondary"
+            icon={<Symbol name="arrowUpForwardApp" size="sm" tone="default" />}
+            accessibilityLabel={`Open ${label} in Google Maps`}
+            onPress={() => launch(google)}
+          />
+        )}
+      </View>
     </View>
   );
 
@@ -77,38 +99,44 @@ export default function HandoffSection(props: HandoffSectionProps): ReactElement
     ? `${isIos ? 'Apple Maps can’t take a loop, so it isn’t offered here. ' : ''}Google gets a rough approximation and re-routes with its own engine. Follow it here to drive the real shape.`
     : 'The external app picks its own roads — it may not match this route. Follow it here to drive the real shape.';
 
+  let index = 0;
+  const rows: ReactElement[] = [];
+  if (options.atob !== null) {
+    rows.push(pair('This drive (A→B)', options.atob.apple, options.atob.google, index++));
+  }
+  if (options.googleLoop !== null) {
+    rows.push(pair('Rough loop (Google only)', null, options.googleLoop, index++));
+  }
+  for (const leg of options.legs) {
+    rows.push(pair(`To ${leg.name}`, leg.apple, leg.google, index++));
+  }
+
   return (
-    <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-      <Text style={[styles.title, { color: colors.text }]}>Open in another app</Text>
-      <Text style={[styles.caption, { color: colors.textMuted }]}>{caption}</Text>
-      {options.atob !== null && pair('This drive (A→B)', options.atob.apple, options.atob.google)}
-      {options.googleLoop !== null && pair('Rough loop (Google only)', null, options.googleLoop)}
-      {options.legs.map((leg) => pair(`To ${leg.name}`, leg.apple, leg.google))}
+    <Chapter title="Open in another app">
+      <Text variant="footnote" tone="muted">
+        {caption}
+      </Text>
+      {rows}
       {problem !== null && (
-        <Text style={[styles.caption, { color: colors.danger }]}>{problem}</Text>
+        <View style={styles.problem}>
+          <View style={styles.problemMark}>
+            <Symbol name="exclamationmarkCircleFill" size="sm" tone="danger" />
+          </View>
+          <Text variant="footnote" tone="danger" style={styles.problemText}>
+            {problem}
+          </Text>
+        </View>
       )}
-    </View>
+    </Chapter>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  title: { ...font.heading },
-  caption: { ...font.caption, lineHeight: 18 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  rowLabel: { ...font.body, flex: 1 },
-  btn: {
-    minHeight: HIT_TARGET,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnLabel: { ...font.body },
+  destination: { gap: spacing.sm },
+  /** A rule ABOVE each destination after the first: they are siblings, not one list. */
+  rule: { marginTop: spacing.xs },
+  buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  problem: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  problemMark: { paddingTop: 2 },
+  problemText: { flex: 1 },
 });

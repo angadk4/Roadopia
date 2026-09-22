@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import RouteDetail from '../../components/RouteDetail';
 import { ApiError } from '../../lib/api';
 import { AuthEngine } from '../../lib/auth_state';
+import { EMPTY_DRAFT, PlanDraftContext } from '../../lib/plan_draft';
 import type { PlanStreamResult } from '../../lib/plan_stream';
 import { memorySessionStore } from '../../lib/session_store';
 import { AuthProvider } from '../../lib/use_auth';
@@ -23,7 +24,14 @@ const REQUEST = { brief: 'loop', origin: { lat: 43.26, lng: -79.87 } };
 const NAV = { replace: () => {}, goBack: () => {} };
 
 /** MapHome reads auth so it can show the signed-in user's OWN spots (their
- *  pins are invisible under the anon key). Anonymous context is enough here. */
+ *  pins are invisible under the anon key). Anonymous context is enough here.
+ *
+ *  It also reads the Plan draft now: the merged home owns the Near-you scan,
+ *  whose origin is the shared draft `PickPoint` writes (MapStack provides it,
+ *  as DiscoverStack used to). Only the two MapHome cases below use this
+ *  wrapper — IA (mechanical), per SPEC "Test changes". */
+const DRAFT = { draft: EMPTY_DRAFT, setDraft: () => {} };
+
 function withAuth(node: ReactElement): ReactElement {
   return (
     <AuthProvider
@@ -34,7 +42,7 @@ function withAuth(node: ReactElement): ReactElement {
         })
       }
     >
-      {node}
+      <PlanDraftContext.Provider value={DRAFT}>{node}</PlanDraftContext.Provider>
     </AuthProvider>
   ) as ReactElement;
 }

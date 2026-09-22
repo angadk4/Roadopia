@@ -4,20 +4,37 @@
  * (§59: persistent, not dismissible). Wording honesty (verification §8): the
  * planner's road choices are BIASES over measured data, never guarantees of
  * conditions — say exactly that, plainly.
+ *
+ * BD-204 presentation: this is an INLINE NOTE, not a panel. It used to be
+ * drawn as the same bordered box as the hand-off tool and the report form, so
+ * a non-interactive disclosure carried the exact visual weight of a control.
+ * A box implies something to press. An icon, a hanging indent and footnote
+ * type say "read this" without pretending to be tappable — and the copy is
+ * untouched, because the plain-spoken version IS the product.
+ *
+ * Redesign (SPEC "Shared pieces > SafetyNote"): unchanged in form — the glyph
+ * is now the one semantic `Symbol` (`info.circle` on iOS, its Ionicons twin on
+ * Android). Both sentences verbatim; never dismissible; no motion.
  */
 
 import type { ReactElement } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { font, radius, spacing, useTheme } from '../theme';
+import { spacing } from '../theme';
+
+import { Symbol, Text } from './ui';
 
 export type SafetyContext = 'route' | 'follow';
 
 export default function SafetyNote(props: { context: SafetyContext }): ReactElement {
-  const { colors } = useTheme();
   return (
-    <View style={[styles.note, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-      <Text style={[styles.text, { color: colors.textMuted }]}>
+    <View style={styles.note}>
+      {/* the glyph sits in its own box so a wrapped sentence hang-indents
+          under itself rather than under the icon */}
+      <View style={styles.mark}>
+        <Symbol name="infoCircle" size="sm" tone="muted" />
+      </View>
+      <Text variant="footnote" tone="muted" style={styles.text}>
         {props.context === 'follow'
           ? 'Drive safely and follow the rules of the road. Keep your eyes on the road — glance at guidance only when it’s safe.'
           : 'Drive safely and obey all speed limits and road rules. Road picks are biases from measured map data, not guarantees — conditions, closures and surfaces can differ on the day.'}
@@ -28,10 +45,12 @@ export default function SafetyNote(props: { context: SafetyContext }): ReactElem
 
 const styles = StyleSheet.create({
   note: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
     marginTop: spacing.md,
   },
-  text: { ...font.caption, lineHeight: 18 },
+  /** 2pt of optical lead-in so a 14pt glyph sits on the footnote's x-height. */
+  mark: { paddingTop: 2 },
+  text: { flex: 1 },
 });

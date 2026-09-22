@@ -1,31 +1,67 @@
 /**
  * The bottom-tab inventory (Master Spec §16: "Map · Plan · Create/Record ·
  * Saved/Profile"). Pure data — node-testable without touching React Navigation.
- * Icon names are Ionicons glyphs (@expo/vector-icons ships inside `expo`).
+ *
+ * Each tab carries TWO glyph pairs (redesign — SPEC "Navigation & IA"):
+ * `symbol` / `symbolFilled` are SF Symbol names, rendered on iOS through the
+ * `Symbol` primitive (which looks the name up in its semantic table, so every
+ * name here MUST be a glyph `SYMBOLS` knows — `tab_spec.test` pins it); `icon`
+ * / `iconIdle` are the Ionicons twins, kept for Android and as the record of
+ * which Ionicons glyph means the same thing. The filled form is ALWAYS the idle
+ * name plus `.fill` — the focused/idle pair is one glyph in two weights, never
+ * two glyphs.
+ *
+ * No name contains `down` (six suites use it as a raw-error tripwire) and none
+ * matches the Hard-rule-D denylist, which includes `gauge`: a tab is a place,
+ * never a speed or timing framing.
  */
 
 export interface TabSpec {
   /** Route name + label. */
-  name: 'Map' | 'Discover' | 'Plan' | 'Create' | 'Saved';
+  name: 'Map' | 'Plan' | 'Create' | 'Saved';
+  /** SF Symbol when idle (the outline form). iOS, via `Symbol`. */
+  symbol: string;
+  /** SF Symbol when focused — `symbol` + `.fill`, always. */
+  symbolFilled: string;
   /** Ionicons glyph when the tab is focused. */
   icon: string;
   /** Ionicons glyph when idle (outline variant). */
   iconIdle: string;
 }
 
-// R23: Discover (a browse-forward surface) takes the slot of the not-yet-built
-// Create/Record tab (M9). trail-sign = road/route signage — engagement, no
-// speed/racing framing (Hard rule D).
-// R24-U10: Discover becomes the PRIMARY/home tab (the map-first showpiece) — it
-// leads the bar; Plan (and its loops) stays; Map + Saved follow.
-// M9: the Create/Record tab (Master Spec §16) joins — Discover keeps the lead
-// slot it earned at R24-U10; Create sits mid-bar between planning and library.
+// R23: Discover (a browse-forward surface) took the slot of the not-yet-built
+// Create/Record tab (M9); R24-U10 made it the PRIMARY/home tab; M9 added
+// Create. REDESIGN (SPEC "The tab bar — four tabs"): Discover and Map were two
+// tabs on the same map — the same region, the same lines, two sets of chrome —
+// so they are ONE. `MapHome` absorbed the scan (its shelf's Near-you mode), and
+// Map takes the lead slot Discover held, keeping the map-first opening screen.
+// The name stays "Map" (Master Spec §16's inventory), which also keeps
+// `MapStack`, `tabBarHiddenFor('MapHome')` and the MapHome suites untouched.
+// Create's Ionicons pair follows its SF glyph (a plus circle, the "make one"
+// mark) rather than the old pencil-square.
 export const TAB_SPEC: readonly TabSpec[] = [
-  { name: 'Discover', icon: 'trail-sign', iconIdle: 'trail-sign-outline' },
-  { name: 'Plan', icon: 'compass', iconIdle: 'compass-outline' },
-  { name: 'Create', icon: 'create', iconIdle: 'create-outline' },
-  { name: 'Map', icon: 'map', iconIdle: 'map-outline' },
-  { name: 'Saved', icon: 'bookmark', iconIdle: 'bookmark-outline' },
+  { name: 'Map', symbol: 'map', symbolFilled: 'map.fill', icon: 'map', iconIdle: 'map-outline' },
+  {
+    name: 'Plan',
+    symbol: 'arrow.triangle.turn.up.right.diamond',
+    symbolFilled: 'arrow.triangle.turn.up.right.diamond.fill',
+    icon: 'compass',
+    iconIdle: 'compass-outline',
+  },
+  {
+    name: 'Create',
+    symbol: 'plus.circle',
+    symbolFilled: 'plus.circle.fill',
+    icon: 'add-circle',
+    iconIdle: 'add-circle-outline',
+  },
+  {
+    name: 'Saved',
+    symbol: 'bookmark',
+    symbolFilled: 'bookmark.fill',
+    icon: 'bookmark',
+    iconIdle: 'bookmark-outline',
+  },
 ] as const;
 
 /**

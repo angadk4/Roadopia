@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 
 import PhotoUpload from '../../components/PhotoUpload';
+import { confirmDialog, dialogPresented } from '../../test/dialog';
 import { ApiError, NetworkError } from '../api';
 import { AuthEngine } from '../auth_state';
 import { deletePhoto, listSpotPhotos, uploadSpotPhoto, type PhotoRef } from '../photos';
@@ -206,25 +207,28 @@ describe('PhotoUpload (component)', () => {
 });
 
 describe('PhotoUpload honesty (device pass, 2026-09-04)', () => {
-  it('delete needs a second tap — a stray tap never removes a photo', async () => {
+  it('delete asks through a native dialog — a stray tap never removes a photo', async () => {
     const deleteFn = vi.fn(async () => undefined);
     const tree = await render({ listFn: async () => [SIGNED], deleteFn: deleteFn as never });
-    await act(async () => {}); // the strip loads after the token resolves
+    await act(async () => {}); // the grid loads after the token resolves
+    expect(dialogPresented(tree)).toBe(false);
     const first = tree.root.findAll(
       (n) => n.props['accessibilityLabel'] === 'Delete photo' && !!n.props['onPress'],
     )[0]!;
     await act(async () => {
       (first.props['onPress'] as () => void)();
     });
+    // the first tap only ASKS — a native confirmation, and the photo is still there
+    expect(dialogPresented(tree)).toBe(true);
+    expect(JSON.stringify(tree.toJSON())).toContain('Delete this photo?');
     expect(deleteFn).not.toHaveBeenCalled();
-    const confirm = tree.root.findAll(
-      (n) => n.props['accessibilityLabel'] === 'Confirm delete photo' && !!n.props['onPress'],
-    )[0]!;
-    await act(async () => {
-      (confirm.props['onPress'] as () => void)();
-    });
+    expect(JSON.stringify(tree.toJSON())).toContain('p1_thumb.jpg');
+    // the op runs ONLY from the dialog's destructive action
+    await confirmDialog(tree, 'Delete');
+    await act(async () => {});
     expect(deleteFn).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(tree.toJSON())).not.toContain('p1_thumb.jpg');
+    expect(dialogPresented(tree)).toBe(false);
   });
 
   it('an oversized pick is refused BEFORE the upload, in plain words', async () => {

@@ -64,6 +64,13 @@ describe('ProgressScreen', () => {
     expect(text).toContain('212');
     expect(text).toContain('Routing on real roads');
     expect(text).toContain('Cancel');
+    // Redesign (SPEC "Progress"; §18): the wait is honest. The iteration count
+    // is not known in advance, so no native progress bar and no percentage
+    // may appear ANYWHERE in the streaming tree — a `%` in a style value
+    // (a keyframe offset, a width) would read as a claimed figure just the
+    // same, which is why the log's keyframes use fractional offsets.
+    expect(text).not.toContain('expo-ui-progressview');
+    expect(text).not.toContain('%');
   });
 
   it('success auto-advances to Result with the validated payload (replace)', async () => {

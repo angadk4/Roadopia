@@ -3,6 +3,11 @@
   "compilerOptions": {
     "strict": true,
     "jsx": "react-jsx",
+    // Redesign platform split (SPEC "Shell chrome > Platform split"):
+    // `./SegmentedPicker` type-resolves to `SegmentedPicker.ios.tsx` (the
+    // @expo/ui tree); the `.android.tsx` twins are still type-checked as root
+    // files through `include`. vitest mirrors this with resolve.extensions.
+    "moduleSuffixes": [".ios", ""],
     "paths": {
       "@shared/*": ["../shared/src/*"]
     }

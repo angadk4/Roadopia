@@ -1,9 +1,10 @@
 import type { LineString, Maneuver, Route, RouteThroughOutput } from '@shared/types';
 import type { ReactElement } from 'react';
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { describe, expect, it, vi } from 'vitest';
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { LocationFix } from '../../lib/location';
+import { __haptics, __resetHaptics } from '../../test/expo-haptics-stub';
 import FollowScreen from '../FollowScreen';
 
 /**
@@ -388,5 +389,165 @@ describe('FollowScreen camera before a fix (review, 2026-09-04)', () => {
     const camera = tree.root.findAll((n) => String(n.type) === 'mapbox-camera')[0]!;
     expect(camera.props['followUserLocation']).toBe(false);
     expect(textOf(tree)).toContain('Location permission is off');
+  });
+});
+
+/**
+ * Redesign (SPEC "Follow") — additive assertions only (kind N in SPEC "Test
+ * changes"); every case above is byte-identical. The structure the owner
+ * asked for is asserted, not the paint: the scrim is one gradient, the status
+ * band and the bottom panel are materials (a blur under a tint), the turn
+ * card is the one OPAQUE surface and animates nothing, Recenter is a material
+ * pill, and the only haptic on the screen is the Success at the finish —
+ * nothing per fix, nothing while the car is moving.
+ */
+describe('FollowScreen redesign structure (SPEC "Follow")', () => {
+  afterEach(() => {
+    __resetHaptics();
+  });
+
+  /** HOST elements only (a string type): a composite carries the same testID
+   *  prop one level up, and `findAll` would hand that back first. */
+  const hostsWithId = (root: ReactTestInstance, id: string): ReactTestInstance[] =>
+    root.findAll((n) => typeof n.type === 'string' && n.props['testID'] === id);
+  const byTestId = (tree: ReactTestRenderer, id: string): ReactTestInstance =>
+    hostsWithId(tree.root, id)[0]!;
+  const blursIn = (node: ReactTestInstance): number =>
+    node.findAll((n) => String(n.type) === 'expo-blurview').length;
+
+  it('plays ONE Success haptic when the drive is done — nothing in motion, never a second', async () => {
+    const w = fixWatcher();
+    const tree = await render({ watchFn: w.watchFn });
+    act(() => {
+      w.fix(43, -80); // the start: progress seeded at 0
+    });
+    act(() => {
+      w.fix(43, -79.915); // ~85% along, guided and moving: the card says "Arrive."
+    });
+    expect(textOf(tree)).toContain('Arrive.');
+    expect(textOf(tree)).not.toContain('That’s the drive');
+    expect(__haptics).toEqual([]); // nothing per fix, nothing for a turn
+    act(() => {
+      w.fix(43, -79.9); // the end
+    });
+    expect(textOf(tree)).toContain('That’s the drive');
+    expect(__haptics).toEqual(['notification:Success']);
+    act(() => {
+      w.fix(43, -79.9); // still parked at the end: `done` again, no second haptic
+    });
+    expect(__haptics).toHaveLength(1);
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('an off-route fix and a Retry play no haptic', async () => {
+    let calls = 0;
+    const w = fixWatcher();
+    const watchFn = async (onFix: (f: LocationFix) => void) => {
+      calls += 1;
+      if (calls === 1) return { status: 'denied' as const };
+      return w.watchFn(onFix);
+    };
+    const tree = await render({ watchFn });
+    const retry = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'Retry location' && !!n.props['onPress'],
+    )[0]!;
+    await act(async () => {
+      (retry.props['onPress'] as () => void)();
+    });
+    await act(async () => {});
+    act(() => {
+      w.fix(43.0027, -79.9); // 300 m off the line
+    });
+    expect(textOf(tree)).toContain('off the route');
+    expect(__haptics).toEqual([]);
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('the scrim is one gradient and the status band is a dense material under it', async () => {
+    const w = fixWatcher();
+    const tree = await render({ watchFn: w.watchFn });
+    // one LinearGradient, not four stacked Views
+    expect(tree.root.findAll((n) => String(n.type) === 'expo-lineargradient')).toHaveLength(1);
+    expect(byTestId(tree, 'follow-scrim').props['pointerEvents']).toBe('none');
+    // acquiring: the banner is a Material (a blur under the tint) with the spinner
+    const banner = byTestId(tree, 'follow-banner');
+    expect(blursIn(banner)).toBe(1);
+    expect(banner.findAll((n) => String(n.type) === 'rn-activityindicator')).toHaveLength(1);
+    expect(textOf(tree)).toContain('Getting a GPS fix');
+    // the bottom panel is a Material too, padded for the home indicator
+    expect(blursIn(byTestId(tree, 'follow-panel'))).toBe(1);
+    expect(textOf(tree)).not.toContain('down');
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('the turn card is OPAQUE — no material, an accent edge, a legend over the distance', async () => {
+    const w = fixWatcher();
+    const tree = await render({ watchFn: w.watchFn });
+    act(() => {
+      w.fix(43, -79.98);
+    });
+    const card = byTestId(tree, 'follow-turn-card');
+    expect(blursIn(card)).toBe(0); // legibility over moving tiles beats material
+    const style = JSON.stringify(card.props['style']);
+    expect(style).toContain('"borderWidth":1');
+    // the banner is gone while a turn shows; the card carries the legend
+    expect(hostsWithId(tree.root, 'follow-banner')).toHaveLength(0);
+    const text = textOf(tree);
+    expect(text).toContain('Next');
+    expect(text).toContain('Turn left onto Forks Rd.');
+    // nothing on the card is a Reanimated entrance: no builder reaches any host
+    expect(text).not.toContain('entering');
+    expect(text).not.toContain('presetName');
+    expect(text).not.toContain('down');
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('Recenter is a material pill inside the labelled pressable', async () => {
+    const w = fixWatcher();
+    const tree = await render({ watchFn: w.watchFn });
+    const camera = () => tree.root.findAll((n) => String(n.type) === 'mapbox-camera')[0]!;
+    act(() => {
+      w.fix(43, -79.99);
+    });
+    expect(hostsWithId(tree.root, 'follow-recenter')).toHaveLength(0);
+    act(() => {
+      (camera().props['onUserTrackingModeChange'] as (e: unknown) => void)({
+        nativeEvent: { payload: { followUserLocation: false } },
+      });
+    });
+    const pressable = tree.root.findAll(
+      (n) => n.props['accessibilityLabel'] === 'Recenter on me' && !!n.props['onPress'],
+    )[0]!;
+    const pill = hostsWithId(pressable, 'follow-recenter');
+    expect(pill).toHaveLength(1);
+    expect(blursIn(pill[0]!)).toBe(1);
+    expect(textOf(tree)).not.toContain('down');
+    act(() => {
+      (pressable.props['onPress'] as () => void)();
+    });
+    expect(hostsWithId(tree.root, 'follow-recenter')).toHaveLength(0);
+    expect(__haptics).toEqual([]); // a pan and a recenter are not haptic moments
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('no drive → the platform empty state, the honest line, and Exit', async () => {
+    const tree = await render({ route: { params: undefined } });
+    expect(
+      tree.root.findAll((n) => String(n.type) === 'expo-ui-contentunavailableview'),
+    ).toHaveLength(1);
+    const text = textOf(tree);
+    expect(text).toContain('No drive to follow — open a route first.');
+    expect(text).toContain('Exit follow mode');
+    expect(text).not.toContain('down');
   });
 });

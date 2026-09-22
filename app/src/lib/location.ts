@@ -26,6 +26,43 @@ export async function getCurrentLocation(): Promise<LocationResult> {
   }
 }
 
+/**
+ * Where the user already is, WITHOUT ever showing a permission dialog.
+ *
+ * `getCurrentLocation` above *requests* permission, which is right for a button
+ * the user pressed and wrong for app launch: a dialog that appears before the
+ * person has done anything has no context to justify itself, and iOS only ever
+ * asks once — spending that single ask on a cold start is how an app ends up
+ * permanently denied. So this CHECKS (`getForegroundPermissionsAsync`) and
+ * returns 'denied' rather than prompting. The in-context ask stays where it
+ * belongs: the "Use my location" button.
+ *
+ * Prefers the OS's last known fix because this runs while a map is mounting and
+ * a cached answer is immediate, where a fresh GPS acquisition can take seconds —
+ * by which time the camera has already settled somewhere else and moving it
+ * again reads as the map lurching. A stale-by-minutes position is still the
+ * right neighbourhood, which is all an opening camera needs.
+ *
+ * Still §20.3 foreground-only, and the caller must never log the coordinate
+ * (Hard rule H).
+ */
+export async function getKnownLocation(): Promise<LocationResult> {
+  try {
+    const perm = await Location.getForegroundPermissionsAsync();
+    if (!perm.granted) return { status: 'denied' };
+    const last = await Location.getLastKnownPositionAsync();
+    if (last) {
+      return { status: 'ok', point: { lat: last.coords.latitude, lng: last.coords.longitude } };
+    }
+    const pos = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+    return { status: 'ok', point: { lat: pos.coords.latitude, lng: pos.coords.longitude } };
+  } catch {
+    return { status: 'error' };
+  }
+}
+
 export interface LocationFix {
   lat: number;
   lng: number;

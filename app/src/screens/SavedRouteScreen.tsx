@@ -9,25 +9,75 @@
  * comment used to claim delete while no code path did it); the header shows
  * the drive's name; the row reloads on focus; a lapsed session re-gates the
  * same action instead of a dead "sign in again" line.
+ *
+ * REDESIGN (SPEC "SavedRoute"; rules 13–15). The same page under a collapsing
+ * large title, in the plate composition:
+ *
+ *   - The NAME is the native large title (`params.name` at once through the
+ *     stack's `pageOptions`; the loaded row and a rename re-title it through
+ *     `navigation.setTitle`). RouteDetail no longer draws it, so the NAME
+ *     chapter keeps it on the page in `body` beside Rename — the name stays
+ *     visible in a bare render. The first child is the ScrollView the title
+ *     collapses over (`contentInsetAdjustmentBehavior="automatic"`); no
+ *     horizontal padding, because RouteDetail owns the gutter so its plate can
+ *     bleed to both edges.
+ *   - FOLLOW rides in RouteDetail's `hero` slot — directly under the numbers,
+ *     the "GO" position — as the ONE solid amber on the page. `reveal` stays
+ *     off: a library item is already there.
+ *   - The HEADER MENU (`ellipsis.circle`): Rename (opens the in-page field) ·
+ *     Delete drive (destructive; opens the same dialog). The screen owns the
+ *     actions and hands the stack a render function through
+ *     `navigation.setHeaderRight`; a bare render has no header and no menu.
+ *     The in-page Rename / Delete controls STAY with their labels (rule 15).
+ *   - VISIBILITY is the platform's segmented control (`SegmentedPicker` ← the
+ *     three chips): one-of-three, short labels, the announced name still
+ *     carries the verb ("Set visibility unlisted"). A REFUSED change reverts
+ *     the picker's `selectedIndex` — the honest "refused" signal is the
+ *     platform control snapping back — and the blurb returns with it.
+ *   - DELETE asks through a native `ConfirmDialog` with a destructive action;
+ *     the op runs ONLY from that action. The two-tap "Tap again to delete"
+ *     arming and its swap wrapper are gone.
+ *   - The dead ends are the platform's `EmptyState`; `signed_out` stays
+ *     distinct from `gone`.
+ *
+ * Motion (expo-animation gate). The blurb swap is tens-a-day → an opacity-only
+ * `entering` (the shell's `ENTER_FADE`) keyed on the visibility, and none on
+ * first paint (`LayoutAnimationConfig skipEntering`); the owner card reflows
+ * (`layout={REFLOW}`) when the rename field opens. Haptics: the picker's own
+ * `selectionAsync` on a tick; the dialog's `impactAsync(Medium)` on the
+ * destructive confirm. Nothing else.
  */
 
 import type { Route } from '@shared/types';
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import Animated, { LayoutAnimationConfig } from 'react-native-reanimated';
 
 import HandoffSection from '../components/HandoffSection';
 import RouteDetail from '../components/RouteDetail';
 import SafetyNote from '../components/SafetyNote';
+import {
+  Button,
+  Chapter,
+  ENTER_FADE,
+  Legend,
+  REFLOW,
+  Row,
+  Rule,
+  Surface,
+  Symbol,
+  Text,
+} from '../components/ui';
+import {
+  ConfirmDialog,
+  EmptyState,
+  HeaderMenu,
+  SegmentedPicker,
+  type MenuAction,
+} from '../components/ui/native';
 import { sessionProblem } from '../lib/auth_state';
 import { DataError } from '../lib/data';
+import { useTabBarHeight } from '../lib/insets';
 import {
   deleteRoute,
   fetchRouteById,
@@ -54,6 +104,10 @@ export interface SavedRouteScreenProps {
     addFocusListener?: (cb: () => void) => () => void;
     /** The native header shows the drive's name; a rename updates it. */
     setTitle?: (title: string) => void;
+    /** The header's `ellipsis.circle` menu. The screen hands the stack a
+     *  render function for `headerRight` (it owns the actions), or `null` to
+     *  clear it. Absent in a bare render — so is the menu. */
+    setHeaderRight?: (render: (() => ReactElement) | null) => void;
   };
   route: { params?: SavedRouteScreenParams };
   cfg?: { url: string; anonKey: string };
@@ -65,6 +119,8 @@ export interface SavedRouteScreenProps {
 
 const VISIBILITIES = ['private', 'unlisted', 'public'] as const;
 type Vis = (typeof VISIBILITIES)[number];
+/** The segment labels — plain words, never the enum. */
+const VISIBILITY_OPTIONS = VISIBILITIES.map((v) => visibilityLabel(v));
 
 /** Plain words for each choice — no jargon, no false promises (§18). */
 export function visibilityBlurb(v: Vis): string {
@@ -76,12 +132,14 @@ export function visibilityBlurb(v: Vis): string {
 export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactElement {
   const { colors } = useTheme();
   const { freshAccessToken, gate, status } = useAuth();
+  const tabBarHeight = useTabBarHeight();
   const params = props.route.params;
   const cfg = props.cfg ?? getSupabaseConfig();
   const load = props.fetchRouteFn ?? fetchRouteById;
   const setVis = props.setVisibilityFn ?? updateVisibility;
   const rename = props.renameFn ?? renameRoute;
   const remove = props.deleteFn ?? deleteRoute;
+  const { setTitle, setHeaderRight } = props.navigation;
 
   const [route, setRoute] = useState<Route | null>(null);
   const [visibility, setVisState] = useState<Vis>((params?.visibility as Vis) ?? 'private');
@@ -93,9 +151,13 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
   const [problem, setProblem] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
+  /** A rename is saving. */
   const [busy, setBusy] = useState(false);
-  /** Deleting takes the drive with it — one stray tap shouldn't. */
-  const [armed, setArmed] = useState(false);
+  /** The delete is running — "Deleting…" on the row, nothing pressable. */
+  const [deleting, setDeleting] = useState(false);
+  /** Deleting takes the drive with it — the native dialog is the deliberate
+   *  second step; the op runs only from its destructive action. */
+  const [confirming, setConfirming] = useState(false);
 
   /** Generation of the latest load: mount + the first focus both fire one,
    *  and a rename/visibility change invalidates whatever is still loading —
@@ -122,7 +184,7 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
         }
         setRoute(r);
         if (r.visibility) setVisState(r.visibility as Vis);
-        if (r.name) props.navigation.setTitle?.(r.name);
+        if (r.name) setTitle?.(r.name);
         setState('ready');
       } catch {
         if (my === gen.current) setState('error');
@@ -194,7 +256,7 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
         const saved = await rename(cfg, token, params.id, clean);
         gen.current += 1; // a load still in flight predates this rename
         setRoute((r) => (r ? { ...r, name: saved } : r));
-        props.navigation.setTitle?.(saved);
+        setTitle?.(saved);
         setRenaming(false);
       } catch (err) {
         setProblem(err instanceof DataError ? err.message : 'Could not rename the drive.');
@@ -204,26 +266,33 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
     })();
   };
 
+  /** Opens the in-page rename field — from the Rename button and from the
+   *  header menu alike. */
+  const startRename = useCallback((): void => {
+    setNameDraft(route?.name ?? params?.name ?? '');
+    setRenaming(true);
+  }, [route?.name, params?.name]);
+
+  const askDelete = useCallback((): void => {
+    if (!deleting) setConfirming(true);
+  }, [deleting]);
+
+  /** Runs ONLY from the dialog's destructive action (and from the sign-in
+   *  gate re-running the same parked delete). */
   const doDelete = (): void => {
-    if (!armed) {
-      setArmed(true); // first tap arms; second tap deletes
-      return;
-    }
-    setBusy(true);
+    setDeleting(true);
     setProblem(null);
     void (async () => {
       let token: string | null;
       try {
         token = await freshAccessToken();
       } catch (err) {
-        setBusy(false);
-        setArmed(false);
+        setDeleting(false);
         setProblem(sessionProblem(err));
         return;
       }
       if (!token || !params?.id) {
-        setBusy(false);
-        setArmed(false);
+        setDeleting(false);
         gate(doDelete, {
           onDismiss: () => setProblem('Not deleted — sign in to delete this drive.'),
         });
@@ -234,254 +303,293 @@ export default function SavedRouteScreen(props: SavedRouteScreenProps): ReactEle
         props.navigation.goBack(); // the list reloads on focus and the row is gone
       } catch (err) {
         setProblem(err instanceof DataError ? err.message : 'Could not delete the drive.');
-        setBusy(false);
-        setArmed(false);
+        setDeleting(false);
       }
     })();
   };
 
+  // The header's ellipsis menu: the screen builds the actions (only it owns
+  // the handlers) and hands the stack a render function. Cleared when the page
+  // is not ready and on unmount. Rename is offered while the field is closed;
+  // once it is open, the field itself is the way in.
+  useEffect(() => {
+    if (setHeaderRight === undefined) return;
+    if (state !== 'ready' || route === null) {
+      setHeaderRight(null);
+      return;
+    }
+    const actions: MenuAction[] = [];
+    if (!renaming) {
+      actions.push({
+        title: 'Rename',
+        symbol: 'pencil',
+        accessibilityLabel: 'Rename drive',
+        onPress: startRename,
+      });
+    }
+    actions.push({
+      title: 'Delete drive',
+      role: 'destructive',
+      symbol: 'trash',
+      accessibilityLabel: 'Delete drive',
+      onPress: askDelete,
+    });
+    setHeaderRight(() => <HeaderMenu actions={actions} />);
+    return () => setHeaderRight(null);
+  }, [setHeaderRight, state, route, renaming, startRename, askDelete]);
+
   if (state === 'loading') {
     return (
-      <View style={[styles.center, { backgroundColor: colors.bg }]}>
+      <View style={[styles.centre, { backgroundColor: colors.bg }]}>
         <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
 
   if (state !== 'ready' || route === null) {
+    // The dead ends are the platform's own "content unavailable" shape, under
+    // the same header; Sign in / Retry keep their handlers and labels.
     return (
-      <View style={[styles.center, { backgroundColor: colors.bg }]}>
-        <Text style={[styles.body, { color: colors.textMuted }]}>
-          {state === 'gone'
-            ? 'That drive isn’t available any more — it may have been deleted.'
-            : state === 'signed_out'
-              ? 'Your session expired — sign in to open this drive.'
-              : 'Could not load that drive right now.'}
-        </Text>
-        {state === 'signed_out' && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Sign in"
-            onPress={() => gate(refresh)}
-            style={[styles.secondaryBtn, { borderColor: colors.border }]}
-          >
-            <Text style={[styles.body, { color: colors.text }]}>Sign in</Text>
-          </Pressable>
-        )}
-        {state === 'error' && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Retry"
-            onPress={refresh}
-            style={[styles.secondaryBtn, { borderColor: colors.border }]}
-          >
-            <Text style={[styles.body, { color: colors.text }]}>Retry</Text>
-          </Pressable>
-        )}
-      </View>
+      <ScrollView
+        style={{ backgroundColor: colors.bg }}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={[styles.deadEnd, { paddingBottom: tabBarHeight + spacing.xl }]}
+      >
+        <EmptyState
+          symbol={
+            state === 'signed_out' ? 'lock' : state === 'gone' ? 'questionmarkCircle' : 'wifiSlash'
+          }
+          title={
+            state === 'gone'
+              ? 'That drive isn’t available any more — it may have been deleted.'
+              : state === 'signed_out'
+                ? 'Your session expired — sign in to open this drive.'
+                : 'Could not load that drive right now.'
+          }
+          {...(state === 'signed_out'
+            ? {
+                action: (
+                  <Button
+                    title="Sign in"
+                    variant="secondary"
+                    accessibilityLabel="Sign in"
+                    onPress={() => gate(refresh)}
+                  />
+                ),
+              }
+            : state === 'error'
+              ? {
+                  action: (
+                    <Button
+                      title="Retry"
+                      variant="secondary"
+                      accessibilityLabel="Retry"
+                      onPress={refresh}
+                    />
+                  ),
+                }
+              : {})}
+        />
+      </ScrollView>
     );
   }
+
+  const name = route.name ?? params?.name ?? '';
 
   return (
     <ScrollView
       style={{ backgroundColor: colors.bg }}
-      contentContainerStyle={styles.content}
+      // FIRST CHILD: what the native large title (the drive's name) collapses
+      // over. No horizontal padding — RouteDetail owns the gutter.
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{ paddingBottom: tabBarHeight + spacing.xl }}
       keyboardShouldPersistTaps="handled"
       // the rename field sits low on the page; without this the keyboard
       // covers it and the Save name row (review finding — ResultScreen's fix)
       automaticallyAdjustKeyboardInsets
     >
-      <RouteDetail route={route} explanation={null} done={null}>
-        {/* M9-T06 (FR-112): saved drives are followable too */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Follow this drive"
-          onPress={() => props.navigation.navigate('Follow', { route })}
-          style={({ pressed }) => [
-            styles.follow,
-            { backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1 },
-          ]}
-        >
-          <Text style={[styles.followLabel, { color: colors.onAccent }]}>Follow this drive</Text>
-        </Pressable>
-
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Name</Text>
-          {renaming ? (
-            <>
-              <TextInput
-                accessibilityLabel="Drive name"
-                value={nameDraft}
-                onChangeText={(t) => setNameDraft(t.slice(0, ROUTE_NAME_MAX))}
-                maxLength={ROUTE_NAME_MAX}
-                autoFocus
-                editable={!busy}
-                returnKeyType="done"
-                onSubmitEditing={submitRename}
-                style={[
-                  styles.input,
-                  {
-                    color: colors.text,
-                    borderColor: colors.border,
-                    backgroundColor: colors.surface,
-                  },
-                ]}
-              />
-              <View style={styles.row}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Save name"
-                  disabled={busy}
-                  onPress={submitRename}
-                  style={[
-                    styles.primaryBtn,
-                    { backgroundColor: colors.accent, opacity: busy ? 0.6 : 1 },
-                  ]}
-                >
-                  <Text style={[styles.primaryLabel, { color: colors.onAccent }]}>
-                    {busy ? 'Saving…' : 'Save name'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel rename"
-                  onPress={() => {
-                    setRenaming(false);
-                    setProblem(null);
-                  }}
-                  style={[styles.secondaryBtn, { borderColor: colors.border }]}
-                >
-                  <Text style={[styles.body, { color: colors.text }]}>Cancel</Text>
-                </Pressable>
+      <RouteDetail
+        route={route}
+        explanation={null}
+        done={null}
+        hero={
+          // M9-T06 (FR-112): saved drives are followable too. The ONE solid
+          // amber on this screen, in the "GO" position under the numbers.
+          <Button
+            title="Follow this drive"
+            size="lg"
+            block
+            accessibilityLabel="Follow this drive"
+            icon={<Symbol name="locationNorthLineFill" size="md" tone="onAccent" />}
+            onPress={() => props.navigation.navigate('Follow', { route })}
+          />
+        }
+      >
+        <Chapter title="This drive">
+          {/* the card reflows when the rename field opens; nothing under it jumps */}
+          <Animated.View layout={REFLOW}>
+            <Surface level="raised" padding="md" style={styles.card}>
+              <View style={styles.section}>
+                <Legend>Name</Legend>
+                {renaming ? (
+                  <>
+                    <TextInput
+                      accessibilityLabel="Drive name"
+                      value={nameDraft}
+                      onChangeText={(t) => setNameDraft(t.slice(0, ROUTE_NAME_MAX))}
+                      maxLength={ROUTE_NAME_MAX}
+                      autoFocus
+                      editable={!busy}
+                      returnKeyType="done"
+                      onSubmitEditing={submitRename}
+                      style={[
+                        styles.input,
+                        {
+                          color: colors.text,
+                          borderColor: colors.borderStrong,
+                          backgroundColor: colors.fill,
+                        },
+                      ]}
+                    />
+                    <View style={styles.row}>
+                      <Button
+                        title={busy ? 'Saving…' : 'Save name'}
+                        accessibilityLabel="Save name"
+                        disabled={busy}
+                        onPress={submitRename}
+                      />
+                      <Button
+                        title="Cancel"
+                        variant="secondary"
+                        accessibilityLabel="Cancel rename"
+                        onPress={() => {
+                          setRenaming(false);
+                          setProblem(null);
+                        }}
+                      />
+                    </View>
+                  </>
+                ) : (
+                  // the name stays ON THE PAGE (the header is the host's, and
+                  // a bare render has none)
+                  <View style={styles.nameRow}>
+                    <Text variant="body" numberOfLines={2} style={styles.flex}>
+                      {name}
+                    </Text>
+                    <Button
+                      title="Rename"
+                      variant="secondary"
+                      accessibilityLabel="Rename drive"
+                      icon={<Symbol name="pencil" size="sm" />}
+                      onPress={startRename}
+                    />
+                  </View>
+                )}
               </View>
-            </>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Rename drive"
-              onPress={() => {
-                setNameDraft(route.name ?? params?.name ?? '');
-                setRenaming(true);
-              }}
-              style={[styles.secondaryBtn, { borderColor: colors.border }]}
-            >
-              <Text style={[styles.body, { color: colors.text }]}>Rename</Text>
-            </Pressable>
-          )}
-        </View>
 
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Who can see this</Text>
-          <View style={styles.row}>
-            {VISIBILITIES.map((v) => {
-              const active = v === visibility;
-              return (
-                <Pressable
-                  key={v}
-                  onPress={() => choose(v)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  accessibilityLabel={`Set visibility ${v}`}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: active ? colors.accent : colors.surface,
-                      borderColor: active ? colors.accent : colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[styles.chipText, { color: active ? colors.onAccent : colors.text }]}
-                  >
-                    {visibilityLabel(v)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Text style={[styles.body, { color: colors.textMuted }]}>
-            {visibilityBlurb(visibility)}
+              <Rule />
+
+              <View style={styles.section}>
+                <Legend>Who can see this</Legend>
+                {/* one of three, so it is the platform's segmented control;
+                    the announced name carries the verb because "Link only" on
+                    its own does not say what choosing it does */}
+                <SegmentedPicker
+                  label="Who can see this"
+                  options={VISIBILITY_OPTIONS}
+                  selectedIndex={Math.max(0, VISIBILITIES.indexOf(visibility))}
+                  onChange={(index) => {
+                    const next = VISIBILITIES[index];
+                    if (next !== undefined) choose(next);
+                  }}
+                  segmentAccessibilityLabel={(_option, index) =>
+                    `Set visibility ${VISIBILITIES[index] ?? ''}`
+                  }
+                />
+                {/* the blurb swaps in place: an opacity-only entrance, none on
+                    first paint */}
+                <LayoutAnimationConfig skipEntering>
+                  <Animated.View key={visibility} entering={ENTER_FADE}>
+                    <Text variant="footnote" tone="muted">
+                      {visibilityBlurb(visibility)}
+                    </Text>
+                  </Animated.View>
+                </LayoutAnimationConfig>
+              </View>
+            </Surface>
+          </Animated.View>
+        </Chapter>
+
+        {problem !== null && (
+          <Text variant="footnote" tone="danger">
+            {problem}
           </Text>
-        </View>
-
-        {problem !== null && <Text style={[styles.body, { color: colors.danger }]}>{problem}</Text>}
+        )}
 
         <HandoffSection route={route} />
         <SafetyNote context="route" />
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={armed ? 'Confirm delete drive' : 'Delete drive'}
-          disabled={busy}
-          onPress={doDelete}
-          style={[styles.secondaryBtn, styles.deleteBtn, { borderColor: colors.danger }]}
-        >
-          <Text style={[styles.body, { color: colors.danger }]}>
-            {busy && armed
-              ? 'Deleting…'
-              : armed
-                ? 'Tap again to delete this drive'
-                : 'Delete drive'}
-          </Text>
-        </Pressable>
+        {/* A DETACHED destructive group. The in-page control stays (a bare
+            render has no header); it presents the same dialog the header
+            menu does, and the op runs only from the dialog. */}
+        <Surface level="inset" padding="none" style={styles.group}>
+          <Row
+            accessibilityLabel="Delete drive"
+            disabled={deleting}
+            onPress={askDelete}
+            variant="inset"
+            leading={<Symbol name="trash" size="md" tone="danger" />}
+          >
+            <Text variant="label" tone="danger">
+              {deleting ? 'Deleting…' : 'Delete drive'}
+            </Text>
+          </Row>
+        </Surface>
+
+        <ConfirmDialog
+          isPresented={confirming}
+          onIsPresentedChange={setConfirming}
+          title={`Delete “${name}”?`}
+          message="This can’t be undone."
+          actions={[
+            {
+              title: 'Delete',
+              role: 'destructive',
+              accessibilityLabel: 'Confirm delete drive',
+              onPress: doDelete,
+            },
+            { title: 'Cancel', role: 'cancel', onPress: () => undefined },
+          ]}
+        />
       </RouteDetail>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  center: {
+  centre: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.xl,
-    gap: spacing.md,
+    padding: spacing.gutter,
   },
-  content: { padding: spacing.lg, gap: spacing.md },
-  body: { ...font.body, lineHeight: 21 },
-  section: { gap: spacing.sm, marginTop: spacing.md },
-  sectionTitle: { ...font.heading },
-  follow: {
-    minHeight: HIT_TARGET + 8,
-    borderRadius: radius.lg,
-    alignItems: 'center',
+  deadEnd: {
+    flexGrow: 1,
     justifyContent: 'center',
-    marginTop: spacing.md,
+    paddingHorizontal: spacing.gutter,
   },
-  followLabel: { ...font.button },
+  card: { gap: spacing.lg },
+  section: { gap: spacing.md },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   row: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  chip: {
-    minHeight: HIT_TARGET,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipText: { ...font.body },
+  flex: { flex: 1 },
   input: {
     borderWidth: 1,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     minHeight: HIT_TARGET,
     ...font.body,
   },
-  primaryBtn: {
-    minHeight: HIT_TARGET,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryLabel: { ...font.button },
-  secondaryBtn: {
-    minHeight: HIT_TARGET,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'flex-start',
-  },
-  deleteBtn: { alignSelf: 'stretch', marginTop: spacing.lg },
+  group: { overflow: 'hidden' },
 });

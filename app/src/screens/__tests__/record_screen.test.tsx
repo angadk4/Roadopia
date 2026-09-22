@@ -1,17 +1,30 @@
 import type { ReactElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthEngine } from '../../lib/auth_state';
 import { memorySessionStore } from '../../lib/session_store';
 import { AuthProvider } from '../../lib/use_auth';
+import { confirmDialog, dialogPresented } from '../../test/dialog';
+import { __haptics, __resetHaptics } from '../../test/expo-haptics-stub';
 import RecordScreen from '../RecordScreen';
 
 /**
  * M9-T03..T05 — the lifecycle contract, which no test covered while three
  * resources (a GPS subscription, the wake-lock and a 1 Hz timer) were being
  * installed asynchronously after a permission dialog.
+ *
+ * Redesign (SPEC "Record"; rule 15): the two-tap "Tap again to discard" arming
+ * became a native `ConfirmDialog`. The guarantee the old assertions carried —
+ * the capture is NOT wiped until a second, deliberate step — now reads as: the
+ * op is not called until the dialog's destructive action is pressed, and a
+ * dialog is actually presented in between (`src/test/dialog.ts`).
  */
+
+// The haptics log is module state shared by every test in this file.
+afterEach(() => {
+  __resetHaptics();
+});
 
 /** A watcher whose resolution we control, so we can leave the screen while the
  *  OS permission dialog is still "open" — the real-world race. */
@@ -233,20 +246,24 @@ describe('RecordScreen keeps the capture (device pass, 2026-09-04)', () => {
     expect(text).not.toContain('Follow this drive');
   });
 
-  it('Discard is two-tap on the review AND on the failed-snap panel (review, 2026-09-07)', async () => {
+  it('Discard asks through a native dialog on the review AND on the failed-snap panel (review, 2026-09-07; redesign)', async () => {
     const tree = await recordAKilometre(
       vi.fn(async () => MATCHED),
       { t: 1_000 },
     );
     tap(tree, 'Discard recording');
     let text = JSON.stringify(tree.toJSON());
-    expect(text).toContain('as driven'); // still the review
-    expect(text).toContain('Tap again to discard');
-    tap(tree, 'Confirm discard recording');
-    await act(async () => {});
+    expect(text).toContain('as driven'); // still the review — the in-page control only asks
+    expect(text).not.toContain('Start recording'); // nothing was wiped by the first tap
+    expect(dialogPresented(tree)).toBe(true);
+    __resetHaptics();
+    await confirmDialog(tree, 'Discard');
+    // the destructive confirmation is ONE Medium — nothing else buzzes for a reset
+    expect(__haptics).toEqual(['impact:Medium']);
     text = JSON.stringify(tree.toJSON());
     expect(text).toContain('Start recording');
     expect(text).not.toContain('as driven');
+    expect(dialogPresented(tree)).toBe(false);
 
     let calls = 0;
     const failing = vi.fn(async () => {
@@ -258,13 +275,13 @@ describe('RecordScreen keeps the capture (device pass, 2026-09-04)', () => {
     tap(failed, 'Discard recording');
     text = JSON.stringify(failed.toJSON());
     expect(text).toContain('Try snapping again'); // the capture is still here
-    expect(text).toContain('Tap again to discard');
-    // Try again disarms: a Discard armed here must not carry into the review
+    expect(dialogPresented(failed)).toBe(true);
+    // Try again dismisses: a Discard asked here must not carry into the review
     tap(failed, 'Try snapping again');
     await act(async () => {});
     text = JSON.stringify(failed.toJSON());
     expect(text).toContain('as driven');
-    expect(text).not.toContain('Tap again to discard');
+    expect(dialogPresented(failed)).toBe(false);
   });
 
   it('Cancel during snapping keeps the recording too', async () => {

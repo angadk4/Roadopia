@@ -38,6 +38,11 @@ const config: ExpoConfig = {
     infoPlist: {
       // No custom/non-exempt crypto → skip the export-compliance prompt on builds.
       ITSAppUsesNonExemptEncryption: false,
+      // BD-205: without this, iOS caps third-party (non-UIKit) animation at
+      // 60fps on ProMotion phones. The redesign's motion runs on the UI thread
+      // via Reanimated, so on a 120Hz iPhone every spring and sheet drag was
+      // being drawn at half the display's rate. One key, no downside.
+      CADisableMinimumFrameDurationOnPhone: true,
     },
   },
   android: {

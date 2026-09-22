@@ -7,6 +7,7 @@
 import type { Route } from '@shared/types';
 import { act } from 'react';
 import type { ReactElement } from 'react';
+import { Text as RNText } from 'react-native';
 import { create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it } from 'vitest';
 
@@ -243,6 +244,39 @@ describe('RouteDetail', () => {
     expect(line.props.style.lineColor).toEqual(['match', ['get', 'leg'], 'core', AMBER, '#8a93a6']);
   });
 
+  // Redesign (SPEC "RouteDetail"; N): the host's actions land in the `hero`
+  // slot DIRECTLY under the numbers card — the "GO" position — and the
+  // drive's name is the host's native large title, so a bare RouteDetail
+  // draws no name unless a headerless host (the M13 shared-link page) asks
+  // for it back with `showName`.
+  it('renders the host hero under the numbers card, and no name unless asked', () => {
+    const named: Route = { ...ROUTE, name: 'Escarpment sweep' };
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <RouteDetail
+          route={named}
+          explanation={EXPLANATION}
+          done="ok"
+          hero={<RNText>hero-slot-marker</RNText>}
+        />,
+      );
+    });
+    const text = textOf(tree);
+    expect(text).not.toContain('Escarpment sweep');
+    const numbers = text.indexOf('≈75 min'); // the numbers card
+    const hero = text.indexOf('hero-slot-marker');
+    const chapters = text.indexOf('duration target'); // the first chapter's first row
+    expect(numbers).toBeGreaterThan(-1);
+    expect(hero).toBeGreaterThan(numbers);
+    expect(chapters).toBeGreaterThan(hero);
+    // and the name comes back only when a headerless host asks
+    act(() => {
+      tree = create(<RouteDetail route={named} explanation={null} done="ok" showName />);
+    });
+    expect(textOf(tree)).toContain('Escarpment sweep');
+  });
+
   it('a route without a split stays ONE feature, tagged core (amber)', () => {
     let tree!: ReactTestRenderer;
     act(() => {
@@ -307,6 +341,10 @@ describe('ResultScreen', () => {
       );
     });
     const text = textOf(tree);
+    // Redesign (re-target R): "Tweak this drive" and the "hard constraints
+    // carry over" line now live in the pinned composer bar at the foot of
+    // the page (RefineComposer ← RefinePanel) — the same contract: present
+    // exactly when the payload carries held constraints.
     expect(text).toContain('Tweak this drive');
     expect(text).toContain('hard'); // "hard constraints carry over" hint
     expect(text).toContain('Compared with the previous drive');
@@ -335,15 +373,15 @@ describe('ResultScreen', () => {
     expect(text).toContain('67.8 km'); // best shown by default
     expect(text).toContain('sustained curves along the escarpment'); // explanation on best
 
-    // switch to Option 2
-    const chip = tree.root.findAll(
-      (n) =>
-        typeof n.props['onPress'] === 'function' &&
-        JSON.stringify(n.props['accessibilityState'] ?? {}).includes('false') &&
-        n.props['accessibilityRole'] === 'button',
-    )[0]!;
+    // switch to Option 2. Redesign (SPEC "Result"; re-target R): the switcher
+    // is the platform's segmented control — one `expo-ui-picker` whose
+    // `selection` is the shown option's index and whose `onSelectionChange`
+    // is the same handler the chip track called. The recommended option is
+    // selected on arrival.
+    const picker = tree.root.findAll((n) => String(n.type) === 'expo-ui-picker')[0]!;
+    expect(picker.props['selection']).toBe(0);
     act(() => {
-      (chip.props['onPress'] as () => void)();
+      (picker.props['onSelectionChange'] as (index: number) => void)(1);
     });
     text = textOf(tree);
     expect(text).toContain('82.5 km'); // the alternate's stats
